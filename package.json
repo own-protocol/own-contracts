@@ -1,0 +1,16 @@
+{
+  "name": "own-contracts",
+  "version": "1.0.0",
+  "description": "First fully decentralised protocol for tokenized real-world assets.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
