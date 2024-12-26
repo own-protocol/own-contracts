@@ -1,3 +1,5 @@
+// Asset price function to be used in the AssetOracle contract to fetch data from Yahoo Finance using Chainlink Functions.
+
 const assetSymbol = args[0];
 const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${assetSymbol}?interval=1d`;
 
