@@ -9,9 +9,5 @@ if (!response || response.status !== 200)
 
 const data = response.data.chart.result[0];
 const currentPrice = data.meta.regularMarketPrice;
-const marketState = data.meta.marketState === "REGULAR";
 
-return (
-  Functions.encodeUint256(Math.round(currentPrice * 100)),
-  Functions.encodeBool(marketState)
-);
+return Functions.encodeUint256(Math.round(currentPrice * 100));

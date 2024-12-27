@@ -14,13 +14,11 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
     bytes public lastResponse;
     bytes public lastError;
 
-
     string public assetSymbol;  // Asset symbol (e.g., "TSLA")
     uint256 public assetPrice; // Price in cents
-    bool public marketOpen;    // Market status
     uint256 public lastUpdated; // Timestamp of last update
 
-    event AssetPriceUpdated(uint256 price, bool marketOpen, uint256 timestamp);
+    event AssetPriceUpdated(uint256 price, uint256 timestamp);
     error UnexpectedRequestID(bytes32 requestId);
 
     constructor(address router, string memory _assetSymbol)
@@ -36,7 +34,7 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donID
-        ) public onlyOwner {
+    ) public onlyOwner {
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(source);
         string[] memory args = new string[](1);
@@ -52,10 +50,8 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
         }
         lastResponse = response;
         lastError = error;
-        (uint256 price, bool open) = abi.decode(response, (uint256, bool));
-        assetPrice = price;
-        marketOpen = open;
+        assetPrice = abi.decode(response, (uint256));
         lastUpdated = block.timestamp;
-        emit AssetPriceUpdated(price, open, block.timestamp);
+        emit AssetPriceUpdated(assetPrice, block.timestamp);
     }
 }
