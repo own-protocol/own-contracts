@@ -13,19 +13,25 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
     bytes32 public s_lastRequestId;
     bytes public lastResponse;
     bytes public lastError;
+    bytes32 public sourceHash; // Hash of the valid source
 
     string public assetSymbol;  // Asset symbol (e.g., "TSLA")
     uint256 public assetPrice; // Price in cents
     uint256 public lastUpdated; // Timestamp of last update
-
+    
+    event AssetSymbolUpdated(string newAssetSymbol);
     event AssetPriceUpdated(uint256 price, uint256 timestamp);
-    error UnexpectedRequestID(bytes32 requestId);
+    event SourceHashUpdated(bytes32 newSourceHash);
 
-    constructor(address router, string memory _assetSymbol)
+    error UnexpectedRequestID(bytes32 requestId);
+    error InvalidSource();
+
+    constructor(address router, string memory _assetSymbol, bytes32 _sourceHash)
         FunctionsClient(router)
         ConfirmedOwner(msg.sender)
     {
         assetSymbol = _assetSymbol;
+        sourceHash = _sourceHash;
     }
 
     // Request new asset price data
@@ -34,12 +40,13 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donID
-    ) public onlyOwner {
+    ) public {
+        // Verify source integrity using its hash
+        if (keccak256(abi.encodePacked(source)) != sourceHash) {
+            revert InvalidSource();
+        }
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(source);
-        string[] memory args = new string[](1);
-        args[0] = assetSymbol;
-        req.setArgs(args);
         s_lastRequestId = _sendRequest(req.encodeCBOR(), subscriptionId, gasLimit, donID);
     }
 
@@ -53,5 +60,17 @@ contract AssetOracle is FunctionsClient, ConfirmedOwner {
         assetPrice = abi.decode(response, (uint256));
         lastUpdated = block.timestamp;
         emit AssetPriceUpdated(assetPrice, block.timestamp);
+    }
+
+    // Update the source hash
+    function updateSourceHash(bytes32 newSourceHash) external onlyOwner {
+        sourceHash = newSourceHash;
+        emit SourceHashUpdated(newSourceHash);
+    }
+
+    // Update the asset symbol
+    function updateAssetSymbol(string memory newAssetSymbol) external onlyOwner {
+        assetSymbol = newAssetSymbol;
+        emit AssetSymbolUpdated(newAssetSymbol);
     }
 }
