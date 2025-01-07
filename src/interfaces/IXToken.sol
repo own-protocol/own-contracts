@@ -4,99 +4,53 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 import {IScaledBalanceToken} from './IScaledBalanceToken.sol';
-import {IInitializableXToken} from './IInitializableXToken.sol';
 
-interface IXToken is IERC20, IScaledBalanceToken, IInitializableXToken {
+interface IXToken is IERC20, IScaledBalanceToken {
   /**
    * @dev Emitted after the mint action
    * @param from The address performing the mint
    * @param value The amount being
-   * @param index The new liquidity index of the reserve
    **/
-  event Mint(address indexed from, uint256 value, uint256 index);
+  event Mint(address indexed from, uint256 value);
 
   /**
    * @dev Mints `amount` xTokens to `user`
    * @param user The address receiving the minted tokens
    * @param amount The amount of tokens getting minted
-   * @param index The new liquidity index of the reserve
-   * @return `true` if the the previous balance of the user was 0
    */
   function mint(
     address user,
-    uint256 amount,
-    uint256 index
-  ) external returns (bool);
+    uint256 amount
+  ) external;
 
   /**
    * @dev Emitted after xTokens are burned
-   * @param from The owner of the xTokens, getting them burned
-   * @param target The address that will receive the underlying
+   * @param user The owner of the xTokens, getting them burned
    * @param value The amount being burned
-   * @param index The new liquidity index of the reserve
    **/
-  event Burn(address indexed from, address indexed target, uint256 value, uint256 index);
+  event Burn(address indexed user, uint256 value);
 
   /**
    * @dev Emitted during the transfer action
    * @param from The user whose tokens are being transferred
    * @param to The recipient
    * @param value The amount being transferred
-   * @param index The new liquidity index of the reserve
    **/
-  event BalanceTransfer(address indexed from, address indexed to, uint256 value, uint256 index);
+  event xTokenTransfer(address indexed from, address indexed to, uint256 value);
 
   /**
    * @dev Burns xTokens from `user` and sends the equivalent amount of underlying to `receiverOfUnderlying`
    * @param user The owner of the xTokens, getting them burned
-   * @param receiverOfUnderlying The address that will receive the underlying
    * @param amount The amount being burned
-   * @param index The new liquidity index of the reserve
    **/
   function burn(
     address user,
-    address receiverOfUnderlying,
-    uint256 amount,
-    uint256 index
+    uint256 amount
   ) external;
 
-  /**
-   * @dev Mints xTokens to the reserve treasury
-   * @param amount The amount of tokens getting minted
-   * @param index The new liquidity index of the reserve
-   */
-  function mintToTreasury(uint256 amount, uint256 index) external;
-
-  /**
-   * @dev Transfers xTokens in the event of a borrow being liquidated, in case the liquidators reclaims the xToken
-   * @param from The address getting liquidated, current owner of the xTokens
-   * @param to The recipient
-   * @param value The amount of tokens getting transferred
-   **/
-  function transferOnLiquidation(
-    address from,
-    address to,
-    uint256 value
-  ) external;
-
-  /**
-   * @dev Transfers the underlying asset to `target`. Used by the LendingPool to transfer
-   * assets in borrow(), withdraw() and flashLoan()
-   * @param user The recipient of the underlying
-   * @param amount The amount getting transferred
-   * @return The amount transferred
-   **/
-  function transferUnderlyingTo(address user, uint256 amount) external returns (uint256);
-
-  /**
-   * @dev Invoked to execute actions on the xToken side after a repayment.
-   * @param user The user executing the repayment
-   * @param amount The amount getting repaid
-   **/
-  function handleRepayment(address user, uint256 amount) external;
 
   /**
    * @dev Returns the address of the underlying asset of this xToken.
    **/
-  function UNDERLYING_ASSET_ADDRESS() external view returns (address);
+  function ASSET_ORACLE_ADDRESS() external view returns (address);
 }
