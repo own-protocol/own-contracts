@@ -9,48 +9,38 @@ import {ILPRegistry} from "./ILPRegistry.sol";
 
 interface IAssetPool {
     enum CycleState {
-        REBALANCING,    // LPs can rebalance
-        IN_CYCLE        // Normal cycle operation
+        ACTIVE,         // Normal operation
+        REBALANCING    // LPs rebalancing reserves
     }
 
-    event DepositReceived(address indexed user, uint256 amount, uint256 cycleNumber);
-    event WithdrawalRequested(address indexed user, uint256 xTokenAmount, uint256 cycleNumber);
-    event XTokensClaimed(address indexed user, uint256 amount, uint256 cycleNumber);
-    event DepositTokensClaimed(address indexed user, uint256 depositTokenAmount, uint256 cycleNumber);
-    event CycleStarted(uint256 cycleNumber, uint256 timestamp);
-    event CycleStateUpdated(CycleState newState);
-    event Rebalanced(address indexed lp, uint256 lpAdded, uint256 lpWithdrawn);
-    event RebalancingCompleted(uint256 cycleNumber);
+    event Deposit(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event WithdrawRequested(address indexed user, uint256 xTokenAmount, uint256 indexed cycleIndex);
+    event Rebalanced(address indexed lp, uint256 amount, bool isDeficit, uint256 indexed cycleIndex);
+    event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
+    event XTokensClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event DepositTokensClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
-    error InvalidState();
-    error NotLP();
     error InvalidAmount();
     error InsufficientBalance();
-    error NotInRebalancingPeriod();
-    error RebalancingAlreadyDone();
-    error NothingToClaim();
+    error NotLP();
+    error InvalidCycleState();
+    error AlreadyRebalanced();
+    error RebalancingExpired();
     error ZeroAddress();
+    error NothingToClaim();
 
+    // User actions
     function deposit(uint256 amount) external;
-    function requestWithdrawal(uint256 xTokenAmount) external;
+    function withdraw(uint256 xTokenAmount) external;
     function claimXTokens() external;
     function claimDepositTokens() external;
-    function rebalance(uint256 lpAdded, uint256 lpWithdrawn) external;
-    function checkAndStartNewCycle() external;
 
-    function assetToken() external view returns (IXToken);
-    function depositToken() external view returns (IERC20);
-    function lpRegistry() external view returns (ILPRegistry);
-    function assetSymbol() external view returns (string memory);
-    function cycleLength() external view returns (uint256);
-    function rebalancingPeriod() external view returns (uint256);
-    function currentCycleStart() external view returns (uint256);
-    function currentCycleNumber() external view returns (uint256);
-    function currentState() external view returns (CycleState);
+    // LP actions
+    function rebalance(uint256 amount) external;
+
+    // View functions
+    function cycleState() external view returns (CycleState);
+    function cycleIndex() external view returns (uint256);
     function unclaimedDeposits(address user) external view returns (uint256);
-    function unclaimedWithdrawals(address user) external view returns (uint256);
-    function lastDepositCycle(address user) external view returns (uint256);
-    function lastWithdrawalCycle(address user) external view returns (uint256);
-    function cycleRebalanced(address lp) external view returns (bool);
-    function rebalancedLPCount() external view returns (uint256);
+    function unclaimedBurns(address user) external view returns (uint256);
 }

@@ -11,45 +11,53 @@ import {ILPRegistry} from "../interfaces/ILPRegistry.sol";
 import {xToken} from "./xToken.sol";
 
 contract AssetPool is IAssetPool, Ownable {
-    IXToken public assetToken;
-    IERC20 public depositToken;
-    ILPRegistry public immutable lpRegistry;
-    string public assetSymbol;
-    
-    uint256 public immutable cycleLength;
-    uint256 public immutable rebalancingPeriod;
-    uint256 public currentCycleStart;
-    uint256 public currentCycleNumber;
-    CycleState public currentState;
-    
+    IERC20 public immutable reserveToken;    // Reserve token (e.g., USDC)
+    IXToken public immutable assetToken;    // xToken contract (renamed from xToken)
+    ILPRegistry public immutable lpRegistry; // LP Registry contract
+
+    // Pool state
+    uint256 public cycleIndex;
+    uint256 public cycleExpiry;
+    CycleState public cycleState;
+
+    // Asset states
+    uint256 public reserveBalance;
+    uint256 public pendingDeposits;
+    uint256 public pendingBurns;
+
+    // Protocol requirements
+    uint256 public totalReserveRequired;
+
+    // Rebalancing state
+    uint256 public rebalanceParticipants;
+    mapping(address => bool) public hasRebalanced;
+
+    // User claim states
     mapping(address => uint256) public unclaimedDeposits;
-    mapping(address => uint256) public unclaimedWithdrawals;
+    mapping(address => uint256) public unclaimedBurns;
     mapping(address => uint256) public lastDepositCycle;
-    mapping(address => uint256) public lastWithdrawalCycle;
-    mapping(address => bool) public cycleRebalanced;
-    uint256 public rebalancedLPCount;
+    mapping(address => uint256) public lastBurnCycle;
+
+    // Constants
+    uint256 private constant PRECISION = 1e18;
+    uint256 private constant PRICE_PRECISION = 1e16;
+    uint256 private constant CYCLE_DURATION = 7 days;
+    uint256 private constant REBALANCE_WINDOW = 1 days;
 
     constructor(
-        string memory _assetSymbol,
-        string memory _assetTokenName,
-        string memory _assetTokenSymbol,
-        address _depositToken,
+        address _reserveToken,
+        string memory _xTokenName,
+        string memory _xTokenSymbol,
         address _oracle,
-        uint256 _cycleLength,
-        uint256 _rebalancingPeriod,
-        address _owner,
         address _lpRegistry
-    ) Ownable(_owner) {
-        if (_depositToken == address(0) || _oracle == address(0) || 
-            _lpRegistry == address(0) || _owner == address(0)) revert ZeroAddress();
-        
-        assetSymbol = _assetSymbol;
-        depositToken = IERC20(_depositToken);
-        assetToken = new xToken(_assetTokenName, _assetTokenSymbol, _oracle);
-        cycleLength = _cycleLength;
-        rebalancingPeriod = _rebalancingPeriod;
-        currentState = CycleState.IN_CYCLE;
+    ) Ownable(msg.sender) {
+        if (_reserveToken == address(0) || _oracle == address(0) || _lpRegistry == address(0)) 
+            revert ZeroAddress();
+
+        reserveToken = IERC20(_reserveToken);
+        assetToken = new xToken(_xTokenName, _xTokenSymbol, _oracle);
         lpRegistry = ILPRegistry(_lpRegistry);
+        cycleState = CycleState.ACTIVE;
     }
 
     modifier onlyLP() {
@@ -59,97 +67,109 @@ contract AssetPool is IAssetPool, Ownable {
 
     function deposit(uint256 amount) external {
         if (amount == 0) revert InvalidAmount();
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         
-        depositToken.transferFrom(msg.sender, address(this), amount);
+        reserveToken.transferFrom(msg.sender, address(this), amount);
+        
+        pendingDeposits += amount;
+        reserveBalance += amount;
         unclaimedDeposits[msg.sender] += amount;
-        lastDepositCycle[msg.sender] = currentCycleNumber;
+        lastDepositCycle[msg.sender] = cycleIndex;
         
-        emit DepositReceived(msg.sender, amount, currentCycleNumber);
+        emit Deposit(msg.sender, amount, cycleIndex);
     }
 
-    function requestWithdrawal(uint256 xTokenAmount) external {
+    function withdraw(uint256 xTokenAmount) external {
         if (xTokenAmount == 0) revert InvalidAmount();
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         if (assetToken.balanceOf(msg.sender) < xTokenAmount) revert InsufficientBalance();
         
         assetToken.transferFrom(msg.sender, address(this), xTokenAmount);
-        unclaimedWithdrawals[msg.sender] += xTokenAmount;
-        lastWithdrawalCycle[msg.sender] = currentCycleNumber;
+        pendingBurns += xTokenAmount;
+        unclaimedBurns[msg.sender] += xTokenAmount;
+        lastBurnCycle[msg.sender] = cycleIndex;
         
-        emit WithdrawalRequested(msg.sender, xTokenAmount, currentCycleNumber);
+        emit WithdrawRequested(msg.sender, xTokenAmount, cycleIndex);
     }
 
     function claimXTokens() external {
-        uint256 depositCycle = lastDepositCycle[msg.sender];
-        if (depositCycle == 0 || depositCycle >= currentCycleNumber) revert NothingToClaim();
-        if (currentState != CycleState.IN_CYCLE) revert InvalidState();
-        
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        if (lastDepositCycle[msg.sender] >= cycleIndex) revert NothingToClaim();
+
         uint256 amount = unclaimedDeposits[msg.sender];
         if (amount == 0) revert NothingToClaim();
-        
+
         unclaimedDeposits[msg.sender] = 0;
         assetToken.mint(msg.sender, amount);
-        
-        emit XTokensClaimed(msg.sender, amount, currentCycleNumber);
+
+        emit XTokensClaimed(msg.sender, amount, cycleIndex);
     }
 
     function claimDepositTokens() external {
-        uint256 withdrawalCycle = lastWithdrawalCycle[msg.sender];
-        if (withdrawalCycle == 0 || withdrawalCycle >= currentCycleNumber) revert NothingToClaim();
-        if (currentState != CycleState.IN_CYCLE) revert InvalidState();
-        
-        uint256 xTokenAmount = unclaimedWithdrawals[msg.sender];
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        if (lastBurnCycle[msg.sender] >= cycleIndex) revert NothingToClaim();
+
+        uint256 xTokenAmount = unclaimedBurns[msg.sender];
         if (xTokenAmount == 0) revert NothingToClaim();
-        
-        uint256 depositTokenAmount = calculateDepositTokenAmount(xTokenAmount);
-        
-        unclaimedWithdrawals[msg.sender] = 0;
+
+        uint256 spotPrice = assetToken.oracle().assetPrice();
+        uint256 depositTokenAmount = (xTokenAmount * spotPrice * PRICE_PRECISION) / PRECISION;
+
+        unclaimedBurns[msg.sender] = 0;
         assetToken.burn(address(this), xTokenAmount);
-        depositToken.transfer(msg.sender, depositTokenAmount);
-        
-        emit DepositTokensClaimed(msg.sender, depositTokenAmount, currentCycleNumber);
+        reserveToken.transfer(msg.sender, depositTokenAmount);
+
+        emit DepositTokensClaimed(msg.sender, depositTokenAmount, cycleIndex);
     }
 
-    function rebalance(uint256 lpAdded, uint256 lpWithdrawn) external onlyLP {
-        if (currentState != CycleState.REBALANCING) revert NotInRebalancingPeriod();
-        if (cycleRebalanced[msg.sender]) revert RebalancingAlreadyDone();
-        if (block.timestamp > currentCycleStart + rebalancingPeriod) revert NotInRebalancingPeriod();
+    function rebalance(uint256 amount) external onlyLP {
+        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
+        if (hasRebalanced[msg.sender]) revert AlreadyRebalanced();
+        if (block.timestamp > cycleExpiry + REBALANCE_WINDOW) revert RebalancingExpired();
 
-        if (lpAdded > 0) {
-            depositToken.transferFrom(msg.sender, address(this), lpAdded);
+        (uint256 requiredAmount, bool deficit) = calculateRebalance();
+
+        if (amount > requiredAmount) revert InvalidAmount();
+        
+        if (deficit){
+            reserveToken.transferFrom(msg.sender, address(this), amount);
+            reserveBalance += amount;
+        } else {
+            reserveToken.transfer(msg.sender, amount);
+            reserveBalance -= amount;
         }
-        if (lpWithdrawn > 0) {
-            depositToken.transfer(msg.sender, lpWithdrawn);
-        }
 
-        cycleRebalanced[msg.sender] = true;
-        rebalancedLPCount++;
+        hasRebalanced[msg.sender] = true;
+        rebalanceParticipants++;
 
-        emit Rebalanced(msg.sender, lpAdded, lpWithdrawn);
+        emit Rebalanced(msg.sender, amount, deficit, cycleIndex);
 
-        if (rebalancedLPCount == lpRegistry.getLPCount(address(this))) {
-            currentState = CycleState.IN_CYCLE;
-            rebalancedLPCount = 0;
-            emit CycleStateUpdated(CycleState.IN_CYCLE);
-            emit RebalancingCompleted(currentCycleNumber);
+        // Start new cycle if all LPs have rebalanced
+        if (rebalanceParticipants == lpRegistry.getLPCount(address(this))) {
+            cycleIndex++;
+            cycleExpiry = block.timestamp + CYCLE_DURATION;
+            cycleState = CycleState.ACTIVE;
+            rebalanceParticipants = 0;
+            pendingDeposits = 0;
+            pendingBurns = 0;
+            
+            emit CycleStarted(cycleIndex, block.timestamp);
         }
     }
 
-    function checkAndStartNewCycle() external {
-    if (currentState == CycleState.IN_CYCLE && 
-        block.timestamp >= currentCycleStart + cycleLength) {
-        
-        currentCycleNumber++;
-        currentCycleStart = block.timestamp;
-        currentState = CycleState.REBALANCING;
-        rebalancedLPCount = 0;
-        
-        emit CycleStarted(currentCycleNumber, block.timestamp);
-        emit CycleStateUpdated(CycleState.REBALANCING);
-    }
-}
+    function calculateRebalance() internal view returns (uint256 amount, bool deficit) {
+        uint256 xTokenSupply = assetToken.totalSupply();
+        uint256 spotPrice = assetToken.oracle().assetPrice();
 
-    function calculateDepositTokenAmount(uint256 xTokenAmount) internal view returns (uint256) {
-        uint256 price = assetToken.oracle().assetPrice();
-        return (xTokenAmount * price * 1e16) / 1e18;
+        uint256 baseReserveRequired = (xTokenSupply - pendingBurns) * PRECISION;
+        uint256 redemptionReserveRequired = (pendingBurns * spotPrice * PRICE_PRECISION) / PRECISION;
+        
+        uint256 _totalReserveRequired = baseReserveRequired + redemptionReserveRequired + pendingDeposits;
+
+        if (_totalReserveRequired > reserveBalance) {
+            return (_totalReserveRequired - reserveBalance, true);
+        } else {
+            return (reserveBalance - _totalReserveRequired, false);
+        }
     }
 }
