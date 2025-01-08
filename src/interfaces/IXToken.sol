@@ -1,56 +1,75 @@
 // SPDX-License-Identifier: AGPL-3.0
+// author: bhargavaparoksham
 
 pragma solidity ^0.8.20;
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
-import {IScaledBalanceToken} from './IScaledBalanceToken.sol';
 
-interface IXToken is IERC20, IScaledBalanceToken {
-  /**
-   * @dev Emitted after the mint action
-   * @param from The address performing the mint
-   * @param value The amount being
-   **/
-  event Mint(address indexed from, uint256 value);
+interface IXToken is IERC20 {
+    /**
+     * @dev Emitted after the mint action
+     * @param account The address receiving the minted tokens
+     * @param value The amount being minted
+     **/
+    event Mint(address indexed account, uint256 value);
 
-  /**
-   * @dev Mints `amount` xTokens to `user`
-   * @param user The address receiving the minted tokens
-   * @param amount The amount of tokens getting minted
-   */
-  function mint(
-    address user,
-    uint256 amount
-  ) external;
+    /**
+     * @dev Emitted after xTokens are burned
+     * @param account The owner of the xTokens, getting burned
+     * @param value The amount being burned
+     **/
+    event Burn(address indexed account, uint256 value);
 
-  /**
-   * @dev Emitted after xTokens are burned
-   * @param user The owner of the xTokens, getting them burned
-   * @param value The amount being burned
-   **/
-  event Burn(address indexed user, uint256 value);
+    /**
+     * @dev Returns the scaled balance of the user. The scaled balance represents the user's balance
+     * normalized by the underlying asset price, maintaining constant purchasing power.
+     * @param user The user whose balance is calculated
+     * @return The scaled balance of the user
+     **/
+    function scaledBalanceOf(address user) external view returns (uint256);
 
-  /**
-   * @dev Emitted during the transfer action
-   * @param from The user whose tokens are being transferred
-   * @param to The recipient
-   * @param value The amount being transferred
-   **/
-  event xTokenTransfer(address indexed from, address indexed to, uint256 value);
+    /**
+     * @dev Returns the scaled total supply of the token. Represents the total supply
+     * normalized by the asset price.
+     * @return The scaled total supply
+     **/
+    function scaledTotalSupply() external view returns (uint256);
 
-  /**
-   * @dev Burns xTokens from `user` and sends the equivalent amount of underlying to `receiverOfUnderlying`
-   * @param user The owner of the xTokens, getting them burned
-   * @param amount The amount being burned
-   **/
-  function burn(
-    address user,
-    uint256 amount
-  ) external;
+    /**
+     * @dev Returns the version of the xToken implementation
+     * @return The version number
+     **/
+    function XTOKEN_VERSION() external view returns (uint256);
 
+    /**
+     * @dev Returns the oracle contract address used for price feeds
+     * @return The address of the oracle contract
+     **/
+    function oracle() external view returns (address);
 
-  /**
-   * @dev Returns the address of the underlying asset of this xToken.
-   **/
-  function ASSET_ORACLE_ADDRESS() external view returns (address);
+    /**
+     * @dev Returns the pool contract address that manages this token
+     * @return The address of the pool contract
+     **/
+    function pool() external view returns (address);
+
+    /**
+     * @dev Mints `amount` xTokens to `account`
+     * @param account The address receiving the minted tokens
+     * @param amount The amount of tokens getting minted
+     */
+    function mint(
+        address account,
+        uint256 amount
+    ) external;
+
+    /**
+     * @dev Burns xTokens from `account`
+     * @param account The owner of the xTokens, getting burned
+     * @param amount The amount being burned
+     **/
+    function burn(
+        address account,
+        uint256 amount
+    ) external;
 }
