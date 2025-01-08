@@ -4,8 +4,34 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
+import {IAssetOracle} from './IAssetOracle.sol';
 
 interface IXToken is IERC20 {
+   /**
+     * @dev Thrown when a caller is not the pool contract
+     */
+    error NotPool();
+
+    /**
+     * @dev Thrown when zero address is provided where it's not allowed
+     */
+    error ZeroAddress();
+
+    /**
+     * @dev Thrown when asset price is invalid (zero)
+     */
+    error InvalidPrice();
+
+    /**
+     * @dev Thrown when account has insufficient balance for an operation
+     */
+    error InsufficientBalance();
+
+    /**
+     * @dev Thrown when spender has insufficient allowance
+     */
+    error InsufficientAllowance();
+
     /**
      * @dev Emitted after the mint action
      * @param account The address receiving the minted tokens
@@ -45,7 +71,7 @@ interface IXToken is IERC20 {
      * @dev Returns the oracle contract address used for price feeds
      * @return The address of the oracle contract
      **/
-    function oracle() external view returns (address);
+    function oracle() external view returns (IAssetOracle);
 
     /**
      * @dev Returns the pool contract address that manages this token

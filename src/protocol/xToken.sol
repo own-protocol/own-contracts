@@ -4,7 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import "./AssetOracle.sol";
+import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
 
 /**
@@ -16,7 +16,7 @@ import "../interfaces/IXToken.sol";
  */
 contract xToken is IXToken, ERC20 {
     /// @notice Reference to the oracle providing asset price feeds
-    AssetOracle public immutable oracle;
+    IAssetOracle public immutable oracle;
     
     /// @notice Address of the pool contract that manages this token
     address public immutable pool;
@@ -40,7 +40,7 @@ contract xToken is IXToken, ERC20 {
      * @notice Ensures the caller is the pool contract
      */
     modifier onlyPool() {
-        require(msg.sender == pool, "Own: Only pool can call this function");
+        if (msg.sender != pool) revert NotPool();
         _;
     }
 
@@ -51,8 +51,8 @@ contract xToken is IXToken, ERC20 {
      * @param _oracle The address of the asset price oracle
      */
     constructor(string memory name, string memory symbol, address _oracle) ERC20(name, symbol) {
-        require(_oracle != address(0), "Own: Oracle cannot be zero address");
-        oracle = AssetOracle(_oracle);
+        if (_oracle == address(0)) revert ZeroAddress();
+        oracle = IAssetOracle(_oracle);
         pool = msg.sender;
     }
 
@@ -82,7 +82,7 @@ contract xToken is IXToken, ERC20 {
      */
     function _convertToScaledAmount(uint256 amount) internal view returns (uint256) {
         uint256 price = oracle.assetPrice();
-        require(price > 0, "Own: Invalid asset price");
+        if (price == 0) revert InvalidPrice();
         return (amount * 1e18) / (price * PRICE_SCALING);
     }
 
@@ -94,7 +94,7 @@ contract xToken is IXToken, ERC20 {
      */
     function balanceOf(address account) public view override(IERC20, ERC20) returns (uint256) {
         uint256 price = oracle.assetPrice();
-        require(price > 0, "Own: Invalid asset price");
+        if (price == 0) revert InvalidPrice();
         return (_scaledBalances[account] * (price * PRICE_SCALING)) / 1e18;
     }
 
@@ -105,7 +105,7 @@ contract xToken is IXToken, ERC20 {
      */
     function totalSupply() public view override(IERC20, ERC20) returns (uint256) {
         uint256 price = oracle.assetPrice();
-        require(price > 0, "Own: Invalid asset price");
+        if (price == 0) revert InvalidPrice();
         return (_totalScaledSupply * (price * PRICE_SCALING)) / 1e18;
     }
 
@@ -130,7 +130,7 @@ contract xToken is IXToken, ERC20 {
      */
     function burn(address account, uint256 amount) external onlyPool {
         uint256 scaledAmount = _convertToScaledAmount(amount);
-        require(_scaledBalances[account] >= scaledAmount, "Own: Insufficient balance");
+        if (_scaledBalances[account] < scaledAmount) revert InsufficientBalance();
         _scaledBalances[account] -= scaledAmount;
         _totalScaledSupply -= scaledAmount;
         emit Burn(account, amount);
@@ -143,9 +143,9 @@ contract xToken is IXToken, ERC20 {
      * @return success True if the transfer succeeded
      */
     function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        require(recipient != address(0), "Own: Transfer to zero address");
+        if (recipient == address(0)) revert ZeroAddress();
         uint256 scaledAmount = _convertToScaledAmount(amount);
-        require(_scaledBalances[msg.sender] >= scaledAmount, "Own: Insufficient balance");
+        if (_scaledBalances[msg.sender] < scaledAmount) revert InsufficientBalance();
         
         _scaledBalances[msg.sender] -= scaledAmount;
         _scaledBalances[recipient] += scaledAmount;
@@ -166,12 +166,12 @@ contract xToken is IXToken, ERC20 {
         address recipient,
         uint256 amount
     ) public override(ERC20, IERC20) returns (bool) {
-        require(recipient != address(0), "Own: Transfer to zero address");
+        if (recipient == address(0)) revert ZeroAddress();
         uint256 currentAllowance = allowance(sender, msg.sender);
-        require(currentAllowance >= amount, "Own: Insufficient allowance");
+        if (currentAllowance < amount) revert InsufficientAllowance();
 
         uint256 scaledAmount = _convertToScaledAmount(amount);
-        require(_scaledBalances[sender] >= scaledAmount, "Own: Insufficient balance");
+        if (_scaledBalances[sender] < scaledAmount) revert InsufficientBalance();
 
         _scaledBalances[sender] -= scaledAmount;
         _scaledBalances[recipient] += scaledAmount;
