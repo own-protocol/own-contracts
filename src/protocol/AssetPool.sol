@@ -3,95 +3,153 @@
 
 pragma solidity ^0.8.20;
 
-import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "./xToken.sol";
-import "./AssetOracle.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IAssetPool} from "../interfaces/IAssetPool.sol";
+import {IXToken} from "../interfaces/IXToken.sol";
+import {ILPRegistry} from "../interfaces/ILPRegistry.sol";
+import {xToken} from "./xToken.sol";
 
-
-contract AssetPool is Ownable {
-    xToken public tokenX;
-    IERC20 public tokenY;
-    AssetOracle public oracle;
-
-    uint256 public totalDeposits; // Total USDC deposited
-    uint256 public totalScaledDeposits; // Total scaled USDC equivalent
-
-    event Deposited(address indexed user, uint256 amount, uint256 xTokenMinted);
-    event Withdrawn(address indexed user, uint256 amount, uint256 xTokenBurned);
-    event Rebalanced(uint256 lpAdded, uint256 lpWithdrawn);
-
-    mapping(address => uint256) public scaledBalances;
+contract AssetPool is IAssetPool, Ownable {
+    IXToken public assetToken;
+    IERC20 public depositToken;
+    ILPRegistry public immutable lpRegistry;
+    string public assetSymbol;
+    
+    uint256 public immutable cycleLength;
+    uint256 public immutable rebalancingPeriod;
+    uint256 public currentCycleStart;
+    uint256 public currentCycleNumber;
+    CycleState public currentState;
+    
+    mapping(address => uint256) public unclaimedDeposits;
+    mapping(address => uint256) public unclaimedWithdrawals;
+    mapping(address => uint256) public lastDepositCycle;
+    mapping(address => uint256) public lastWithdrawalCycle;
+    mapping(address => bool) public cycleRebalanced;
+    uint256 public rebalancedLPCount;
 
     constructor(
-        address _tokenY,
+        string memory _assetSymbol,
+        string memory _assetTokenName,
+        string memory _assetTokenSymbol,
+        address _depositToken,
         address _oracle,
-        string memory _xtokenName,
-        string memory _xtokenSymbol
-    ) Ownable(msg.sender) {
-        tokenY = IERC20(_tokenY);
-        oracle = AssetOracle(_oracle);
-        tokenX = new xToken(_xtokenName, _xtokenSymbol, address(oracle));
-
+        uint256 _cycleLength,
+        uint256 _rebalancingPeriod,
+        address _owner,
+        address _lpRegistry
+    ) Ownable(_owner) {
+        if (_depositToken == address(0) || _oracle == address(0) || 
+            _lpRegistry == address(0) || _owner == address(0)) revert ZeroAddress();
+        
+        assetSymbol = _assetSymbol;
+        depositToken = IERC20(_depositToken);
+        assetToken = new xToken(_assetTokenName, _assetTokenSymbol, _oracle);
+        cycleLength = _cycleLength;
+        rebalancingPeriod = _rebalancingPeriod;
+        currentState = CycleState.IN_CYCLE;
+        lpRegistry = ILPRegistry(_lpRegistry);
     }
 
-    function _getScaledBalance(uint256 amount, uint256 price) internal pure returns (uint256) {
-        // Price is in cents, so divide by 100 to convert to a scaled factor
-        return (amount * 1e18) / (price * 1e16);
+    modifier onlyLP() {
+        if (!lpRegistry.isLP(address(this), msg.sender)) revert NotLP();
+        _;
     }
 
     function deposit(uint256 amount) external {
-        require(amount > 0, "Amount must be greater than zero");
-        uint256 price = oracle.assetPrice();
-        require(price > 0, "Invalid asset price");
-
-        tokenY.transferFrom(msg.sender, address(this), amount);
-
-        uint256 scaledAmount = _getScaledBalance(amount, price);
-        totalDeposits += amount;
-        totalScaledDeposits += scaledAmount;
-
-        scaledBalances[msg.sender] += scaledAmount;
-        tokenX.mint(msg.sender, scaledAmount);
-
-        emit Deposited(msg.sender, amount, scaledAmount);
+        if (amount == 0) revert InvalidAmount();
+        
+        depositToken.transferFrom(msg.sender, address(this), amount);
+        unclaimedDeposits[msg.sender] += amount;
+        lastDepositCycle[msg.sender] = currentCycleNumber;
+        
+        emit DepositReceived(msg.sender, amount, currentCycleNumber);
     }
 
-    function withdraw(uint256 xtokenAmount) external {
-        require(xtokenAmount > 0, "Amount must be greater than zero");
-        require(tokenX.balanceOf(msg.sender) >= xtokenAmount, "Insufficient xToken balance");
-
-        uint256 price = oracle.assetPrice();
-        require(price > 0, "Invalid asset price");
-
-        uint256 usdcAmount = (xtokenAmount * (price * 1e16)) / 1e18;
-        require(usdcAmount <= tokenY.balanceOf(address(this)), "Insufficient USDC liquidity");
-
-        tokenX.burn(msg.sender, xtokenAmount);
-        scaledBalances[msg.sender] -= xtokenAmount;
-        totalDeposits -= usdcAmount;
-        totalScaledDeposits -= xtokenAmount;
-
-        tokenY.transfer(msg.sender, usdcAmount);
-
-        emit Withdrawn(msg.sender, usdcAmount, xtokenAmount);
+    function requestWithdrawal(uint256 xTokenAmount) external {
+        if (xTokenAmount == 0) revert InvalidAmount();
+        if (assetToken.balanceOf(msg.sender) < xTokenAmount) revert InsufficientBalance();
+        
+        assetToken.transferFrom(msg.sender, address(this), xTokenAmount);
+        unclaimedWithdrawals[msg.sender] += xTokenAmount;
+        lastWithdrawalCycle[msg.sender] = currentCycleNumber;
+        
+        emit WithdrawalRequested(msg.sender, xTokenAmount, currentCycleNumber);
     }
 
-    function rebalance(uint256 lpAdded, uint256 lpWithdrawn) external onlyOwner {
-        require(lpAdded > 0 || lpWithdrawn > 0, "Invalid rebalance amounts");
+    function claimXTokens() external {
+        uint256 depositCycle = lastDepositCycle[msg.sender];
+        if (depositCycle == 0 || depositCycle >= currentCycleNumber) revert NothingToClaim();
+        if (currentState != CycleState.IN_CYCLE) revert InvalidState();
+        
+        uint256 amount = unclaimedDeposits[msg.sender];
+        if (amount == 0) revert NothingToClaim();
+        
+        unclaimedDeposits[msg.sender] = 0;
+        assetToken.mint(msg.sender, amount);
+        
+        emit XTokensClaimed(msg.sender, amount, currentCycleNumber);
+    }
+
+    function claimDepositTokens() external {
+        uint256 withdrawalCycle = lastWithdrawalCycle[msg.sender];
+        if (withdrawalCycle == 0 || withdrawalCycle >= currentCycleNumber) revert NothingToClaim();
+        if (currentState != CycleState.IN_CYCLE) revert InvalidState();
+        
+        uint256 xTokenAmount = unclaimedWithdrawals[msg.sender];
+        if (xTokenAmount == 0) revert NothingToClaim();
+        
+        uint256 depositTokenAmount = calculateDepositTokenAmount(xTokenAmount);
+        
+        unclaimedWithdrawals[msg.sender] = 0;
+        assetToken.burn(address(this), xTokenAmount);
+        depositToken.transfer(msg.sender, depositTokenAmount);
+        
+        emit DepositTokensClaimed(msg.sender, depositTokenAmount, currentCycleNumber);
+    }
+
+    function rebalance(uint256 lpAdded, uint256 lpWithdrawn) external onlyLP {
+        if (currentState != CycleState.REBALANCING) revert NotInRebalancingPeriod();
+        if (cycleRebalanced[msg.sender]) revert RebalancingAlreadyDone();
+        if (block.timestamp > currentCycleStart + rebalancingPeriod) revert NotInRebalancingPeriod();
 
         if (lpAdded > 0) {
-            tokenY.transferFrom(msg.sender, address(this), lpAdded);
-            totalDeposits += lpAdded;
+            depositToken.transferFrom(msg.sender, address(this), lpAdded);
         }
-
         if (lpWithdrawn > 0) {
-            require(lpWithdrawn <= tokenY.balanceOf(address(this)), "Insufficient USDC liquidity");
-            tokenY.transfer(msg.sender, lpWithdrawn);
-            totalDeposits -= lpWithdrawn;
+            depositToken.transfer(msg.sender, lpWithdrawn);
         }
 
-        emit Rebalanced(lpAdded, lpWithdrawn);
+        cycleRebalanced[msg.sender] = true;
+        rebalancedLPCount++;
+
+        emit Rebalanced(msg.sender, lpAdded, lpWithdrawn);
+
+        if (rebalancedLPCount == lpRegistry.getLPCount(address(this))) {
+            currentState = CycleState.IN_CYCLE;
+            rebalancedLPCount = 0;
+            emit CycleStateUpdated(CycleState.IN_CYCLE);
+            emit RebalancingCompleted(currentCycleNumber);
+        }
     }
 
+    function checkAndStartNewCycle() external {
+    if (currentState == CycleState.IN_CYCLE && 
+        block.timestamp >= currentCycleStart + cycleLength) {
+        
+        currentCycleNumber++;
+        currentCycleStart = block.timestamp;
+        currentState = CycleState.REBALANCING;
+        rebalancedLPCount = 0;
+        
+        emit CycleStarted(currentCycleNumber, block.timestamp);
+        emit CycleStateUpdated(CycleState.REBALANCING);
+    }
+}
+
+    function calculateDepositTokenAmount(uint256 xTokenAmount) internal view returns (uint256) {
+        uint256 price = assetToken.oracle().assetPrice();
+        return (xTokenAmount * price * 1e16) / 1e18;
+    }
 }
