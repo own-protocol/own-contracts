@@ -13,12 +13,16 @@ interface IAssetPool {
         REBALANCING    // LPs rebalancing reserves
     }
 
-    event Deposit(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-    event WithdrawRequested(address indexed user, uint256 xTokenAmount, uint256 indexed cycleIndex);
+    event DepositRequested(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event DepositCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event AssetClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event BurnRequested(address indexed user, uint256 xTokenAmount, uint256 indexed cycleIndex);
+    event BurnCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event ReserveWithdrawn(address indexed user, uint256 amount, uint256 indexed cycleIndex);
     event Rebalanced(address indexed lp, uint256 amount, bool isDeficit, uint256 indexed cycleIndex);
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
-    event XTokensClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-    event DepositTokensClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event CycleTimeUpdated(uint256 newCycleTime);
+    event RebalanceTimeUpdated(uint256 newRebalanceTime);
 
     error InvalidAmount();
     error InsufficientBalance();
@@ -28,19 +32,60 @@ interface IAssetPool {
     error RebalancingExpired();
     error ZeroAddress();
     error NothingToClaim();
+    error NothingToCancel();
 
     // User actions
-    function deposit(uint256 amount) external;
-    function withdraw(uint256 xTokenAmount) external;
-    function claimXTokens() external;
-    function claimDepositTokens() external;
+    function depositReserve(uint256 amount) external;
+    function cancelDeposit() external;
+    function claimAsset() external;
+    function burnAsset(uint256 xTokenAmount) external;
+    function cancelBurn() external;
+    function withdrawReserve() external;
 
     // LP actions
     function rebalance(uint256 amount) external;
 
+    // Governance actions
+    function updateCycleTime(uint256 newCycleTime) external;
+    function updateRebalanceTime(uint256 newRebalanceTime) external;
+    function pausePool() external;
+    function unpausePool() external;
+
     // View functions
-    function cycleState() external view returns (CycleState);
+    function getGeneralInfo() external view returns (
+        uint256 _reserveBalance,
+        uint256 _xTokenSupply,
+        CycleState _cycleState,
+        uint256 _cycleIndex,
+        uint256 _nextRebalanceStartDate,
+        uint256 _nextRebalanceEndDate,
+        uint256 _assetPrice
+    );
+
+    function getLPInfo() external view returns (
+        uint256 _totalDepositRequests,
+        uint256 _totalRedemptionRequests,
+        uint256 _totalReserveRequired,
+        uint256 _rebalanceAmount
+    );
+
+    // State getters
+    function reserveToken() external view returns (IERC20);
+    function assetToken() external view returns (IXToken);
+    function lpRegistry() external view returns (ILPRegistry);
     function cycleIndex() external view returns (uint256);
-    function unclaimedDeposits(address user) external view returns (uint256);
-    function unclaimedBurns(address user) external view returns (uint256);
+    function cycleState() external view returns (CycleState);
+    function nextRebalanceStartDate() external view returns (uint256);
+    function nextRebalanceEndDate() external view returns (uint256);
+    function cycleTime() external view returns (uint256);
+    function rebalanceTime() external view returns (uint256);
+    function reserveBalance() external view returns (uint256);
+    function totalDepositRequests() external view returns (uint256);
+    function totalRedemptionRequests() external view returns (uint256);
+    function rebalanceParticipants() external view returns (uint256);
+    function hasRebalanced(address lp) external view returns (bool);
+    function depositRequests(address user) external view returns (uint256);
+    function redemptionRequests(address user) external view returns (uint256);
+    function redemptionScaledRequests(address user) external view returns (uint256);
+    function lastActionCycle(address user) external view returns (uint256);
 }
