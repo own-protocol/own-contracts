@@ -29,15 +29,17 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     // Asset states
     uint256 public reserveBalance;           // USDC balance
     uint256 public totalDepositRequests;     // Pending deposits
-    uint256 public totalRedemptionRequests;  // Pending burns
+    uint256 public totalRedemptionScaledRequests;  // Pending burns
+    uint256 public totalReserveRequired;    // Total reserve required
+
+    uint256 public rebalanceAmount;         // Rebalance amount
 
     // Rebalancing state
-    uint256 public rebalanceParticipants;
+    uint256 public rebalancedLPs;
     mapping(address => bool) public hasRebalanced;
 
     // User request states
     mapping(address => uint256) public depositRequests;     // Pending deposits per user
-    mapping(address => uint256) public redemptionRequests;  // Pending burns per user (in xTokens)
     mapping(address => uint256) public redemptionScaledRequests;  // Pending burns per user (in scaled terms)
     mapping(address => uint256) public lastActionCycle;     // Last cycle when user made a request
 
@@ -52,8 +54,11 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         string memory _xTokenName,
         string memory _xTokenSymbol,
         address _oracle,
-        address _lpRegistry
-    ) Ownable(msg.sender) {
+        address _lpRegistry,
+        uint256 _cyclePeriod,
+        uint256 _rebalancingPeriod,
+        address _owner
+    ) Ownable(_owner) {
         if (_reserveToken == address(0) || _oracle == address(0) || _lpRegistry == address(0)) 
             revert ZeroAddress();
 
@@ -61,8 +66,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         assetToken = new xToken(_xTokenName, _xTokenSymbol, _oracle);
         lpRegistry = ILPRegistry(_lpRegistry);
         cycleState = CycleState.ACTIVE;
-        cycleTime = DEFAULT_CYCLE_TIME;
-        rebalanceTime = DEFAULT_REBALANCE_TIME;
+        cycleTime = _cyclePeriod;
+        rebalanceTime = _rebalancingPeriod;
     }
 
     modifier onlyLP() {
@@ -122,8 +127,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         
         assetToken.transferFrom(msg.sender, address(this), xTokenAmount);
         redemptionScaledRequests[msg.sender] = scaledBurnAmount;
-        redemptionRequests[msg.sender] = xTokenAmount; // Keep for backwards compatibility
-        totalRedemptionRequests += xTokenAmount;
+        totalRedemptionScaledRequests += scaledBurnAmount;
         lastActionCycle[msg.sender] = cycleIndex;
         
         emit BurnRequested(msg.sender, xTokenAmount, cycleIndex);
@@ -137,8 +141,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
         
         redemptionScaledRequests[msg.sender] = 0;
-        redemptionRequests[msg.sender] = 0;
-        totalRedemptionRequests -= redemptionRequests[msg.sender];
+        totalRedemptionScaledRequests -= redemptionScaledRequests[msg.sender];
         assetToken.transfer(msg.sender, currentNominalAmount);
         
         emit BurnCancelled(msg.sender, currentNominalAmount, cycleIndex);
@@ -155,7 +158,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 reserveAmount = (currentNominalAmount * price * PRICE_PRECISION) / PRECISION;
         
         redemptionScaledRequests[msg.sender] = 0;
-        redemptionRequests[msg.sender] = 0;
         assetToken.burn(address(this), currentNominalAmount);
         reserveBalance -= reserveAmount;
         reserveToken.transfer(msg.sender, reserveAmount);
@@ -164,15 +166,16 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     }
 
     // LP Actions
-    function rebalance(uint256 amount) external onlyLP {
+    function rebalance(address lp, uint256 assetPriceRebalancedAt, uint256 amount, bool isClaim) external onlyLP {
         if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
         if (hasRebalanced[msg.sender]) revert AlreadyRebalanced();
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
         
         _validateRebalancing();
 
-        uint256 totalReserveRequired = assetToken.totalSupply() + totalDepositRequests - totalRedemptionRequests;
-        uint256 rebalanceAmount = totalReserveRequired - reserveBalance;
+        uint256 totalRedemptionRequests = totalRedemptionScaledRequests * assetToken.oracle().assetPrice() / PRICE_PRECISION;
+        totalReserveRequired = assetToken.totalSupply() + totalDepositRequests - totalRedemptionRequests;
+        rebalanceAmount = totalReserveRequired - reserveBalance;
 
         if (amount > rebalanceAmount) revert InvalidAmount();
         
@@ -186,11 +189,11 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         }
 
         hasRebalanced[msg.sender] = true;
-        rebalanceParticipants++;
+        rebalancedLPs++;
 
         emit Rebalanced(msg.sender, amount, deficit, cycleIndex);
 
-        if (rebalanceParticipants == lpRegistry.getLPCount(address(this))) {
+        if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
             _startNewCycle();
         }
     }
@@ -224,7 +227,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleState = CycleState.ACTIVE;
         nextRebalanceStartDate = block.timestamp + cycleTime;
         nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
-        rebalanceParticipants = 0;
+        rebalancedLPs = 0;
         
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -252,14 +255,14 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
     function getLPInfo() external view returns (
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
+        uint256 _totalRedemptionScaledRequests,
         uint256 _totalReserveRequired,
         uint256 _rebalanceAmount
     ) {
         _totalDepositRequests = totalDepositRequests;
-        _totalRedemptionRequests = totalRedemptionRequests;
-        _totalReserveRequired = assetToken.totalSupply() + totalDepositRequests - totalRedemptionRequests;
-        _rebalanceAmount = _totalReserveRequired - reserveBalance;
+        _totalRedemptionScaledRequests = totalRedemptionScaledRequests;
+        _totalReserveRequired = totalReserveRequired;
+        _rebalanceAmount = rebalanceAmount;
     }
 
 }

@@ -43,7 +43,7 @@ interface IAssetPool {
     function withdrawReserve() external;
 
     // LP actions
-    function rebalance(uint256 amount) external;
+    function rebalance(address lp, uint256 assetPriceRebalancedAt, uint256 amount, bool isClaim) external;
 
     // Governance actions
     function updateCycleTime(uint256 newCycleTime) external;
@@ -64,7 +64,7 @@ interface IAssetPool {
 
     function getLPInfo() external view returns (
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
+        uint256 _totalRedemptionScaledRequests,
         uint256 _totalReserveRequired,
         uint256 _rebalanceAmount
     );
@@ -81,11 +81,12 @@ interface IAssetPool {
     function rebalanceTime() external view returns (uint256);
     function reserveBalance() external view returns (uint256);
     function totalDepositRequests() external view returns (uint256);
-    function totalRedemptionRequests() external view returns (uint256);
-    function rebalanceParticipants() external view returns (uint256);
+    function totalRedemptionScaledRequests() external view returns (uint256);
+    function totalReserveRequired() external view returns (uint256);
+    function rebalanceAmount() external view returns (uint256);
+    function rebalancedLPs() external view returns (uint256);
     function hasRebalanced(address lp) external view returns (bool);
     function depositRequests(address user) external view returns (uint256);
-    function redemptionRequests(address user) external view returns (uint256);
     function redemptionScaledRequests(address user) external view returns (uint256);
     function lastActionCycle(address user) external view returns (uint256);
 }

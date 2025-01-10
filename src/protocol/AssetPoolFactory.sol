@@ -23,26 +23,25 @@ contract PoolFactory is IPoolFactory, Ownable {
         string memory assetTokenSymbol,
         address depositToken,
         address oracle,
-        uint256 cycleLength,
+        uint256 cyclePeriod,
         uint256 rebalancingPeriod
     ) external onlyOwner returns (address) {
         if (
             depositToken == address(0) ||
             oracle == address(0) ||
-            cycleLength == 0 ||
-            rebalancingPeriod >= cycleLength
+            cyclePeriod == 0 ||
+            rebalancingPeriod >= cyclePeriod
         ) revert InvalidParams();
 
         AssetPool pool = new AssetPool(
-            assetSymbol,
+            depositToken,
             assetTokenName,
             assetTokenSymbol,
-            depositToken,
             oracle,
-            cycleLength,
+            address(lpRegistry),
+            cyclePeriod,
             rebalancingPeriod,
-            msg.sender,
-            address(lpRegistry)
+            msg.sender
         );
 
         lpRegistry.addPool(address(pool));
@@ -52,7 +51,7 @@ contract PoolFactory is IPoolFactory, Ownable {
             assetSymbol,
             depositToken,
             oracle,
-            cycleLength,
+            cyclePeriod,
             rebalancingPeriod
         );
 
