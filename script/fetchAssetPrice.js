@@ -9,4 +9,4 @@ if (!response || response.status !== 200)
 const data = response.data.chart.result[0];
 const currentPrice = data.meta.regularMarketPrice;
 
-return Functions.encodeUint256(Math.round(currentPrice * 100));
+return Functions.encodeUint256(Math.round(currentPrice * 1e18));
