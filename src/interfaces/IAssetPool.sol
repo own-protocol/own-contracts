@@ -64,7 +64,7 @@ interface IAssetPool {
 
     function getLPInfo() external view returns (
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionScaledRequests,
+        uint256 _totalRedemptionRequests,
         uint256 _totalReserveRequired,
         uint256 _rebalanceAmount
     );
@@ -81,7 +81,7 @@ interface IAssetPool {
     function rebalanceTime() external view returns (uint256);
     function reserveBalance() external view returns (uint256);
     function totalDepositRequests() external view returns (uint256);
-    function totalRedemptionScaledRequests() external view returns (uint256);
+    function totalRedemptionRequests() external view returns (uint256);
     function totalReserveRequired() external view returns (uint256);
     function rebalanceAmount() external view returns (uint256);
     function rebalancedLPs() external view returns (uint256);

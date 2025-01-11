@@ -29,7 +29,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     // Asset states
     uint256 public reserveBalance;           // USDC balance
     uint256 public totalDepositRequests;     // Pending deposits
-    uint256 public totalRedemptionScaledRequests;  // Pending burns
+    uint256 public totalRedemptionRequests;  // Pending burns
     uint256 public totalReserveRequired;    // Total reserve required
 
     uint256 public rebalanceAmount;         // Rebalance amount
@@ -45,9 +45,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
     // Constants
     uint256 private constant PRECISION = 1e18;
-    uint256 private constant PRICE_PRECISION = 1e16;
-    uint256 private constant DEFAULT_CYCLE_TIME = 7 days;
-    uint256 private constant DEFAULT_REBALANCE_TIME = 1 days;
 
     constructor(
         address _reserveToken,
@@ -127,7 +124,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         
         assetToken.transferFrom(msg.sender, address(this), xTokenAmount);
         redemptionScaledRequests[msg.sender] = scaledBurnAmount;
-        totalRedemptionScaledRequests += scaledBurnAmount;
+        totalRedemptionRequests += scaledBurnAmount;
         lastActionCycle[msg.sender] = cycleIndex;
         
         emit BurnRequested(msg.sender, xTokenAmount, cycleIndex);
@@ -141,7 +138,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
         
         redemptionScaledRequests[msg.sender] = 0;
-        totalRedemptionScaledRequests -= redemptionScaledRequests[msg.sender];
+        totalRedemptionRequests -= redemptionScaledRequests[msg.sender];
         assetToken.transfer(msg.sender, currentNominalAmount);
         
         emit BurnCancelled(msg.sender, currentNominalAmount, cycleIndex);
@@ -155,7 +152,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         // Convert scaled amount to current nominal amount for reserve calculation
         uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
         uint256 price = assetToken.oracle().assetPrice();
-        uint256 reserveAmount = (currentNominalAmount * price * PRICE_PRECISION) / PRECISION;
+        uint256 reserveAmount = (currentNominalAmount * price) / PRECISION;
         
         redemptionScaledRequests[msg.sender] = 0;
         assetToken.burn(address(this), currentNominalAmount);
@@ -173,7 +170,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         
         _validateRebalancing();
 
-        uint256 totalRedemptionRequests = totalRedemptionScaledRequests * assetToken.oracle().assetPrice() / PRICE_PRECISION;
+        uint256 totalRedemptionRequests = totalRedemptionRequests * assetToken.oracle().assetPrice();
         totalReserveRequired = assetToken.totalSupply() + totalDepositRequests - totalRedemptionRequests;
         rebalanceAmount = totalReserveRequired - reserveBalance;
 
@@ -255,12 +252,12 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
     function getLPInfo() external view returns (
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionScaledRequests,
+        uint256 _totalRedemptionRequests,
         uint256 _totalReserveRequired,
         uint256 _rebalanceAmount
     ) {
         _totalDepositRequests = totalDepositRequests;
-        _totalRedemptionScaledRequests = totalRedemptionScaledRequests;
+        _totalRedemptionRequests = totalRedemptionRequests;
         _totalReserveRequired = totalReserveRequired;
         _rebalanceAmount = rebalanceAmount;
     }
