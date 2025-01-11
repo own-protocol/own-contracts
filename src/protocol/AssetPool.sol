@@ -102,13 +102,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit DepositCancelled(msg.sender, amount, cycleIndex);
     }
 
-    function claimAsset() external whenNotPaused notRebalancing {
-        if (lastActionCycle[msg.sender] >= cycleIndex) revert NothingToClaim();
-        uint256 amount = depositRequests[msg.sender];
+    function mintAsset(address user) external whenNotPaused notRebalancing {
+        if (lastActionCycle[user] >= cycleIndex) revert NothingToClaim();
+        uint256 amount = depositRequests[user];
         if (amount == 0) revert NothingToClaim();
 
-        depositRequests[msg.sender] = 0;
-        assetToken.mint(msg.sender, amount);
+        depositRequests[user] = 0;
+        assetToken.transfer(user, amount);
         
         emit AssetClaimed(msg.sender, amount, cycleIndex);
     }
@@ -144,9 +144,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit BurnCancelled(msg.sender, currentNominalAmount, cycleIndex);
     }
 
-    function withdrawReserve() external whenNotPaused notRebalancing {
-        if (lastActionCycle[msg.sender] >= cycleIndex) revert NothingToClaim();
-        uint256 scaledAmount = redemptionScaledRequests[msg.sender];
+    function withdrawReserve(address user) external whenNotPaused notRebalancing {
+        if (lastActionCycle[user] >= cycleIndex) revert NothingToClaim();
+        uint256 scaledAmount = redemptionScaledRequests[user];
         if (scaledAmount == 0) revert NothingToClaim();
 
         // Convert scaled amount to current nominal amount for reserve calculation
@@ -154,12 +154,12 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 price = assetToken.oracle().assetPrice();
         uint256 reserveAmount = (currentNominalAmount * price) / PRECISION;
         
-        redemptionScaledRequests[msg.sender] = 0;
+        redemptionScaledRequests[user] = 0;
         assetToken.burn(address(this), currentNominalAmount);
         reserveBalance -= reserveAmount;
-        reserveToken.transfer(msg.sender, reserveAmount);
+        reserveToken.transfer(user, reserveAmount);
         
-        emit ReserveWithdrawn(msg.sender, reserveAmount, cycleIndex);
+        emit ReserveWithdrawn(user, reserveAmount, cycleIndex);
     }
 
     // LP Actions

@@ -37,10 +37,10 @@ interface IAssetPool {
     // User actions
     function depositReserve(uint256 amount) external;
     function cancelDeposit() external;
-    function claimAsset() external;
+    function mintAsset(address user) external;
     function burnAsset(uint256 xTokenAmount) external;
     function cancelBurn() external;
-    function withdrawReserve() external;
+    function withdrawReserve(address user) external;
 
     // LP actions
     function rebalance(address lp, uint256 assetPriceRebalancedAt, uint256 amount, bool isClaim) external;
