@@ -62,6 +62,19 @@ interface IXToken is IERC20 {
     function scaledTotalSupply() external view returns (uint256);
 
     /**
+     * @dev Returns the market value of a user's tokens.
+     * @param user The user whose balance is calculated
+     * @return The market value of a user's tokens
+     **/
+    function marketValue(address user) external view returns (uint256);
+
+    /**
+     * @dev Returns the total market value of all the tokens.
+     * @return The total market value of all the tokens
+     **/
+    function totalMarketValue() external view returns (uint256);
+
+    /**
      * @dev Returns the version of the xToken implementation
      * @return The version number
      **/

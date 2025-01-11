@@ -4,6 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
 
@@ -77,7 +78,30 @@ contract xToken is IXToken, ERC20 {
     function _convertToScaledAmount(uint256 amount) internal view returns (uint256) {
         uint256 price = oracle.assetPrice();
         if (price == 0) revert InvalidPrice();
-        return amount * price;
+        return Math.mulDiv(amount, 1e18, price);
+    }
+
+    /**
+     * @notice Returns the market value of a user's tokens
+     * @dev Converts the scaled balance to market value using current asset price
+     * @param account The address of the account
+     * @return The market value of a user's tokens
+     */
+    function marketValue(address account) public view returns (uint256) {
+        uint256 price = oracle.assetPrice();
+        if (price == 0) revert InvalidPrice();
+        return Math.mulDiv(_scaledBalances[account], price, 1e18);
+    }
+
+    /**
+     * @notice Returns the total market vaule of all the tokens
+     * @dev Converts the total scaled supply to nominal terms using current asset price
+     * @return The total market value of all the tokens
+     */
+    function totalMarketValue() public view returns (uint256) {
+        uint256 price = oracle.assetPrice();
+        if (price == 0) revert InvalidPrice();
+        return Math.mulDiv(_totalScaledSupply, price, 1e18);
     }
 
     /**
@@ -101,11 +125,60 @@ contract xToken is IXToken, ERC20 {
      * @param amount The amount of tokens to burn (in nominal terms)
      */
     function burn(address account, uint256 amount) external onlyPool {
-        if (_balances[account] < amount) revert InsufficientBalance();
         uint256 scaledAmount = _convertToScaledAmount(amount);
+        if (_scaledBalances[account] < scaledAmount) revert InsufficientBalance();
         _scaledBalances[account] -= scaledAmount;
         _totalScaledSupply -= scaledAmount;
         _burn(account, amount);
         emit Burn(account, amount);
+    }
+
+    /**
+     * @notice Transfers tokens to a recipient
+     * @param recipient The address receiving the tokens
+     * @param amount The amount of tokens to transfer (in nominal terms)
+     * @return success True if the transfer succeeded
+     */
+    function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
+        if (recipient == address(0)) revert ZeroAddress();
+        uint256 scaledAmount = _convertToScaledAmount(amount);
+        if (_scaledBalances[msg.sender] < scaledAmount) revert InsufficientBalance();
+        
+        _scaledBalances[msg.sender] -= scaledAmount;
+        _scaledBalances[recipient] += scaledAmount;
+
+        _transfer(msg.sender, recipient, amount);
+        
+        emit Transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    /**
+     * @notice Transfers tokens from one address to another using the allowance mechanism
+     * @param sender The address to transfer tokens from
+     * @param recipient The address receiving the tokens
+     * @param amount The amount of tokens to transfer (in nominal terms)
+     * @return success True if the transfer succeeded
+     */
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override(ERC20, IERC20) returns (bool) {
+        if (recipient == address(0)) revert ZeroAddress();
+        uint256 currentAllowance = allowance(sender, msg.sender);
+        if (currentAllowance < amount) revert InsufficientAllowance();
+
+        uint256 scaledAmount = _convertToScaledAmount(amount);
+        if (_scaledBalances[sender] < scaledAmount) revert InsufficientBalance();
+
+        _scaledBalances[sender] -= scaledAmount;
+        _scaledBalances[recipient] += scaledAmount;
+        _approve(sender, msg.sender, currentAllowance - amount);
+
+        _transfer(sender, recipient, amount);
+
+        emit Transfer(sender, recipient, amount);
+        return true;
     }
 }
