@@ -36,15 +36,17 @@ interface IXToken is IERC20 {
      * @dev Emitted after the mint action
      * @param account The address receiving the minted tokens
      * @param value The amount being minted
+     * @param price The price at which the tokens are minted
      **/
-    event Mint(address indexed account, uint256 value);
+    event Mint(address indexed account, uint256 value, uint256 price);
 
     /**
      * @dev Emitted after xTokens are burned
      * @param account The owner of the xTokens, getting burned
      * @param value The amount being burned
+     * @param price The price at which the tokens are burned
      **/
-    event Burn(address indexed account, uint256 value);
+    event Burn(address indexed account, uint256 value, uint256 price);
 
     /**
      * @dev Returns the scaled balance of the user. The scaled balance represents the user's balance
@@ -96,19 +98,23 @@ interface IXToken is IERC20 {
      * @dev Mints `amount` xTokens to `account`
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens getting minted
+     * @param price The price at which the tokens are minted
      */
     function mint(
         address account,
-        uint256 amount
+        uint256 amount,
+        uint256 price
     ) external;
 
     /**
      * @dev Burns xTokens from `account`
      * @param account The owner of the xTokens, getting burned
      * @param amount The amount being burned
+     * @param price The price at which the tokens are burned
      **/
     function burn(
         address account,
-        uint256 amount
+        uint256 amount,
+        uint256 price
     ) external;
 }

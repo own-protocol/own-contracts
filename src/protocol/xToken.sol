@@ -80,6 +80,11 @@ contract xToken is IXToken, ERC20 {
         return amount / price;
     }
 
+    function _convertToScaledAmountWithPrice(uint256 amount, uint256 price) internal pure returns (uint256) {
+        if (price == 0) revert InvalidPrice();
+        return amount / price;
+    }
+
     /**
      * @notice Returns the market value of a user's tokens
      * @dev Converts the scaled balance to market value using current asset price
@@ -108,13 +113,14 @@ contract xToken is IXToken, ERC20 {
      * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens to mint (in 18 decimal precision)
+     * @param price The asset price at which the minting is done
      */
-    function mint(address account, uint256 amount) external onlyPool {
-        uint256 scaledAmount = _convertToScaledAmount(amount);
+    function mint(address account, uint256 amount, uint256 price) external onlyPool {
+        uint256 scaledAmount = _convertToScaledAmountWithPrice(amount, price);
         _scaledBalances[account] += scaledAmount;
         _totalScaledSupply += scaledAmount;
         _mint(account, amount);
-        emit Mint(account, amount);
+        emit Mint(account, amount, price);
     }
 
     /**
@@ -122,14 +128,15 @@ contract xToken is IXToken, ERC20 {
      * @dev Only callable by the pool contract
      * @param account The address to burn tokens from
      * @param amount The amount of tokens to burn (in 18 decimal precision)
+     * @param price The asset price at which the burning is done
      */
-    function burn(address account, uint256 amount) external onlyPool {
-        uint256 scaledAmount = _convertToScaledAmount(amount);
+    function burn(address account, uint256 amount, uint256 price) external onlyPool {
+        uint256 scaledAmount = _convertToScaledAmountWithPrice(amount, price);
         if (_scaledBalances[account] < scaledAmount) revert InsufficientBalance();
         _scaledBalances[account] -= scaledAmount;
         _totalScaledSupply -= scaledAmount;
         _burn(account, amount);
-        emit Burn(account, amount);
+        emit Burn(account, amount, price);
     }
 
     /**
