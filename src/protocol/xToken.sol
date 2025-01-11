@@ -4,7 +4,6 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
 
@@ -12,8 +11,8 @@ import "../interfaces/IXToken.sol";
  * @title xToken Contract
  * @notice This contract implements a price-scaling token that tracks an underlying real-world asset.
  * @dev The token maintains scaled balances that adjust based on the underlying asset price.
- * All user-facing amounts are in standard token decimals, while internal accounting uses scaled balances.
- * The asset price is assumed to be in cents (1/100 of a dollar).
+ * All amounts are expected to be in 18 decimal precision.
+ * The asset price is assumed to be in 18 decimal precision.
  */
 contract xToken is IXToken, ERC20 {
     /// @notice Reference to the oracle providing asset price feeds
@@ -72,43 +71,43 @@ contract xToken is IXToken, ERC20 {
     /**
      * @notice Converts a nominal token amount to its scaled equivalent
      * @dev Uses the current asset price for conversion
-     * @param amount The amount to convert
+     * @param amount The amount to convert (in 18 decimal precision)
      * @return The equivalent scaled amount
      */
     function _convertToScaledAmount(uint256 amount) internal view returns (uint256) {
         uint256 price = oracle.assetPrice();
         if (price == 0) revert InvalidPrice();
-        return Math.mulDiv(amount, 1e18, price);
+        return amount / price;
     }
 
     /**
      * @notice Returns the market value of a user's tokens
      * @dev Converts the scaled balance to market value using current asset price
      * @param account The address of the account
-     * @return The market value of a user's tokens
+     * @return The market value of user's tokens in 18 decimal precision
      */
     function marketValue(address account) public view returns (uint256) {
         uint256 price = oracle.assetPrice();
         if (price == 0) revert InvalidPrice();
-        return Math.mulDiv(_scaledBalances[account], price, 1e18);
+        return _scaledBalances[account] * price;
     }
 
     /**
-     * @notice Returns the total market vaule of all the tokens
+     * @notice Returns the total market value of all tokens
      * @dev Converts the total scaled supply to nominal terms using current asset price
-     * @return The total market value of all the tokens
+     * @return The total market value in 18 decimal precision
      */
     function totalMarketValue() public view returns (uint256) {
         uint256 price = oracle.assetPrice();
         if (price == 0) revert InvalidPrice();
-        return Math.mulDiv(_totalScaledSupply, price, 1e18);
+        return _totalScaledSupply * price;
     }
 
     /**
      * @notice Mints new tokens to an account
      * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
-     * @param amount The amount of tokens to mint (in nominal terms)
+     * @param amount The amount of tokens to mint (in 18 decimal precision)
      */
     function mint(address account, uint256 amount) external onlyPool {
         uint256 scaledAmount = _convertToScaledAmount(amount);
@@ -122,7 +121,7 @@ contract xToken is IXToken, ERC20 {
      * @notice Burns tokens from an account
      * @dev Only callable by the pool contract
      * @param account The address to burn tokens from
-     * @param amount The amount of tokens to burn (in nominal terms)
+     * @param amount The amount of tokens to burn (in 18 decimal precision)
      */
     function burn(address account, uint256 amount) external onlyPool {
         uint256 scaledAmount = _convertToScaledAmount(amount);
@@ -135,8 +134,8 @@ contract xToken is IXToken, ERC20 {
 
     /**
      * @notice Transfers tokens to a recipient
-     * @param recipient The address receiving the tokens
-     * @param amount The amount of tokens to transfer (in nominal terms)
+     * @param recipient The address receiving the tokens 
+     * @param amount The amount of tokens to transfer (in 18 decimal precision)
      * @return success True if the transfer succeeded
      */
     function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
@@ -157,7 +156,7 @@ contract xToken is IXToken, ERC20 {
      * @notice Transfers tokens from one address to another using the allowance mechanism
      * @param sender The address to transfer tokens from
      * @param recipient The address receiving the tokens
-     * @param amount The amount of tokens to transfer (in nominal terms)
+     * @param amount The amount of tokens to transfer (in 18 decimal precision)
      * @return success True if the transfer succeeded
      */
     function transferFrom(
