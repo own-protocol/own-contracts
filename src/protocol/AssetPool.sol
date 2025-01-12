@@ -26,13 +26,17 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     uint256 public cycleTime;
     uint256 public rebalanceTime;
 
-    // Asset states
-    uint256 public reserveBalance;           // USDC balance
-    uint256 public totalDepositRequests;     // Pending deposits
-    uint256 public totalRedemptionRequests;  // Pending burns
-    uint256 public totalReserveRequired;    // Total reserve required
+     // Asset states
+    uint256 public reserveBalance;           
+    uint256 public totalDepositRequests;     
+    uint256 public totalRedemptionRequests;  
+    uint256 public totalReserveRequired;     
+    uint256 public rebalanceAmount; 
 
-    uint256 public rebalanceAmount;         // Rebalance amount
+    // Rebalancing instructions
+    int256 public netReserveDelta;     // e.g., stable to deposit (+) or withdraw (-)
+    int256 public netAssetDelta;     // e.g., how many TSLA shares to buy (+) or sell (-)
+    uint256 public assetRebalancePrice;  // Price at which rebalance was executed
 
     // Rebalancing state
     uint256 public rebalancedLPs;
@@ -42,9 +46,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     mapping(address => uint256) public depositRequests;     // Pending deposits per user
     mapping(address => uint256) public redemptionScaledRequests;  // Pending burns per user (in scaled terms)
     mapping(address => uint256) public lastActionCycle;     // Last cycle when user made a request
-
-    // Constants
-    uint256 private constant PRECISION = 1e18;
 
     constructor(
         address _reserveToken,
@@ -152,48 +153,122 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         // Convert scaled amount to current nominal amount for reserve calculation
         uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
         uint256 price = assetToken.oracle().assetPrice();
-        uint256 reserveAmount = (currentNominalAmount * price) / PRECISION;
+        uint256 reserveAmount = (currentNominalAmount * price);
         
         redemptionScaledRequests[user] = 0;
-        assetToken.burn(address(this), currentNominalAmount);
         reserveBalance -= reserveAmount;
         reserveToken.transfer(user, reserveAmount);
         
         emit ReserveWithdrawn(user, reserveAmount, cycleIndex);
     }
 
-    // LP Actions
-    function rebalance(address lp, uint256 assetPriceRebalancedAt, uint256 amount, bool isClaim) external onlyLP {
-        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
-        if (hasRebalanced[msg.sender]) revert AlreadyRebalanced();
-        if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
-        
-        _validateRebalancing();
+    // --------------------------------------------------------------------------------
+    //                               REBALANCING LOGIC
+    // --------------------------------------------------------------------------------
 
-        uint256 totalRedemptionRequests = totalRedemptionRequests * assetToken.oracle().assetPrice();
-        totalReserveRequired = assetToken.totalSupply() + totalDepositRequests - totalRedemptionRequests;
-        rebalanceAmount = totalReserveRequired - reserveBalance;
+    /**
+     * @notice Initiates the rebalance, calculates how much stock & stablecoin
+     *         needs to move, and broadcasts instructions for LPs to act on.
+     */
+    function startRebalance() external {
+        require(cycleState == CycleState.ACTIVE, "Already rebalancing");
+        cycleState = CycleState.REBALANCING;
 
-        if (amount > rebalanceAmount) revert InvalidAmount();
-        
-        bool deficit = totalReserveRequired > reserveBalance;
-        if (deficit) {
-            reserveToken.transferFrom(msg.sender, address(this), amount);
-            reserveBalance += amount;
-        } else {
-            reserveToken.transfer(msg.sender, amount);
-            reserveBalance -= amount;
+        // 1. Convert redemption requests from scaled to nominal
+        uint256 redemptionsNominal = 0;
+        if (assetToken.scaledTotalSupply() > 0) {
+            redemptionsNominal =
+                (totalRedemptionRequests * assetToken.totalSupply()) /
+                assetToken.scaledTotalSupply();
         }
 
-        hasRebalanced[msg.sender] = true;
+        // 2. Convert that nominal to stable coin => redemptions * spotPrice
+        uint256 spotPrice = assetToken.oracle().assetPrice();
+        uint256 redemptionReserveRequired = (redemptionsNominal * spotPrice);
+
+        // 3. baseReserveRequired = xTokenSupply - redemptionsNominal (if positive)
+        uint256 xTokenTotalSupply = assetToken.totalSupply();
+        uint256 baseReserveRequired = (xTokenTotalSupply > redemptionsNominal)
+            ? xTokenTotalSupply - redemptionsNominal
+            : 0;
+
+        // 4. totalReserveRequired = baseReserveRequired + redemptionReserveRequired + totalDepositRequests
+        totalReserveRequired = baseReserveRequired + redemptionReserveRequired + totalDepositRequests;
+
+        // 5. The difference from current reserve
+        bool deficit = (totalReserveRequired > reserveBalance);
+        rebalanceAmount = deficit
+            ? (totalReserveRequired - reserveBalance)
+            : (reserveBalance - totalReserveRequired);
+
+        // For demonstration: Suppose netAssetDelta is the shares needed off-chain.
+        // e.g., difference in coverage if the pool is short or long.
+        // Actual formula depends on your real strategy.
+        netAssetDelta = deficit
+            ? int256(rebalanceAmount / spotPrice)
+            : -int256(rebalanceAmount / spotPrice);
+
+        // netReserveDelta is simply the difference in stable needed on-chain
+        netReserveDelta = deficit
+            ? int256(rebalanceAmount)
+            : -int256(rebalanceAmount);
+
+        emit RebalanceStarted(
+            cycleIndex,
+            spotPrice,
+            netAssetDelta,
+            netReserveDelta
+        );
+
+        // nextRebalanceEndDate is set so LPs have time to respond
+        nextRebalanceStartDate = block.timestamp;
+        nextRebalanceEndDate = block.timestamp + rebalanceTime;
+    }
+
+    /**
+     * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
+     * @param lp Address of the LP performing the final on-chain step
+     * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
+     * @param isDeposit True if depositing stable, false if withdrawing
+     */
+    function completeRebalance(address lp, uint256 amount, bool isDeposit) external onlyLP {
+        require(cycleState == CycleState.REBALANCING, "Not in rebalancing");
+        if (hasRebalanced[lp]) revert AlreadyRebalanced();
+        if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
+
+        // Approve stablecoins if deposit
+        if (isDeposit) {
+            // If depositing stable, transfer from LP
+            reserveToken.transferFrom(lp, address(this), amount);
+            reserveBalance += amount;
+        } else {
+            // If withdrawing stable, ensure the pool has enough
+            if (amount > reserveBalance) revert InvalidAmount();
+            reserveBalance -= amount;
+            reserveToken.transfer(lp, amount);
+        }
+
+        hasRebalanced[lp] = true;
         rebalancedLPs++;
 
-        emit Rebalanced(msg.sender, amount, deficit, cycleIndex);
+        emit Rebalanced(lp, amount, isDeposit, cycleIndex);
 
+        // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
             _startNewCycle();
         }
     }
+
+    function _startNewCycle() internal {
+        cycleIndex++;
+        cycleState = CycleState.ACTIVE;
+        rebalancedLPs = 0;
+        nextRebalanceStartDate = block.timestamp + cycleTime;
+        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
+
+        emit CycleStarted(cycleIndex, block.timestamp);
+    }
+
 
     // Governance Actions
     function updateCycleTime(uint256 newCycleTime) external onlyOwner {
@@ -219,16 +294,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         require(lpRegistry.getLPLiquidity(address(this), msg.sender) > 0, "Insufficient LP liquidity");
     }
 
-    function _startNewCycle() internal {
-        cycleIndex++;
-        cycleState = CycleState.ACTIVE;
-        nextRebalanceStartDate = block.timestamp + cycleTime;
-        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
-        rebalancedLPs = 0;
-        
-        emit CycleStarted(cycleIndex, block.timestamp);
-    }
-
     // View functions
     function getGeneralInfo() external view returns (
         uint256 _reserveBalance,
@@ -250,16 +315,24 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         );
     }
 
-    function getLPInfo() external view returns (
-        uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
-        uint256 _totalReserveRequired,
-        uint256 _rebalanceAmount
-    ) {
+    function getLPInfo()
+        external
+        view
+        returns (
+            uint256 _totalDepositRequests,
+            uint256 _totalRedemptionRequests,
+            uint256 _totalReserveRequired,
+            uint256 _rebalanceAmount,
+            int256 _netReserveDelta,
+            int256 _netAssetDelta
+        )
+    {
         _totalDepositRequests = totalDepositRequests;
         _totalRedemptionRequests = totalRedemptionRequests;
         _totalReserveRequired = totalReserveRequired;
         _rebalanceAmount = rebalanceAmount;
+        _netReserveDelta = netReserveDelta;
+        _netAssetDelta = netAssetDelta;
     }
 
 }

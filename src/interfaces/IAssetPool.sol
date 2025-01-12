@@ -23,6 +23,12 @@ interface IAssetPool {
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
     event CycleTimeUpdated(uint256 newCycleTime);
     event RebalanceTimeUpdated(uint256 newRebalanceTime);
+    event RebalanceStarted(
+        uint256 indexed cycleIndex,
+        uint256 spotPrice,
+        int256 netSharesDelta,
+        int256 netStableDelta
+    );
 
     error InvalidAmount();
     error InsufficientBalance();
@@ -43,7 +49,8 @@ interface IAssetPool {
     function withdrawReserve(address user) external;
 
     // LP actions
-    function rebalance(address lp, uint256 assetPriceRebalancedAt, uint256 amount, bool isClaim) external;
+    function startRebalance() external;
+    function completeRebalance(address lp, uint256 amount, bool isDeposit) external;
 
     // Governance actions
     function updateCycleTime(uint256 newCycleTime) external;
@@ -66,7 +73,9 @@ interface IAssetPool {
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests,
         uint256 _totalReserveRequired,
-        uint256 _rebalanceAmount
+        uint256 _rebalanceAmount,
+        int256 _netReserveDelta,
+        int256 _netAssetDelta
     );
 
     // State getters
