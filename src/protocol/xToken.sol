@@ -69,17 +69,11 @@ contract xToken is IXToken, ERC20 {
     }
 
     /**
-     * @notice Converts a nominal token amount to its scaled equivalent
-     * @dev Uses the current asset price for conversion
+     * @notice Converts token amount to its scaled equivalent at the given price
      * @param amount The amount to convert (in 18 decimal precision)
+     * @param price The asset price to use for conversion
      * @return The equivalent scaled amount
      */
-    function _convertToScaledAmount(uint256 amount) internal view returns (uint256) {
-        uint256 price = oracle.assetPrice();
-        if (price == 0) revert InvalidPrice();
-        return amount / price;
-    }
-
     function _convertToScaledAmountWithPrice(uint256 amount, uint256 price) internal pure returns (uint256) {
         if (price == 0) revert InvalidPrice();
         return amount / price;
