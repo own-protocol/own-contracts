@@ -44,9 +44,8 @@ interface IXToken is IERC20 {
      * @dev Emitted after xTokens are burned
      * @param account The owner of the xTokens, getting burned
      * @param value The amount being burned
-     * @param price The price at which the tokens are burned
      **/
-    event Burn(address indexed account, uint256 value, uint256 price);
+    event Burn(address indexed account, uint256 value);
 
     /**
      * @dev Returns the scaled balance of the user. The scaled balance represents the user's balance
@@ -83,6 +82,12 @@ interface IXToken is IERC20 {
     function XTOKEN_VERSION() external view returns (uint256);
 
     /**
+     * @dev Returns the precision constant
+     * @return The precision
+     **/
+    function PRECISION() external view returns (uint256);
+
+    /**
      * @dev Returns the oracle contract address used for price feeds
      * @return The address of the oracle contract
      **/
@@ -110,11 +115,9 @@ interface IXToken is IERC20 {
      * @dev Burns xTokens from `account`
      * @param account The owner of the xTokens, getting burned
      * @param amount The amount being burned
-     * @param price The price at which the tokens are burned
      **/
     function burn(
         address account,
-        uint256 amount,
-        uint256 price
+        uint256 amount
     ) external;
 }

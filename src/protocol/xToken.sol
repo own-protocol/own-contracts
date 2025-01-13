@@ -25,7 +25,7 @@ contract xToken is IXToken, ERC20 {
     uint256 public constant XTOKEN_VERSION = 0x1;
 
     /// @notice Price precision constant
-    uint256 public constant PRICE_PRECISION = 1e18;
+    uint256 public constant PRECISION = 1e18;
 
     /// @notice Mapping of scaled balances for each account
     mapping(address => uint256) private _scaledBalances;
@@ -79,7 +79,7 @@ contract xToken is IXToken, ERC20 {
      */
     function _convertToScaledAmountWithPrice(uint256 amount, uint256 price) internal pure returns (uint256) {
         if (price == 0) revert InvalidPrice();
-        return (amount * PRICE_PRECISION) / price;
+        return (amount * PRECISION) / price;
     }
 
     /**
@@ -125,15 +125,17 @@ contract xToken is IXToken, ERC20 {
      * @dev Only callable by the pool contract
      * @param account The address to burn tokens from
      * @param amount The amount of tokens to burn (in 18 decimal precision)
-     * @param price The asset price at which the burning is done
      */
-    function burn(address account, uint256 amount, uint256 price) external onlyPool {
-        uint256 scaledAmount = _convertToScaledAmountWithPrice(amount, price);
-        if (_scaledBalances[account] < scaledAmount) revert InsufficientBalance();
-        _scaledBalances[account] -= scaledAmount;
-        _totalScaledSupply -= scaledAmount;
+    function burn(address account, uint256 amount) external onlyPool {
+        uint256 balance = balanceOf(account);
+        if (balance < amount) revert InsufficientBalance();
+        uint256 scaledBalace = _scaledBalances[account];
+        uint256 scaledBalanceToBurn = scaledBalace * amount / balance;
+
+        _scaledBalances[account] -= scaledBalanceToBurn;
+        _totalScaledSupply -= scaledBalanceToBurn;
         _burn(account, amount);
-        emit Burn(account, amount, price);
+        emit Burn(account, amount);
     }
 
     /**
