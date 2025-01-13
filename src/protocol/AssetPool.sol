@@ -185,7 +185,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleState = CycleState.REBALANCING;
 
         uint256 spotPrice = assetToken.oracle().assetPrice();
-        netReserveDelta = totalDepositRequests - totalRedemptionRequests;
+        netReserveDelta = int256(totalDepositRequests) - int256(totalRedemptionRequests);
         newReserveSupply =  xToken.totalSupply() + totalDepositRequests; // Redemptions are already burned so they are not considered
         newAssetSupply = newReserveSupply * spotPrice / PRECISION;
         rebalanceAmount = totalRedemptionScaledRequests * spotPrice / PRECISION - totalRedemptionRequests;
