@@ -151,7 +151,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         redemptionScaledRequests[msg.sender] = 0;
         totalRedemptionRequests -= redemptionRequests[msg.sender];
         totalRedemptionScaledRequests -= scaledAmount;
-        uint256 price = amount / scaledAmount;
+        uint256 price = amount * PRECISION / scaledAmount;
         assetToken.mint(msg.sender, amount, price);
         
         emit BurnCancelled(msg.sender, amount, cycleIndex);
