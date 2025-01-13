@@ -147,11 +147,14 @@ contract xToken is IXToken, ERC20 {
      */
     function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
         if (recipient == address(0)) revert ZeroAddress();
-        uint256 scaledAmount = _convertToScaledAmount(amount);
-        if (_scaledBalances[msg.sender] < scaledAmount) revert InsufficientBalance();
+        uint256 balance = balanceOf(msg.sender);
+        if (balance < amount) revert InsufficientBalance();
+
+        uint256 scaledBalance = _scaledBalances[msg.sender];
+        uint256 scaledBalanceToTransfer = (amount / balance) * scaledBalance;
         
-        _scaledBalances[msg.sender] -= scaledAmount;
-        _scaledBalances[recipient] += scaledAmount;
+        _scaledBalances[msg.sender] -= scaledBalanceToTransfer;
+        _scaledBalances[recipient] += scaledBalanceToTransfer;
 
         _transfer(msg.sender, recipient, amount);
         
@@ -175,11 +178,14 @@ contract xToken is IXToken, ERC20 {
         uint256 currentAllowance = allowance(sender, msg.sender);
         if (currentAllowance < amount) revert InsufficientAllowance();
 
-        uint256 scaledAmount = _convertToScaledAmount(amount);
-        if (_scaledBalances[sender] < scaledAmount) revert InsufficientBalance();
+        uint256 balance = balanceOf(sender);
+        if (balance < amount) revert InsufficientBalance();
 
-        _scaledBalances[sender] -= scaledAmount;
-        _scaledBalances[recipient] += scaledAmount;
+        uint256 scaledBalance = _scaledBalances[sender];
+        uint256 scaledBalanceToTransfer = (amount / balance) * scaledBalance;
+
+        _scaledBalances[sender] -= scaledBalanceToTransfer;
+        _scaledBalances[recipient] += scaledBalanceToTransfer;
         _approve(sender, msg.sender, currentAllowance - amount);
 
         _transfer(sender, recipient, amount);
