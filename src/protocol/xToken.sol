@@ -24,6 +24,9 @@ contract xToken is IXToken, ERC20 {
     /// @notice Version identifier for the xToken implementation
     uint256 public constant XTOKEN_VERSION = 0x1;
 
+    /// @notice Price precision constant
+    uint256 public constant PRICE_PRECISION = 1e18;
+
     /// @notice Mapping of scaled balances for each account
     mapping(address => uint256) private _scaledBalances;
     
@@ -76,7 +79,7 @@ contract xToken is IXToken, ERC20 {
      */
     function _convertToScaledAmountWithPrice(uint256 amount, uint256 price) internal pure returns (uint256) {
         if (price == 0) revert InvalidPrice();
-        return amount / price;
+        return (amount * PRICE_PRECISION) / price;
     }
 
     /**
@@ -145,7 +148,7 @@ contract xToken is IXToken, ERC20 {
         if (balance < amount) revert InsufficientBalance();
 
         uint256 scaledBalance = _scaledBalances[msg.sender];
-        uint256 scaledBalanceToTransfer = (amount / balance) * scaledBalance;
+        uint256 scaledBalanceToTransfer = scaledBalance * amount / balance;
         
         _scaledBalances[msg.sender] -= scaledBalanceToTransfer;
         _scaledBalances[recipient] += scaledBalanceToTransfer;
@@ -176,7 +179,7 @@ contract xToken is IXToken, ERC20 {
         if (balance < amount) revert InsufficientBalance();
 
         uint256 scaledBalance = _scaledBalances[sender];
-        uint256 scaledBalanceToTransfer = (amount / balance) * scaledBalance;
+        uint256 scaledBalanceToTransfer = scaledBalance * amount / balance;
 
         _scaledBalances[sender] -= scaledBalanceToTransfer;
         _scaledBalances[recipient] += scaledBalanceToTransfer;
