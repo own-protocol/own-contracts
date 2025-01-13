@@ -167,35 +167,22 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Initiates the rebalance, calculates how much stock & stablecoin
+     * @notice Initiates the rebalance, calculates how much asset & stablecoin
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
-    function startRebalance() external {
+    function initiateRebalance() external {
         require(cycleState == CycleState.ACTIVE, "Already rebalancing");
+        require(block.timestamp < nextRebalanceStartDate, "Cycle inprogress");
         cycleState = CycleState.REBALANCING;
 
-        // 1. Convert redemption requests from scaled to nominal
-        uint256 redemptionsNominal = 0;
-        if (assetToken.scaledTotalSupply() > 0) {
-            redemptionsNominal =
-                (totalRedemptionRequests * assetToken.totalSupply()) /
-                assetToken.scaledTotalSupply();
-        }
-
-        // 2. Convert that nominal to stable coin => redemptions * spotPrice
         uint256 spotPrice = assetToken.oracle().assetPrice();
-        uint256 redemptionReserveRequired = (redemptionsNominal * spotPrice);
+        uint256 redemptionReserveRequired = (totalRedemptionRequests * spotPrice);
 
-        // 3. baseReserveRequired = xTokenSupply - redemptionsNominal (if positive)
         uint256 xTokenTotalSupply = assetToken.totalSupply();
-        uint256 baseReserveRequired = (xTokenTotalSupply > redemptionsNominal)
-            ? xTokenTotalSupply - redemptionsNominal
-            : 0;
+        uint256 baseReserveRequired = xTokenTotalSupply - totalRedemptionRequests;
 
-        // 4. totalReserveRequired = baseReserveRequired + redemptionReserveRequired + totalDepositRequests
         totalReserveRequired = baseReserveRequired + redemptionReserveRequired + totalDepositRequests;
 
-        // 5. The difference from current reserve
         bool deficit = (totalReserveRequired > reserveBalance);
         rebalanceAmount = deficit
             ? (totalReserveRequired - reserveBalance)
@@ -213,16 +200,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
             ? int256(rebalanceAmount)
             : -int256(rebalanceAmount);
 
-        emit RebalanceStarted(
+        emit RebalanceInitiated(
             cycleIndex,
             spotPrice,
             netAssetDelta,
             netReserveDelta
         );
 
-        // nextRebalanceEndDate is set so LPs have time to respond
-        nextRebalanceStartDate = block.timestamp;
-        nextRebalanceEndDate = block.timestamp + rebalanceTime;
     }
 
     /**
@@ -231,7 +215,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
      * @param isDeposit True if depositing stable, false if withdrawing
      */
-    function completeRebalance(address lp, uint256 amount, bool isDeposit) external onlyLP {
+    function rebalancePool(address lp, uint256 amount, bool isDeposit) external onlyLP {
         require(cycleState == CycleState.REBALANCING, "Not in rebalancing");
         if (hasRebalanced[lp]) revert AlreadyRebalanced();
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();

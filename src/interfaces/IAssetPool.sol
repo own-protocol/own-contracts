@@ -23,7 +23,7 @@ interface IAssetPool {
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
     event CycleTimeUpdated(uint256 newCycleTime);
     event RebalanceTimeUpdated(uint256 newRebalanceTime);
-    event RebalanceStarted(
+    event RebalanceInitiated(
         uint256 indexed cycleIndex,
         uint256 spotPrice,
         int256 netSharesDelta,
@@ -49,8 +49,8 @@ interface IAssetPool {
     function withdrawReserve(address user) external;
 
     // LP actions
-    function startRebalance() external;
-    function completeRebalance(address lp, uint256 amount, bool isDeposit) external;
+    function initiateRebalance() external;
+    function rebalancePool(address lp, uint256 amount, bool isDeposit) external;
 
     // Governance actions
     function updateCycleTime(uint256 newCycleTime) external;
