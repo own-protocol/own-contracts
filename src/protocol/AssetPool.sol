@@ -27,16 +27,16 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     uint256 public rebalanceTime;
 
      // Asset states
-    uint256 public reserveBalance;           
-    uint256 public totalDepositRequests;     
-    uint256 public totalRedemptionRequests;  
-    uint256 public totalReserveRequired;     
-    uint256 public rebalanceAmount; 
+    uint256 public reserveBalance;  // total reserve token balance         
+    uint256 public totalDepositRequests; // Total deposit requests
+    uint256 public totalRedemptionRequests; // Total redemption requests
+    uint256 public totalRedemptionScaledRequests; // Total redemption requests in scaled amount
 
     // Rebalancing instructions
-    int256 public netReserveDelta;     // e.g., stable to deposit (+) or withdraw (-)
-    int256 public netAssetDelta;     // e.g., how many TSLA shares to buy (+) or sell (-)
-    uint256 public assetRebalancePrice;  // Price at which rebalance was executed
+    uint256 public newReserveSupply; // New reserve balance after rebalance excluding rebalance amount
+    uint256 public newAssetSupply;  // New asset balance after rebalance excluding rebalance amount
+    int256 public netReserveDelta;  // Net reserve change after rebalance excluding rebalance amount
+    int256 public rebalanceAmount; // Net reserve redemption PnL
 
     // Rebalancing state
     uint256 public rebalancedLPs;
@@ -44,8 +44,14 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
     // User request states
     mapping(address => uint256) public depositRequests;     // Pending deposits per user
-    mapping(address => uint256) public redemptionScaledRequests;  // Pending burns per user (in scaled terms)
-    mapping(address => uint256) public lastActionCycle;     // Last cycle when user made a request
+    mapping(address => uint256) public redemptionRequests;  // Pending burns per user
+    mapping(address => uint256) public redemptionScaledRequests;  // Pending burns per user in scaled amount
+    mapping(address => uint256) public lastActionCycle;     // Last cycle user interacted with
+
+    mapping(uint256 => uint256) public cycleRebalancePrice;  // price at which the rebalance was executed in a cycle
+
+    // Constants
+    uint256 private constant PRECISION = 1e18; // Precision for calculations
 
     constructor(
         address _reserveToken,
@@ -109,7 +115,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         if (amount == 0) revert NothingToClaim();
 
         depositRequests[user] = 0;
-        assetToken.transfer(user, amount);
+        totalDepositRequests -= amount;
+        uint256 rebalancePrice = cycleRebalancePrice[lastActionCycle[user]];
+
+        assetToken.mint(user, amount, rebalancePrice);
         
         emit AssetClaimed(msg.sender, amount, cycleIndex);
     }
@@ -117,46 +126,46 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     function burnAsset(uint256 xTokenAmount) external whenNotPaused notRebalancing {
         if (xTokenAmount == 0) revert InvalidAmount();
         if (assetToken.balanceOf(msg.sender) < xTokenAmount) revert InsufficientBalance();
-        
+
         // Get scaled amount from xToken contract
         uint256 scaledAmount = assetToken.scaledBalanceOf(msg.sender);
         uint256 nominalBalance = assetToken.balanceOf(msg.sender);
-        uint256 scaledBurnAmount = (scaledAmount * xTokenAmount) / nominalBalance;
+        uint256 scaledBurnAmount = scaledAmount * xTokenAmount / nominalBalance;
         
-        assetToken.transferFrom(msg.sender, address(this), xTokenAmount);
+        assetToken.burn(msg.sender, xTokenAmount);
         redemptionScaledRequests[msg.sender] = scaledBurnAmount;
-        totalRedemptionRequests += scaledBurnAmount;
+        totalRedemptionScaledRequests += scaledBurnAmount;
+        redemptionRequests[msg.sender] = xTokenAmount;
+        totalRedemptionRequests += xTokenAmount;
         lastActionCycle[msg.sender] = cycleIndex;
         
         emit BurnRequested(msg.sender, xTokenAmount, cycleIndex);
     }
 
     function cancelBurn() external notRebalancing {
+        uint256 amount = redemptionRequests[msg.sender];
+        if (amount == 0) revert NothingToCancel();
+
         uint256 scaledAmount = redemptionScaledRequests[msg.sender];
-        if (scaledAmount == 0) revert NothingToCancel();
-        
-        // Convert scaled amount to current nominal amount
-        uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
-        
+        redemptionRequests[msg.sender] = 0;
         redemptionScaledRequests[msg.sender] = 0;
-        totalRedemptionRequests -= redemptionScaledRequests[msg.sender];
-        assetToken.transfer(msg.sender, currentNominalAmount);
+        totalRedemptionRequests -= redemptionRequests[msg.sender];
+        totalRedemptionScaledRequests -= scaledAmount;
+        uint256 price = amount / scaledAmount;
+        assetToken.mint(msg.sender, amount, price);
         
-        emit BurnCancelled(msg.sender, currentNominalAmount, cycleIndex);
+        emit BurnCancelled(msg.sender, amount, cycleIndex);
     }
 
     function withdrawReserve(address user) external whenNotPaused notRebalancing {
         if (lastActionCycle[user] >= cycleIndex) revert NothingToClaim();
-        uint256 scaledAmount = redemptionScaledRequests[user];
-        if (scaledAmount == 0) revert NothingToClaim();
-
-        // Convert scaled amount to current nominal amount for reserve calculation
-        uint256 currentNominalAmount = (scaledAmount * assetToken.totalSupply()) / assetToken.scaledTotalSupply();
-        uint256 price = assetToken.oracle().assetPrice();
-        uint256 reserveAmount = (currentNominalAmount * price);
+        uint256 amount = redemptionRequests[user];
+        if (amount == 0) revert NothingToClaim();
         
+        uint256 scaledAmount = redemptionScaledRequests[user];
+        redemptionRequests[user] = 0;
         redemptionScaledRequests[user] = 0;
-        reserveBalance -= reserveAmount;
+        uint256 reserveAmount = scaledAmount * cycleRebalancePrice[lastActionCycle[user]];
         reserveToken.transfer(user, reserveAmount);
         
         emit ReserveWithdrawn(user, reserveAmount, cycleIndex);
@@ -176,35 +185,16 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleState = CycleState.REBALANCING;
 
         uint256 spotPrice = assetToken.oracle().assetPrice();
-        uint256 redemptionReserveRequired = (totalRedemptionRequests * spotPrice);
-
-        uint256 xTokenTotalSupply = assetToken.totalSupply();
-        uint256 baseReserveRequired = xTokenTotalSupply - totalRedemptionRequests;
-
-        totalReserveRequired = baseReserveRequired + redemptionReserveRequired + totalDepositRequests;
-
-        bool deficit = (totalReserveRequired > reserveBalance);
-        rebalanceAmount = deficit
-            ? (totalReserveRequired - reserveBalance)
-            : (reserveBalance - totalReserveRequired);
-
-        // For demonstration: Suppose netAssetDelta is the shares needed off-chain.
-        // e.g., difference in coverage if the pool is short or long.
-        // Actual formula depends on your real strategy.
-        netAssetDelta = deficit
-            ? int256(rebalanceAmount / spotPrice)
-            : -int256(rebalanceAmount / spotPrice);
-
-        // netReserveDelta is simply the difference in stable needed on-chain
-        netReserveDelta = deficit
-            ? int256(rebalanceAmount)
-            : -int256(rebalanceAmount);
+        netReserveDelta = totalDepositRequests - totalRedemptionRequests;
+        newReserveSupply =  xToken.totalSupply() + totalDepositRequests; // Redemptions are already burned so they are not considered
+        newAssetSupply = newReserveSupply * spotPrice / PRECISION;
+        rebalanceAmount = totalRedemptionScaledRequests * spotPrice / PRECISION - totalRedemptionRequests;
 
         emit RebalanceInitiated(
             cycleIndex,
             spotPrice,
-            netAssetDelta,
-            netReserveDelta
+            netReserveDelta,
+            rebalanceAmount
         );
 
     }
@@ -305,18 +295,14 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         returns (
             uint256 _totalDepositRequests,
             uint256 _totalRedemptionRequests,
-            uint256 _totalReserveRequired,
-            uint256 _rebalanceAmount,
             int256 _netReserveDelta,
-            int256 _netAssetDelta
+            int256 _rebalanceAmount
         )
     {
         _totalDepositRequests = totalDepositRequests;
         _totalRedemptionRequests = totalRedemptionRequests;
-        _totalReserveRequired = totalReserveRequired;
-        _rebalanceAmount = rebalanceAmount;
         _netReserveDelta = netReserveDelta;
-        _netAssetDelta = netAssetDelta;
+        _rebalanceAmount = rebalanceAmount;
     }
 
 }

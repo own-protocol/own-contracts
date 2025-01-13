@@ -26,8 +26,8 @@ interface IAssetPool {
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
         uint256 spotPrice,
-        int256 netSharesDelta,
-        int256 netStableDelta
+        int256 netReserveDelta,
+        int256 rebalanceAmount
     );
 
     error InvalidAmount();
@@ -72,10 +72,8 @@ interface IAssetPool {
     function getLPInfo() external view returns (
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests,
-        uint256 _totalReserveRequired,
-        uint256 _rebalanceAmount,
         int256 _netReserveDelta,
-        int256 _netAssetDelta
+        int256 _rebalanceAmount
     );
 
     // State getters
