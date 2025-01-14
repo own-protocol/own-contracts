@@ -25,7 +25,7 @@ contract xToken is IXToken, ERC20 {
     uint256 public constant XTOKEN_VERSION = 0x1;
 
     /// @notice Price precision constant
-    uint256 public constant PRECISION = 1e18;
+    uint256 private constant PRECISION = 1e18;
 
     /// @notice Mapping of scaled balances for each account
     mapping(address => uint256) private _scaledBalances;

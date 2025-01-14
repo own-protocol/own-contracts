@@ -82,12 +82,6 @@ interface IXToken is IERC20 {
     function XTOKEN_VERSION() external view returns (uint256);
 
     /**
-     * @dev Returns the precision constant
-     * @return The precision
-     **/
-    function PRECISION() external view returns (uint256);
-
-    /**
      * @dev Returns the oracle contract address used for price feeds
      * @return The address of the oracle contract
      **/

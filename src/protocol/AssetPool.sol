@@ -186,9 +186,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         uint256 spotPrice = assetToken.oracle().assetPrice();
         netReserveDelta = int256(totalDepositRequests) - int256(totalRedemptionRequests);
-        newReserveSupply =  xToken.totalSupply() + totalDepositRequests; // Redemptions are already burned so they are not considered
+        newReserveSupply =  assetToken.totalSupply() + totalDepositRequests; // Redemptions are already burned so they are not considered
         newAssetSupply = newReserveSupply * spotPrice / PRECISION;
-        rebalanceAmount = totalRedemptionScaledRequests * spotPrice / PRECISION - totalRedemptionRequests;
+        rebalanceAmount = int256(totalRedemptionScaledRequests * spotPrice / PRECISION) - int256(totalRedemptionRequests);
 
         emit RebalanceInitiated(
             cycleIndex,

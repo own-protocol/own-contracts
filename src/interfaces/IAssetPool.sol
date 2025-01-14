@@ -89,11 +89,12 @@ interface IAssetPool {
     function reserveBalance() external view returns (uint256);
     function totalDepositRequests() external view returns (uint256);
     function totalRedemptionRequests() external view returns (uint256);
-    function totalReserveRequired() external view returns (uint256);
+    function totalRedemptionScaledRequests() external view returns (uint256);
     function rebalanceAmount() external view returns (int256);
     function rebalancedLPs() external view returns (uint256);
     function hasRebalanced(address lp) external view returns (bool);
     function depositRequests(address user) external view returns (uint256);
     function redemptionScaledRequests(address user) external view returns (uint256);
     function lastActionCycle(address user) external view returns (uint256);
+    function cycleRebalancePrice(uint256 _cycleIndex) external view returns (uint256);
 }
