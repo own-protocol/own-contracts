@@ -4,6 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
 
@@ -79,7 +80,7 @@ contract xToken is IXToken, ERC20 {
      */
     function _convertToScaledAmountWithPrice(uint256 amount, uint256 price) internal pure returns (uint256) {
         if (price == 0) revert InvalidPrice();
-        return (amount * PRECISION) / price;
+        return Math.mulDiv(amount, PRECISION, price);
     }
 
     /**
@@ -129,8 +130,8 @@ contract xToken is IXToken, ERC20 {
     function burn(address account, uint256 amount) external onlyPool {
         uint256 balance = balanceOf(account);
         if (balance < amount) revert InsufficientBalance();
-        uint256 scaledBalace = _scaledBalances[account];
-        uint256 scaledBalanceToBurn = scaledBalace * amount / balance;
+        uint256 scaledBalance = _scaledBalances[account];
+        uint256 scaledBalanceToBurn = Math.mulDiv(scaledBalance, amount, balance);
 
         _scaledBalances[account] -= scaledBalanceToBurn;
         _totalScaledSupply -= scaledBalanceToBurn;
@@ -150,14 +151,13 @@ contract xToken is IXToken, ERC20 {
         if (balance < amount) revert InsufficientBalance();
 
         uint256 scaledBalance = _scaledBalances[msg.sender];
-        uint256 scaledBalanceToTransfer = scaledBalance * amount / balance;
+        uint256 scaledBalanceToTransfer = Math.mulDiv(scaledBalance, amount, balance);
         
         _scaledBalances[msg.sender] -= scaledBalanceToTransfer;
         _scaledBalances[recipient] += scaledBalanceToTransfer;
 
         _transfer(msg.sender, recipient, amount);
         
-        emit Transfer(msg.sender, recipient, amount);
         return true;
     }
 
@@ -189,7 +189,6 @@ contract xToken is IXToken, ERC20 {
 
         _transfer(sender, recipient, amount);
 
-        emit Transfer(sender, recipient, amount);
         return true;
     }
 }

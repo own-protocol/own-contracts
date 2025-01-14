@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
+import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
 import {ILPRegistry} from "../interfaces/ILPRegistry.sol";
@@ -129,8 +130,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         // Get scaled amount from xToken contract
         uint256 scaledAmount = assetToken.scaledBalanceOf(msg.sender);
-        uint256 nominalBalance = assetToken.balanceOf(msg.sender);
-        uint256 scaledBurnAmount = scaledAmount * xTokenAmount / nominalBalance;
+        uint256 balance = assetToken.balanceOf(msg.sender);
+        uint256 scaledBurnAmount = Math.mulDiv(scaledAmount, xTokenAmount, balance);
         
         assetToken.burn(msg.sender, xTokenAmount);
         redemptionScaledRequests[msg.sender] = scaledBurnAmount;
@@ -147,11 +148,14 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         if (amount == 0) revert NothingToCancel();
 
         uint256 scaledAmount = redemptionScaledRequests[msg.sender];
+
+        totalRedemptionRequests -= amount;
+        totalRedemptionScaledRequests -= scaledAmount;
+
         redemptionRequests[msg.sender] = 0;
         redemptionScaledRequests[msg.sender] = 0;
-        totalRedemptionRequests -= redemptionRequests[msg.sender];
-        totalRedemptionScaledRequests -= scaledAmount;
-        uint256 price = amount * PRECISION / scaledAmount;
+        
+        uint256 price = Math.mulDiv(amount, PRECISION, scaledAmount);
         assetToken.mint(msg.sender, amount, price);
         
         emit BurnCancelled(msg.sender, amount, cycleIndex);
@@ -187,8 +191,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 spotPrice = assetToken.oracle().assetPrice();
         netReserveDelta = int256(totalDepositRequests) - int256(totalRedemptionRequests);
         newReserveSupply =  assetToken.totalSupply() + totalDepositRequests; // Redemptions are already burned so they are not considered
-        newAssetSupply = newReserveSupply * spotPrice / PRECISION;
-        rebalanceAmount = int256(totalRedemptionScaledRequests * spotPrice / PRECISION) - int256(totalRedemptionRequests);
+        newAssetSupply = Math.mulDiv(newReserveSupply, spotPrice, PRECISION);
+        rebalanceAmount = int256(Math.mulDiv(totalRedemptionScaledRequests, spotPrice, PRECISION)) - int256(totalRedemptionRequests);
 
         emit RebalanceInitiated(
             cycleIndex,
