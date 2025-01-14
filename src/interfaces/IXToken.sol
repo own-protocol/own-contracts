@@ -4,9 +4,10 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
+import {IERC20Permit} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Permit.sol';
 import {IAssetOracle} from './IAssetOracle.sol';
 
-interface IXToken is IERC20 {
+interface IXToken is IERC20, IERC20Permit {
    /**
      * @dev Thrown when a caller is not the pool contract
      */

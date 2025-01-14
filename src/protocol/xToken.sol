@@ -4,6 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
@@ -15,7 +16,7 @@ import "../interfaces/IXToken.sol";
  * All amounts are expected to be in 18 decimal precision.
  * The asset price is assumed to be in 18 decimal precision.
  */
-contract xToken is IXToken, ERC20 {
+contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Reference to the oracle providing asset price feeds
     IAssetOracle public immutable oracle;
     
@@ -48,7 +49,7 @@ contract xToken is IXToken, ERC20 {
      * @param symbol The symbol of the token
      * @param _oracle The address of the asset price oracle
      */
-    constructor(string memory name, string memory symbol, address _oracle) ERC20(name, symbol) {
+    constructor(string memory name, string memory symbol, address _oracle) ERC20(name, symbol) ERC20Permit(name) {
         if (_oracle == address(0)) revert ZeroAddress();
         oracle = IAssetOracle(_oracle);
         pool = msg.sender;
