@@ -105,7 +105,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @param amount The amount of tokens to transfer (in 18 decimal precision)
      * @return success True if the transfer succeeded
      */
-    function transfer(address recipient, uint256 amount) public override(ERC20) returns (bool) {
+    function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
         if (recipient == address(0)) revert ZeroAddress();
         uint256 balance = balanceOf(msg.sender);
         if (balance < amount) revert InsufficientBalance();
@@ -132,7 +132,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         address sender,
         address recipient,
         uint256 amount
-    ) public override(ERC20) returns (bool) {
+    ) public override(ERC20, IERC20) returns (bool) {
         if (recipient == address(0)) revert ZeroAddress();
         uint256 currentAllowance = allowance(sender, msg.sender);
         if (currentAllowance < amount) revert InsufficientAllowance();
