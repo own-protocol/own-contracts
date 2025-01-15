@@ -49,6 +49,24 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         pool = msg.sender;
     }
 
+     /**
+     * @notice Returns the reserve balance of an account
+     * @dev This balance is independent of the asset price and represents the user's share of the reserve tokens in the pool
+     * @param account The address of the account
+     * @return The reserve balance of the account
+     */
+    function reserveBalanceOf(address account) public view returns (uint256) {
+        return _reserveBalances[account];
+    }
+
+    /**
+     * @notice Returns the total reserve supply
+     * @return The total reserve supply of tokens
+     */
+    function totalReserveSupply() public view returns (uint256) {
+        return _totalReserveSupply;
+    }
+
     /**
      * @notice Mints new tokens to an account
      * @dev Only callable by the pool contract

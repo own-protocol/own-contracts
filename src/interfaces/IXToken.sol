@@ -53,6 +53,19 @@ interface IXToken {
      **/
     function pool() external view returns (address);
 
+     /**
+     * @dev Returns the reserve balance of the user that is backing the xTokens.
+     * @param user The user whose balance is calculated
+     * @return The reserve balance of the user
+     **/
+    function reserveBalanceOf(address user) external view returns (uint256);
+
+    /**
+     * @dev Returns the reserve total supply of the token.
+     * @return The reserve total supply
+     **/
+    function totalReserveSupply() external view returns (uint256);
+
     /**
      * @dev Mints `amount` xTokens to `account`
      * @param account The address receiving the minted tokens
