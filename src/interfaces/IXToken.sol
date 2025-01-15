@@ -7,7 +7,8 @@ import {IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/IERC20.sol';
 import {IAssetOracle} from './IAssetOracle.sol';
 
 interface IXToken is IERC20 {
-   /**
+    
+    /**
      * @dev Thrown when a caller is not the pool contract
      */
     error NotPool();

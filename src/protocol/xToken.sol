@@ -15,7 +15,6 @@ import "../interfaces/IXToken.sol";
  * The asset price is assumed to be in 18 decimal precision.
  */
 contract xToken is IXToken, ERC20, ERC20Permit {
-
     
     /// @notice Address of the pool contract that manages this token
     address public immutable pool;
