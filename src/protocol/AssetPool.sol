@@ -212,7 +212,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @param rebalancePrice Price at which the rebalance was executed
      * @param isDeposit True if depositing stable, false if withdrawing
      *
-     * ToDo: lpLiquidty should be bassed on how much being asset being rebalanced during the cycle
+     * ToDo: lpLiquidty should be based on how much being asset being rebalanced during the cycle
+     * ToDo: Need to handle the case when LP doesn't rebalance within the rebalance window
      */
 
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
@@ -221,7 +222,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
 
-        _validateRebalancing(lp, rebalancePrice, amount, isDeposit);
+        _validateRebalancing(lp, amount, isDeposit);
 
         cycleWeightedSum[cycleIndex] += rebalancePrice * lpLiquidity;
 
@@ -242,6 +243,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
             uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
+            uint256 assetBalance = assetToken.balanceOf(address(this));
+            uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
+            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
             cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
             _startNewCycle();
         }
@@ -278,7 +282,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     }
 
     // Internal functions
-    function _validateRebalancing(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) internal view {
+    function _validateRebalancing(address lp, uint256 amount, bool isDeposit) internal view {
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
         require(lpLiquidity > 0, "Insufficient LP liquidity");
 
