@@ -47,6 +47,9 @@ interface IAssetPool {
     error NothingToClaim();
     error NothingToCancel();
     error MintOrBurnPending();
+    error CycleInProgress();
+    error InsufficientLPLiquidity();
+    error RebalanceMismatch();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS

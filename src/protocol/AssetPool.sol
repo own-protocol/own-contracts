@@ -183,8 +183,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
     function initiateRebalance() external {
-        require(cycleState == CycleState.ACTIVE, "Already rebalancing");
-        require(block.timestamp < nextRebalanceStartDate, "Cycle inprogress");
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        if (block.timestamp >= nextRebalanceStartDate) revert CycleInProgress();
         cycleState = CycleState.REBALANCING;
         uint256 assetPrice = assetOracle.assetPrice();
         uint256 depositRequests = cycleTotalDepositRequests[cycleIndex];
@@ -217,7 +217,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      */
 
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
-        require(cycleState == CycleState.REBALANCING, "Not in rebalancing");
+        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
         if (hasRebalanced[lp]) revert AlreadyRebalanced();
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
@@ -284,15 +284,15 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     // Internal functions
     function _validateRebalancing(address lp, uint256 amount, bool isDeposit) internal view {
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
-        require(lpLiquidity > 0, "Insufficient LP liquidity");
+        if (lpLiquidity == 0) revert InsufficientLPLiquidity();
 
         // Check if the rebalance direction aligns with the rebalanceAmount
-        if (rebalanceAmount > 0 && !isDeposit) revert("Expected deposit, got withdrawal");
-        if (rebalanceAmount < 0 && isDeposit) revert("Expected withdrawal, got deposit");
+        if (rebalanceAmount > 0 && !isDeposit) revert RebalanceMismatch();
+        if (rebalanceAmount < 0 && isDeposit) revert RebalanceMismatch();
 
         // Calculate the expected amount based on LP's liquidity share
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) * lpLiquidity / lpRegistry.getTotalLPLiquidity(address(this));
-        require(amount == expectedAmount, "Amount mismatch with liquidity share");
+        if (amount != expectedAmount) revert RebalanceMismatch();
 
         
     }
