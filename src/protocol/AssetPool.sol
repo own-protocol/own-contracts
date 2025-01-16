@@ -51,6 +51,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     mapping(address => uint256) public lastActionCycle;     // Last cycle user interacted with
 
     mapping(uint256 => uint256) public cycleRebalancePrice;  // price at which the rebalance was executed in a cycle
+    mapping(uint256 => uint256) private cycleWeightedSum;  // Weighted sum of rebalance prices
 
     // Constants
     uint256 private constant PRECISION = 1e18; // Precision for calculations
@@ -208,12 +209,21 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
      * @param lp Address of the LP performing the final on-chain step
      * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
+     * @param rebalancePrice Price at which the rebalance was executed
      * @param isDeposit True if depositing stable, false if withdrawing
+     *
+     * ToDo: lpLiquidty should be bassed on how much being asset being rebalanced during the cycle
      */
-    function rebalancePool(address lp, uint256 amount, bool isDeposit) external onlyLP {
+
+    function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
         require(cycleState == CycleState.REBALANCING, "Not in rebalancing");
         if (hasRebalanced[lp]) revert AlreadyRebalanced();
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
+        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
+
+        _validateRebalancing(lp, rebalancePrice, amount, isDeposit);
+
+        cycleWeightedSum[cycleIndex] += rebalancePrice * lpLiquidity;
 
         // Approve stablecoins if deposit
         if (isDeposit) {
@@ -221,17 +231,18 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
             reserveToken.transferFrom(lp, address(this), amount);
         } else {
             // If withdrawing stable, ensure the pool has enough
-            if (amount > uint256(rebalanceAmount)) revert InvalidAmount();
             reserveToken.transfer(lp, amount);
         }
 
         hasRebalanced[lp] = true;
         rebalancedLPs++;
 
-        emit Rebalanced(lp, amount, isDeposit, cycleIndex);
+        emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
+            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
+            cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
             _startNewCycle();
         }
     }
@@ -267,8 +278,19 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     }
 
     // Internal functions
-    function _validateRebalancing() internal view {
-        require(lpRegistry.getLPLiquidity(address(this), msg.sender) > 0, "Insufficient LP liquidity");
+    function _validateRebalancing(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) internal view {
+        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
+        require(lpLiquidity > 0, "Insufficient LP liquidity");
+
+        // Check if the rebalance direction aligns with the rebalanceAmount
+        if (rebalanceAmount > 0 && !isDeposit) revert("Expected deposit, got withdrawal");
+        if (rebalanceAmount < 0 && isDeposit) revert("Expected withdrawal, got deposit");
+
+        // Calculate the expected amount based on LP's liquidity share
+        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) * lpLiquidity / lpRegistry.getTotalLPLiquidity(address(this));
+        require(amount == expectedAmount, "Amount mismatch with liquidity share");
+
+        
     }
 
     // View functions

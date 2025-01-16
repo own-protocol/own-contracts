@@ -23,13 +23,13 @@ interface IAssetPool {
     event BurnRequested(address indexed user, uint256 xTokenAmount, uint256 indexed cycleIndex);
     event BurnCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
     event ReserveWithdrawn(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-    event Rebalanced(address indexed lp, uint256 amount, bool isDeposit, uint256 indexed cycleIndex);
+    event Rebalanced(address indexed lp, uint256 rebalancePrice, uint256 amount, bool isDeposit, uint256 indexed cycleIndex);
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
     event CycleTimeUpdated(uint256 newCycleTime);
     event RebalanceTimeUpdated(uint256 newRebalanceTime);
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
-        uint256 spotPrice,
+        uint256 assetPrice,
         int256 netReserveDelta,
         int256 rebalanceAmount
     );
@@ -62,7 +62,7 @@ interface IAssetPool {
     //                                  LP ACTIONS
     // --------------------------------------------------------------------------------
     function initiateRebalance() external;
-    function rebalancePool(address lp, uint256 amount, bool isDeposit) external;
+    function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external;
 
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE ACTIONS
