@@ -13,49 +13,162 @@ import {ILPRegistry} from "../interfaces/ILPRegistry.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {xToken} from "./xToken.sol";
 
+/**
+ * @title AssetPool
+ * @notice Manages the lifecycle of assets and reserves in a decentralized pool.
+ *         Facilitates deposits, minting, redemptions, and rebalancing of assets.
+ *         Includes governance controls for updating operational parameters.
+ */
 contract AssetPool is IAssetPool, Ownable, Pausable {
-    IERC20 public immutable reserveToken;    // Reserve token (e.g., USDC)
-    IXToken public immutable assetToken;     // xToken contract
-    ILPRegistry public immutable lpRegistry;  // LP Registry contract
-    IAssetOracle public immutable assetOracle;     // Asset Oracle contract
+    // --------------------------------------------------------------------------------
+    //                               STATE VARIABLES
+    // --------------------------------------------------------------------------------
 
-    // Pool state
+    /**
+     * @notice Address of the reserve token (e.g., USDC).
+     */
+    IERC20 public immutable reserveToken;
+
+    /**
+     * @notice Address of the xToken contract used for asset representation.
+     */
+    IXToken public immutable assetToken;
+
+    /**
+     * @notice Address of the LP Registry contract for managing LPs.
+     */
+    ILPRegistry public immutable lpRegistry;
+
+    /**
+     * @notice Address of the Asset Oracle contract for fetching asset prices.
+     */
+    IAssetOracle public immutable assetOracle;
+
+    /**
+     * @notice Index of the current operational cycle.
+     */
     uint256 public cycleIndex;
+
+    /**
+     * @notice Current state of the pool (ACTIVE or REBALANCING).
+     */
     CycleState public cycleState;
+
+    /**
+     * @notice Timestamp when the next rebalance is scheduled to start.
+     */
     uint256 public nextRebalanceStartDate;
+
+    /**
+     * @notice Timestamp when the next rebalance is scheduled to end.
+     */
     uint256 public nextRebalanceEndDate;
 
-    // Cycle timing
+    /**
+     * @notice Duration of each operational cycle in seconds.
+     */
     uint256 public cycleTime;
+
+    /**
+     * @notice Duration of the rebalance period in seconds.
+     */
     uint256 public rebalanceTime;
 
-     // Asset states
-    uint256 public totalReserveBalance;  // total reserve token balance         
+    /**
+     * @notice Total reserve token balance in the pool.
+     */
+    uint256 public totalReserveBalance;
 
-    // Rebalancing instructions
-    uint256 public newReserveSupply; // New reserve balance after rebalance excluding rebalance amount
-    uint256 public newAssetSupply;  // New asset balance after rebalance excluding rebalance amount
-    int256 public netReserveDelta;  // Net reserve change after rebalance excluding rebalance amount
-    int256 public rebalanceAmount; // Net reserve redemption PnL
+    /**
+     * @notice New reserve supply post-rebalance.
+     */
+    uint256 public newReserveSupply;
 
-    // Rebalancing state
+    /**
+     * @notice New asset supply post-rebalance.
+     */
+    uint256 public newAssetSupply;
+
+    /**
+     * @notice Net change in reserves post-rebalance.
+     */
+    int256 public netReserveDelta;
+
+    /**
+     * @notice Total amount to rebalance (PnL from reserves).
+     */
+    int256 public rebalanceAmount;
+
+    /**
+     * @notice Count of LPs who have completed rebalancing in the current cycle.
+     */
     uint256 public rebalancedLPs;
+
+    /**
+     * @notice Tracks whether an LP has completed rebalancing in the current cycle.
+     */
     mapping(address => bool) public hasRebalanced;
 
-    // User request states
-    mapping(address => uint256) public reserveBalance; // User reserve balance
-    mapping(uint256 => uint256) public cycleTotalDepositRequests; // Pending deposits per user
-    mapping(uint256 => uint256) public cycleTotalRedemptionRequests;  // Pending burns per user
-    mapping(uint256 => mapping(address => uint256)) public cycleDepositRequests;     // Pending deposits per user
-    mapping(uint256 => mapping(address => uint256)) public cycleRedemptionRequests;  // Pending burns per user
-    mapping(address => uint256) public lastActionCycle;     // Last cycle user interacted with
+    /**
+     * @notice Individual user reserve balances.
+     */
+    mapping(address => uint256) public reserveBalance;
 
-    mapping(uint256 => uint256) public cycleRebalancePrice;  // price at which the rebalance was executed in a cycle
-    mapping(uint256 => uint256) private cycleWeightedSum;  // Weighted sum of rebalance prices
+    /**
+     * @notice Total pending deposit requests for each cycle.
+     */
+    mapping(uint256 => uint256) public cycleTotalDepositRequests;
 
-    // Constants
-    uint256 private constant PRECISION = 1e18; // Precision for calculations
+    /**
+     * @notice Total pending redemption requests for each cycle.
+     */
+    mapping(uint256 => uint256) public cycleTotalRedemptionRequests;
 
+    /**
+     * @notice Pending deposit requests by user for each cycle.
+     */
+    mapping(uint256 => mapping(address => uint256)) public cycleDepositRequests;
+
+    /**
+     * @notice Pending redemption requests by user for each cycle.
+     */
+    mapping(uint256 => mapping(address => uint256)) public cycleRedemptionRequests;
+
+    /**
+     * @notice Tracks the last cycle a user interacted with.
+     */
+    mapping(address => uint256) public lastActionCycle;
+
+    /**
+     * @notice Rebalance price for each cycle.
+     */
+    mapping(uint256 => uint256) public cycleRebalancePrice;
+
+    /**
+     * @notice Weighted sum of rebalance prices for each cycle.
+     */
+    mapping(uint256 => uint256) private cycleWeightedSum;
+
+    /**
+     * @notice Precision used for calculations.
+     */
+    uint256 private constant PRECISION = 1e18;
+
+    // --------------------------------------------------------------------------------
+    //                                    CONSTRUCTOR
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Initializes the AssetPool contract with required dependencies and parameters.
+     * @param _reserveToken Address of the reserve token contract (e.g., USDC).
+     * @param _xTokenName Name of the xToken to be created.
+     * @param _xTokenSymbol Symbol of the xToken to be created.
+     * @param _assetOracle Address of the asset price oracle contract.
+     * @param _lpRegistry Address of the LP registry contract.
+     * @param _cyclePeriod Duration of each operational cycle.
+     * @param _rebalancingPeriod Duration of the rebalance period.
+     * @param _owner Address of the contract owner.
+     */
     constructor(
         address _reserveToken,
         string memory _xTokenName,
@@ -78,17 +191,35 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         rebalanceTime = _rebalancingPeriod;
     }
 
+    // --------------------------------------------------------------------------------
+    //                                    MODIFIERS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @dev Ensures the caller is a registered LP.
+     */
     modifier onlyLP() {
         if (!lpRegistry.isLP(address(this), msg.sender)) revert NotLP();
         _;
     }
 
+    /**
+     * @dev Ensures the pool is not in a rebalancing state.
+     */
     modifier notRebalancing() {
         if (cycleState == CycleState.REBALANCING) revert InvalidCycleState();
         _;
     }
 
-    // User Actions
+    // --------------------------------------------------------------------------------
+    //                                  USER ACTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Allows a user to deposit reserve tokens into the pool.
+     *         The deposited amount will be processed in the next cycle.
+     * @param amount Amount of reserve tokens to deposit.
+     */
     function depositReserve(uint256 amount) external whenNotPaused notRebalancing {
         uint256 userCycle = lastActionCycle[msg.sender];
         if (amount == 0) revert InvalidAmount();
@@ -101,6 +232,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit DepositRequested(msg.sender, amount, cycleIndex);
     }
 
+    /**
+     * @notice Allows a user to cancel a pending deposit request for the current cycle.
+     */
     function cancelDeposit() external notRebalancing {
         uint256 amount = cycleDepositRequests[cycleIndex][msg.sender];
         if (amount == 0) revert NothingToCancel();
@@ -113,6 +247,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit DepositCancelled(msg.sender, amount, cycleIndex);
     }
 
+    /**
+     * @notice Mints asset tokens for a user based on their processed deposit requests.
+     * @param user Address of the user claiming the asset tokens.
+     */
     function mintAsset(address user) external whenNotPaused notRebalancing {
         uint256 userCycle = lastActionCycle[user];
         if (userCycle >= cycleIndex) revert NothingToClaim();
@@ -131,6 +269,11 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit AssetClaimed(msg.sender, assetAmount, userCycle);
     }
 
+    /**
+     * @notice Burn asset tokens for a user and creates a redemption request for the current cycle.
+     *         The redemption request will be processed in the next cycle.
+     * @param assetAmount Amount of asset tokens to burn.
+     */
     function burnAsset(uint256 assetAmount) external whenNotPaused notRebalancing {
         uint256 userBalance = assetToken.balanceOf(msg.sender);
         uint256 userCycle = lastActionCycle[msg.sender];
@@ -146,6 +289,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit BurnRequested(msg.sender, assetAmount, cycleIndex);
     }
 
+    /**
+     * @notice Allows a user to cancel a pending burn request for the current cycle.
+     */
     function cancelBurn() external notRebalancing {
         uint256 assetAmount = cycleRedemptionRequests[cycleIndex][msg.sender];
         if (assetAmount == 0) revert NothingToCancel();
@@ -159,6 +305,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         emit BurnCancelled(msg.sender, assetAmount, cycleIndex);
     }
 
+    /**
+     * @notice Allows a user to withdraw reserve tokens after their redemption request is processed.
+     * @param user Address of the user withdrawing the reserve tokens.
+     */
     function withdrawReserve(address user) external whenNotPaused notRebalancing {
         uint256 userCycle = lastActionCycle[user];
         if (userCycle >= cycleIndex) revert NothingToClaim();
@@ -208,8 +358,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     /**
      * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
      * @param lp Address of the LP performing the final on-chain step
-     * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
      * @param rebalancePrice Price at which the rebalance was executed
+     * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
      * @param isDeposit True if depositing stable, false if withdrawing
      *
      * ToDo: lpLiquidty should be based on how much being asset being rebalanced during the cycle
@@ -226,7 +376,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         cycleWeightedSum[cycleIndex] += rebalancePrice * lpLiquidity;
 
-        // Approve stablecoins if deposit
         if (isDeposit) {
             // If depositing stable, transfer from LP
             reserveToken.transferFrom(lp, address(this), amount);
@@ -242,46 +391,57 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
-            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
-            uint256 assetBalance = assetToken.balanceOf(address(this));
-            uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-            cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
             _startNewCycle();
         }
     }
 
-    function _startNewCycle() internal {
-        cycleIndex++;
-        cycleState = CycleState.ACTIVE;
-        rebalancedLPs = 0;
-        nextRebalanceStartDate = block.timestamp + cycleTime;
-        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
+    // --------------------------------------------------------------------------------
+    //                            GOVERNANCE FUNCTIONS
+    // --------------------------------------------------------------------------------
 
-        emit CycleStarted(cycleIndex, block.timestamp);
-    }
-
-
-    // Governance Actions
+    /**
+     * @notice Updates the duration of each cycle.
+     * @param newCycleTime New cycle duration in seconds.
+     */
     function updateCycleTime(uint256 newCycleTime) external onlyOwner {
         cycleTime = newCycleTime;
         emit CycleTimeUpdated(newCycleTime);
     }
 
+    /**
+     * @notice Updates the duration of the rebalance period.
+     * @param newRebalanceTime New rebalance duration in seconds.
+     */
     function updateRebalanceTime(uint256 newRebalanceTime) external onlyOwner {
         rebalanceTime = newRebalanceTime;
         emit RebalanceTimeUpdated(newRebalanceTime);
     }
 
+    /**
+     * @notice Pauses the pool, disabling all user actions.
+     */
     function pausePool() external onlyOwner {
         _pause();
     }
 
+    /**
+     * @notice Unpauses the pool, re-enabling all user actions.
+     */
     function unpausePool() external onlyOwner {
         _unpause();
     }
 
-    // Internal functions
+    // --------------------------------------------------------------------------------
+    //                            INTERNAL FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+
+    /**
+     * @notice Validates the rebalancing action performed by an LP.
+     * @param lp Address of the LP performing the rebalance.
+     * @param amount Amount of reserve being deposited or withdrawn.
+     * @param isDeposit True if depositing reserve, false if withdrawing.
+     */
     function _validateRebalancing(address lp, uint256 amount, bool isDeposit) internal view {
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
         if (lpLiquidity == 0) revert InsufficientLPLiquidity();
@@ -294,10 +454,39 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) * lpLiquidity / lpRegistry.getTotalLPLiquidity(address(this));
         if (amount != expectedAmount) revert RebalanceMismatch();
 
-        
     }
 
-    // View functions
+    /**
+     * @notice Starts a new cycle after all LPs have rebalanced.
+     */
+    function _startNewCycle() internal {
+        uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
+        uint256 assetBalance = assetToken.balanceOf(address(this));
+        uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
+        assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+        cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
+        cycleIndex++;
+        cycleState = CycleState.ACTIVE;
+        rebalancedLPs = 0;
+        nextRebalanceStartDate = block.timestamp + cycleTime;
+        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
+
+        emit CycleStarted(cycleIndex, block.timestamp);
+    }
+
+    // --------------------------------------------------------------------------------
+    //                            VIEW FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the general information about the pool.
+     * @return _xTokenSupply Total supply of the xToken.
+     * @return _cycleState Current state of the pool.
+     * @return _cycleIndex Current cycle index.
+     * @return _nextRebalanceStartDate Timestamp of the next rebalance start.
+     * @return _nextRebalanceEndDate Timestamp of the next rebalance end.
+     * @return _assetPrice Current price of the asset.
+     */
     function getGeneralInfo() external view returns (
         uint256 _xTokenSupply,
         CycleState _cycleState,
@@ -316,6 +505,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         );
     }
 
+    /**
+     * @notice Returns the LP-specific information about the pool.
+     * @return _totalDepositRequests Total pending deposit requests.
+     * @return _totalRedemptionRequests Total pending redemption requests.
+     * @return _netReserveDelta Net change in reserves post-rebalance.
+     * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
+     */
     function getLPInfo()
         external
         view
