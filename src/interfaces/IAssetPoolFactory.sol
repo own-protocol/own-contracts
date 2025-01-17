@@ -10,7 +10,7 @@ import {ILPRegistry} from './ILPRegistry.sol';
  * @dev Interface defining the structure of the PoolFactory contract.
  * Responsible for creating and managing asset pools for liquidity provisioning.
  */
-interface IPoolFactory {
+interface IAssetPoolFactory {
     /**
      * @dev Emitted when a new asset pool is created.
      * @param pool Address of the newly created pool.
@@ -46,20 +46,18 @@ interface IPoolFactory {
 
     /**
      * @dev Creates a new asset pool with the specified parameters.
-     * @param assetSymbol Symbol of the asset.
-     * @param assetTokenName Name of the token representing the asset.
-     * @param assetTokenSymbol Symbol of the token representing the asset.
      * @param depositToken Address of the token used for deposits.
+     * @param assetName Name of the token representing the asset.
+     * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
      * @param cycleLength Length of each investment cycle in seconds.
      * @param rebalancingPeriod Rebalancing period length within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
-        string memory assetSymbol,
-        string memory assetTokenName,
-        string memory assetTokenSymbol,
         address depositToken,
+        string memory assetName,
+        string memory assetSymbol,
         address oracle,
         uint256 cycleLength,
         uint256 rebalancingPeriod
