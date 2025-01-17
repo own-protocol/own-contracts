@@ -31,7 +31,7 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     /// @notice Symbol of the asset being tracked (e.g., "TSLA")
     string public assetSymbol;
     
-    /// @notice Current price of the asset in cents
+    /// @notice Current price of the asset in 18 decimal format
     uint256 public assetPrice;
     
     /// @notice Timestamp of the last price update

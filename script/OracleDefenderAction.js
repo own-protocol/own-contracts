@@ -8,7 +8,7 @@ const GAS_LIMIT = 300_000;
 const DON_ID =
   "0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000";
 const SOURCE =
-  'const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1h`; const response = await Functions.makeHttpRequest({ url: yahooFinanceUrl }); if (!response || response.status !== 200) throw new Error("Failed to fetch asset data"); const data = response.data.chart.result[0]; const currentPrice = data.meta.regularMarketPrice; return Functions.encodeUint256(Math.round(currentPrice * 100));';
+  'const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1h`; const response = await Functions.makeHttpRequest({ url: yahooFinanceUrl }); if (!response || response.status !== 200) throw new Error("Failed to fetch asset data"); const data = response.data.chart.result[0]; const currentPrice = data.meta.regularMarketPrice; return Functions.encodeUint256(Math.round(currentPrice * 1e18));';
 
 // ABI of the AssetOracle contract
 const ASSET_ORACLE_ABI = [
