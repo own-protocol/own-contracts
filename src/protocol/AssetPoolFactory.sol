@@ -73,8 +73,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         // Register the newly created pool in the LP Registry.
         lpRegistry.addPool(address(pool));
 
-        // Emit the PoolCreated event to notify listeners.
-        emit PoolCreated(
+        // Emit the AssetPoolCreated event to notify listeners.
+        emit AssetPoolCreated(
             address(pool),
             assetSymbol,
             depositToken,

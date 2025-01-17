@@ -20,7 +20,7 @@ interface IAssetPoolFactory {
      * @param cycleLength Duration of a single investment cycle in seconds.
      * @param rebalancingPeriod Duration of the rebalancing period within a cycle in seconds.
      */
-    event PoolCreated(
+    event AssetPoolCreated(
         address indexed pool,
         string assetSymbol,
         address depositToken,
