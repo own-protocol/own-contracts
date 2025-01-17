@@ -15,7 +15,7 @@ import {AssetPool} from './AssetPool.sol';
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     /// @notice Reference to the LP Registry contract.
-    ILPRegistry public immutable lpRegistry;
+    ILPRegistry public lpRegistry;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
@@ -70,9 +70,6 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             msg.sender
         );
 
-        // Register the newly created pool in the LP Registry.
-        lpRegistry.addPool(address(pool));
-
         // Emit the AssetPoolCreated event to notify listeners.
         emit AssetPoolCreated(
             address(pool),
@@ -84,5 +81,19 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         );
 
         return address(pool);
+    }
+
+    /**
+    * @dev Updates the LP Registry contract address.
+    * Only callable by the owner of the contract.
+    * Reverts if the new address is zero.
+    * 
+    * @param newLPRegistry Address of the new LP Registry contract.
+    */
+    function updateLPRegistry(address newLPRegistry) external onlyOwner {
+        if (newLPRegistry == address(0)) revert ZeroAddress();
+        address oldRegistry = address(lpRegistry);
+        lpRegistry = ILPRegistry(newLPRegistry);
+        emit LPRegistryUpdated(oldRegistry, newLPRegistry);
     }
 }

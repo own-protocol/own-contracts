@@ -30,6 +30,13 @@ interface IAssetPoolFactory {
     );
 
     /**
+     * @dev Emitted when the LP Registry contract address is updated.
+     * @param lpRegistry Address of the old LP Registry contract.
+     * @param newLPRegistry Address of the new LP Registry contract.
+     */
+    event LPRegistryUpdated(address lpRegistry, address newLPRegistry);
+
+    /**
      * @dev Reverts when provided parameters are invalid.
      */
     error InvalidParams();
@@ -62,4 +69,13 @@ interface IAssetPoolFactory {
         uint256 cycleLength,
         uint256 rebalancingPeriod
     ) external returns (address);
+
+    /**
+    * @dev Updates the LP Registry contract address.
+    * Only callable by the owner of the contract.
+    * Reverts if the new address is zero.
+    * 
+    * @param newLPRegistry Address of the new LP Registry contract.
+    */
+    function updateLPRegistry(address newLPRegistry) external;
 }
