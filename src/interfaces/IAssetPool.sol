@@ -149,6 +149,8 @@ interface IAssetPool {
     error InsufficientLPLiquidity();
     /// @notice Thrown when rebalance parameters don't match requirements
     error RebalanceMismatch();
+    /// @notice Thrown when a user attempts to interact with an LP's rebalance
+    error InvalidCycleRequest();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS

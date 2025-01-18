@@ -189,6 +189,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleState = CycleState.ACTIVE;
         cycleTime = _cyclePeriod;
         rebalanceTime = _rebalancingPeriod;
+        nextRebalanceStartDate = block.timestamp + _cyclePeriod;
+        nextRebalanceEndDate = nextRebalanceStartDate + _rebalancingPeriod;
     }
 
     // --------------------------------------------------------------------------------
@@ -393,6 +395,17 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
             _startNewCycle();
         }
+    }
+
+    function updateCycle() external {
+        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
+        if (cycleTotalDepositRequests[cycleIndex] > 0) revert InvalidCycleRequest();
+        if (cycleTotalRedemptionRequests[cycleIndex] > 0) revert InvalidCycleRequest();
+        
+        cycleIndex++;
+        cycleState = CycleState.ACTIVE;
+        nextRebalanceStartDate = block.timestamp + cycleTime;
+        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
     }
 
     // --------------------------------------------------------------------------------
