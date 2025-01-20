@@ -336,7 +336,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      */
     function initiateRebalance() external {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        if (block.timestamp >= nextRebalanceStartDate) revert CycleInProgress();
+        if (block.timestamp < nextRebalanceStartDate) revert CycleInProgress();
         cycleState = CycleState.REBALANCING;
         uint256 assetPrice = assetOracle.assetPrice();
         uint256 depositRequests = cycleTotalDepositRequests[cycleIndex];
