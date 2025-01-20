@@ -208,6 +208,11 @@ interface IAssetPool {
      */
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external;
 
+    /**
+     * @notice When there is nothing to rebalance, start the new cycle
+     */
+    function startNewCycle() external;
+
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE ACTIONS
     // --------------------------------------------------------------------------------

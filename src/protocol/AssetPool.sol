@@ -393,19 +393,25 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
+            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
+            uint256 assetBalance = assetToken.balanceOf(address(this));
+            uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
+            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
+            
             _startNewCycle();
         }
     }
 
-    function updateCycle() external {
+    /**
+     * @notice If there is nothing to rebalance, start the next cycle.
+     */
+    function startNewCycle() external {
         if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
         if (cycleTotalDepositRequests[cycleIndex] > 0) revert InvalidCycleRequest();
         if (cycleTotalRedemptionRequests[cycleIndex] > 0) revert InvalidCycleRequest();
         
-        cycleIndex++;
-        cycleState = CycleState.ACTIVE;
-        nextRebalanceStartDate = block.timestamp + cycleTime;
-        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
+        _startNewCycle();
     }
 
     // --------------------------------------------------------------------------------
@@ -473,11 +479,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @notice Starts a new cycle after all LPs have rebalanced.
      */
     function _startNewCycle() internal {
-        uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
-        uint256 assetBalance = assetToken.balanceOf(address(this));
-        uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-        assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-        cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
         cycleIndex++;
         cycleState = CycleState.ACTIVE;
         rebalancedLPs = 0;
