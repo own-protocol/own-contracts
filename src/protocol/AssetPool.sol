@@ -404,6 +404,17 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     }
 
     /**
+     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
+     * ToDo: Slash the LPs who didn't rebalance within the rebalance window, rebalance the pool and start the next cycle
+     */
+    function settlePool() external {
+        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
+        if (block.timestamp < nextRebalanceEndDate) revert RebalancingInProgress();
+        
+        _startNewCycle();
+    }
+
+    /**
      * @notice If there is nothing to rebalance, start the next cycle.
      */
     function startNewCycle() external {

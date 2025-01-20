@@ -151,6 +151,8 @@ interface IAssetPool {
     error RebalanceMismatch();
     /// @notice Thrown when a user attempts to interact with an LP's rebalance
     error InvalidCycleRequest();
+    /// @notice Thrown when an LP tries to settle a rebalance before the rebalance ends
+    error RebalancingInProgress();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -208,6 +210,11 @@ interface IAssetPool {
      */
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external;
 
+    /**
+     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
+     */
+    function settlePool() external;
+        
     /**
      * @notice When there is nothing to rebalance, start the new cycle
      */
