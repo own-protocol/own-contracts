@@ -105,9 +105,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     uint256 public rebalancedLPs;
 
     /**
-     * @notice Tracks whether an LP has completed rebalancing in the current cycle.
+     * @notice Tracks the last cycle an lp rebalanced.
      */
-    mapping(address => bool) public hasRebalanced;
+    mapping(address => uint256) public lastRebalancedCycle;
 
     /**
      * @notice Individual user reserve balances.
@@ -145,9 +145,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     mapping(uint256 => uint256) public cycleRebalancePrice;
 
     /**
-     * @notice Weighted sum of rebalance prices for each cycle.
+     * @notice Weighted sum of rebalance prices for the current cycle.
      */
-    mapping(uint256 => uint256) private cycleWeightedSum;
+    uint256 private cycleWeightedSum;
 
     /**
      * @notice Precision used for calculations.
@@ -370,13 +370,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
         if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
-        if (hasRebalanced[lp]) revert AlreadyRebalanced();
+        if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
 
         _validateRebalancing(lp, amount, isDeposit);
 
-        cycleWeightedSum[cycleIndex] += rebalancePrice * lpLiquidity;
+        cycleWeightedSum += rebalancePrice * lpLiquidity;
 
         if (isDeposit) {
             // If depositing stable, transfer from LP
@@ -386,7 +386,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
             reserveToken.transfer(lp, amount);
         }
 
-        hasRebalanced[lp] = true;
+        lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
         emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
@@ -397,7 +397,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
             uint256 assetBalance = assetToken.balanceOf(address(this));
             uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-            cycleRebalancePrice[cycleIndex] = cycleWeightedSum[cycleIndex] / totalLiquidity;
+            cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
             
             _startNewCycle();
         }
@@ -493,6 +493,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleIndex++;
         cycleState = CycleState.ACTIVE;
         rebalancedLPs = 0;
+        cycleWeightedSum = 0;
         nextRebalanceStartDate = block.timestamp + cycleTime;
         nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
 

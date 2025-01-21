@@ -367,10 +367,10 @@ interface IAssetPool {
     function rebalancedLPs() external view returns (uint256);
 
     /**
-     * @notice Checks if an LP has completed their rebalancing
+     * @notice Returns the last cycle an LP rebalanced
      * @param lp Address of the LP to check
      */
-    function hasRebalanced(address lp) external view returns (bool);
+    function lastRebalancedCycle(address lp) external view returns (uint256);
 
     /**
      * @notice Returns total deposit requests for a specific cycle

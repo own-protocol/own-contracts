@@ -5,8 +5,8 @@ import "forge-std/Test.sol";
 import "../src/protocol/AssetPool.sol";
 import "../src/protocol/xToken.sol";
 import "../src/protocol/LPRegistry.sol";
-import "../src/protocol/AssetOracle.sol";
 import "../src/interfaces/IAssetPool.sol";
+import "../src/interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract AssetPoolTest is Test {
@@ -15,7 +15,7 @@ contract AssetPoolTest is Test {
     IERC20 public reserveToken;
     xToken public assetToken;
     LPRegistry public lpRegistry;
-    AssetOracle public assetOracle;
+    MockAssetOracle assetOracle;
 
     // Test addresses
     address owner = address(1);
@@ -39,11 +39,9 @@ contract AssetPoolTest is Test {
 
         // Deploy core contracts
         lpRegistry = new LPRegistry();
-        assetOracle = new AssetOracle(
-            address(0), // Mock router address
-            "TSLA",
-            bytes32(0) // Mock source hash
-        );
+        assetOracle = new MockAssetOracle();
+
+        assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
         pool = new AssetPool(
             address(reserveToken),
@@ -212,7 +210,7 @@ contract AssetPoolTest is Test {
         pool.rebalancePool(lp1, rebalancePrice, expectedAmount, rebalanceAmount > 0);
         vm.stopPrank();
 
-        assertTrue(pool.hasRebalanced(lp1));
+        assertTrue(pool.lastRebalancedCycle(lp1) == pool.cycleIndex());
         assertEq(pool.rebalancedLPs(), 1);
     }
 
@@ -277,6 +275,8 @@ contract AssetPoolTest is Test {
         assertGt(userBalance, 0, "User should have received reserve tokens");
     }
 
+    // ToDO: Add tests to validate rebalance amount & reserve balances & asset balances pre & post rebalance
+
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE TESTS
     // --------------------------------------------------------------------------------
@@ -339,16 +339,12 @@ contract AssetPoolTest is Test {
         reserveToken.approve(address(pool), expectedAmount);
         pool.rebalancePool(lp2, rebalancePrice, expectedAmount, isDeposit);
         vm.stopPrank();
-
-        // Move to next cycle start
-        vm.warp(block.timestamp + REBALANCE_PERIOD + 1);
         
     }
 
     function setupCompleteBurnCycle() internal {
 
         setupCompleteDepositCycle();
-
         pool.mintAsset(user1);
 
         // Verify user has assets before burning
@@ -363,12 +359,15 @@ contract AssetPoolTest is Test {
 
         // Move to after rebalance start
         vm.warp(block.timestamp + CYCLE_PERIOD + 1);
+
+        assetOracle.setAssetPrice(2e18);
         
         // Complete rebalancing
         pool.initiateRebalance();
         
         // Get rebalance info
         (, , , int256 rebalanceAmount) = pool.getLPInfo();
+
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
         bool isDeposit = rebalanceAmount > 0;
         uint256 rebalancePrice = 2e18;
@@ -384,9 +383,6 @@ contract AssetPoolTest is Test {
         reserveToken.approve(address(pool), expectedAmount);
         pool.rebalancePool(lp2, rebalancePrice, expectedAmount, isDeposit);
         vm.stopPrank();
-
-        // Move to next cycle start
-        vm.warp(block.timestamp + REBALANCE_PERIOD + 1);
         
     }
 }
@@ -401,5 +397,19 @@ contract MockERC20 is ERC20 {
 
     function mint(address account, uint256 amount) external {
         _mint(account, amount);
+    }
+}
+
+// Mock asset oracle contract for testing
+contract MockAssetOracle {
+    uint256 public assetPrice;
+    
+    constructor() {
+        assetPrice = 1e18; // Default to 1.0
+    }
+    
+    // Test helper to set price
+    function setAssetPrice(uint256 newPrice) external {
+        assetPrice = newPrice;
     }
 }
