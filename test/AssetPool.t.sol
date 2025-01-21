@@ -151,6 +151,21 @@ contract AssetPoolTest is Test {
         assertEq(pool.lastActionCycle(user1), 0);
     }
 
+    function testMintAsset() public {
+
+        // Verify user has assets before minting
+        uint256 userBalance = assetToken.balanceOf(user1);
+        assertEq(userBalance, 0, "User should have assets to mint");
+
+        setupCompleteDepositCycle();
+
+        pool.mintAsset(user1);
+
+        // Verify assets were minted
+        uint256 newUserBalance = assetToken.balanceOf(user1);
+        assertGt(newUserBalance, userBalance, "Asset minting failed");
+    }
+
     // --------------------------------------------------------------------------------
     //                              REBALANCING TESTS
     // --------------------------------------------------------------------------------
@@ -205,23 +220,25 @@ contract AssetPoolTest is Test {
     //                              REDEMPTION TESTS
     // --------------------------------------------------------------------------------
 
-    // function testBurnAsset() public {
-    //     // Setup: Complete a cycle first to have assets to burn
-    //     setupCompleteDepositCycle();
+    function testBurnAsset() public {
+        // Setup: Complete a cycle first to have assets to burn
+        setupCompleteDepositCycle();
 
-    //     // Verify user has assets before burning
-    //     uint256 userBalance = assetToken.balanceOf(user1);
-    //     assertGt(userBalance, 0, "User should have assets to burn");
+        pool.mintAsset(user1);
 
-    //     uint256 burnAmount = userBalance / 2; // Burn half of the balance
+        // Verify user has assets before burning
+        uint256 userBalance = assetToken.balanceOf(user1);
+        assertGt(userBalance, 0, "User should have assets to burn");
+
+        uint256 burnAmount = userBalance / 2; // Burn half of the balance
         
-    //     vm.startPrank(user1);
-    //     assetToken.approve(address(pool), burnAmount);
-    //     pool.burnAsset(burnAmount);
-    //     vm.stopPrank();
+        vm.startPrank(user1);
+        assetToken.approve(address(pool), burnAmount);
+        pool.burnAsset(burnAmount);
+        vm.stopPrank();
 
-    //     assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
-    // }
+        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
+    }
 
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE TESTS
@@ -289,12 +306,6 @@ contract AssetPoolTest is Test {
         // Move to next cycle start
         vm.warp(block.timestamp + REBALANCE_PERIOD + 1);
         
-        // Mint assets for user1
-        pool.mintAsset(user1);
-
-        // Verify assets were minted
-        uint256 userBalance = assetToken.balanceOf(user1);
-        require(userBalance > 0, "Asset minting failed");
     }
 }
 
