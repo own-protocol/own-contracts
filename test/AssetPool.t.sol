@@ -240,6 +240,43 @@ contract AssetPoolTest is Test {
         assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
     }
 
+    function testCancelBurn() public {
+        // Setup: Complete a cycle first to have assets to burn
+        setupCompleteDepositCycle();
+
+        pool.mintAsset(user1);
+
+        // Verify user has assets before burning
+        uint256 userBalance = assetToken.balanceOf(user1);
+        assertGt(userBalance, 0, "User should have assets");
+
+        uint256 burnAmount = userBalance / 2; // Burn half of the balance
+
+        vm.startPrank(user1);
+        assetToken.approve(address(pool), burnAmount);
+        pool.burnAsset(burnAmount);
+        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
+
+        // Cancel burn
+        pool.cancelBurn();
+        vm.stopPrank();
+
+        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), 0);
+    }
+
+    function testWithdrawReserve() public {
+        // complete the deposit & burn cycle
+        setupCompleteBurnCycle();
+
+        // withdraw the reserve tokens
+        pool.withdrawReserve(user1);
+        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), 0);
+
+        // assert that the user has received the reserve tokens
+        uint256 userBalance = reserveToken.balanceOf(user1);
+        assertGt(userBalance, 0, "User should have received reserve tokens");
+    }
+
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE TESTS
     // --------------------------------------------------------------------------------
@@ -290,6 +327,51 @@ contract AssetPoolTest is Test {
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
         bool isDeposit = rebalanceAmount > 0;
         uint256 rebalancePrice = 1e18;
+
+        // LP1 rebalance
+        vm.startPrank(lp1);
+        reserveToken.approve(address(pool), expectedAmount);
+        pool.rebalancePool(lp1, rebalancePrice, expectedAmount, isDeposit);
+        vm.stopPrank();
+
+        // LP2 rebalance
+        vm.startPrank(lp2);
+        reserveToken.approve(address(pool), expectedAmount);
+        pool.rebalancePool(lp2, rebalancePrice, expectedAmount, isDeposit);
+        vm.stopPrank();
+
+        // Move to next cycle start
+        vm.warp(block.timestamp + REBALANCE_PERIOD + 1);
+        
+    }
+
+    function setupCompleteBurnCycle() internal {
+
+        setupCompleteDepositCycle();
+
+        pool.mintAsset(user1);
+
+        // Verify user has assets before burning
+        uint256 userBalance = assetToken.balanceOf(user1);
+        assertGt(userBalance, 0, "User should have assets");
+
+        uint256 burnAmount = userBalance / 2; // Burn half of the balance
+
+        vm.startPrank(user1);
+        assetToken.approve(address(pool), burnAmount);
+        pool.burnAsset(burnAmount);
+
+        // Move to after rebalance start
+        vm.warp(block.timestamp + CYCLE_PERIOD + 1);
+        
+        // Complete rebalancing
+        pool.initiateRebalance();
+        
+        // Get rebalance info
+        (, , , int256 rebalanceAmount) = pool.getLPInfo();
+        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
+        bool isDeposit = rebalanceAmount > 0;
+        uint256 rebalancePrice = 2e18;
 
         // LP1 rebalance
         vm.startPrank(lp1);
