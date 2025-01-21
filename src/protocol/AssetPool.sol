@@ -256,10 +256,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     function mintAsset(address user) external whenNotPaused notRebalancing {
         uint256 userCycle = lastActionCycle[user];
         if (userCycle >= cycleIndex) revert NothingToClaim();
-        uint256 reserveAmount = cycleDepositRequests[userCycle][msg.sender];
+        uint256 reserveAmount = cycleDepositRequests[userCycle][user];
         if (reserveAmount == 0) revert NothingToClaim();
 
-        cycleDepositRequests[userCycle][msg.sender] = 0;
+        cycleDepositRequests[userCycle][user] = 0;
         cycleTotalDepositRequests[userCycle] -= reserveAmount;
         uint256 rebalancePrice = cycleRebalancePrice[userCycle];
         lastActionCycle[user] = 0;
@@ -268,7 +268,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         assetToken.mint(user, assetAmount, reserveAmount);
         
-        emit AssetClaimed(msg.sender, assetAmount, userCycle);
+        emit AssetClaimed(user, assetAmount, userCycle);
     }
 
     /**
@@ -314,7 +314,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     function withdrawReserve(address user) external whenNotPaused notRebalancing {
         uint256 userCycle = lastActionCycle[user];
         if (userCycle >= cycleIndex) revert NothingToClaim();
-        uint256 assetAmount = cycleRedemptionRequests[userCycle][msg.sender];
+        uint256 assetAmount = cycleRedemptionRequests[userCycle][user];
         if (assetAmount == 0) revert NothingToClaim();
         
         uint256 reserveAmountToTransfer = Math.mulDiv(assetAmount, cycleRebalancePrice[userCycle], PRECISION);
