@@ -191,7 +191,7 @@ interface IAssetPool {
      * @notice Claim asset or reserve based on user's previous pending requests once they are processed
      * @param user Address of the user for whom the asset or reserve is to be claimed
      */
-    function claimAssetOrReserve(address user) external;
+    function claimRequest(address user) external;
 
 
     // --------------------------------------------------------------------------------

@@ -284,7 +284,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @notice Claim asset or reserve based on user's previous pending requests once they are processed
      * @param user Address of the user for whom the asset or reserve is to be claimed
      */
-    function claimAssetOrReserve(address user) external whenNotPaused notRebalancing {
+    function claimRequest(address user) external whenNotPaused notRebalancing {
 
         UserRequest storage request = pendingRequests[user];
         uint256 amount = request.amount;

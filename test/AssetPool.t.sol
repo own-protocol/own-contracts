@@ -169,7 +169,7 @@ contract AssetPoolTest is Test {
 
         setupCompleteDepositCycle();
 
-        pool.claimAssetOrReserve(user1);
+        pool.claimRequest(user1);
 
         // Verify assets were minted
         uint256 newUserBalance = assetToken.balanceOf(user1);
@@ -234,7 +234,7 @@ contract AssetPoolTest is Test {
         // Setup: Complete a cycle first to have assets to burn
         setupCompleteDepositCycle();
 
-        pool.claimAssetOrReserve(user1);
+        pool.claimRequest(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -259,7 +259,7 @@ contract AssetPoolTest is Test {
         // Setup: Complete a cycle first to have assets to burn
         setupCompleteDepositCycle();
 
-        pool.claimAssetOrReserve(user1);
+        pool.claimRequest(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -286,7 +286,7 @@ contract AssetPoolTest is Test {
         setupCompleteBurnCycle();
 
         // withdraw the reserve tokens
-        pool.claimAssetOrReserve(user1);
+        pool.claimRequest(user1);
         (uint256 amount,,) = pool.pendingRequests(user1);
         assertEq(amount, 0);
 
@@ -357,7 +357,7 @@ contract AssetPoolTest is Test {
     function setupCompleteBurnCycle() internal {
 
         setupCompleteDepositCycle();
-        pool.claimAssetOrReserve(user1);
+        pool.claimRequest(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
