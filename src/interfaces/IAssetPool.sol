@@ -24,6 +24,18 @@ interface IAssetPool {
         REBALANCING
     }
 
+    /**
+     * @notice Structure to hold user's deposit or redemption request
+     * @param amount Amount of tokens (reserve for deposit, asset for redemption)
+     * @param isDeposit True for deposit, false for redemption
+     * @param requestCycle Cycle when request was made
+     */
+    struct UserRequest {
+        uint256 amount;
+        bool isDeposit;
+        uint256 requestCycle;
+    }
+
     // --------------------------------------------------------------------------------
     //                                     EVENTS
     // --------------------------------------------------------------------------------
@@ -53,20 +65,20 @@ interface IAssetPool {
     event AssetClaimed(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
-     * @notice Emitted when a user requests to burn their asset tokens
+     * @notice Emitted when a user makes a redemption request
      * @param user Address of the user requesting the burn
-     * @param xTokenAmount Amount of asset tokens to be burned
+     * @param assetAmount Amount of asset tokens to be burned for reserves
      * @param cycleIndex Current operational cycle index
      */
-    event BurnRequested(address indexed user, uint256 xTokenAmount, uint256 indexed cycleIndex);
+    event RedemptionRequested(address indexed user, uint256 assetAmount, uint256 indexed cycleIndex);
 
     /**
-     * @notice Emitted when a user cancels their burn request
-     * @param user Address of the user canceling the burn
+     * @notice Emitted when a user cancels their redemption request
+     * @param user Address of the user canceling the redemption
      * @param amount Amount of asset tokens being returned
      * @param cycleIndex Current operational cycle index
      */
-    event BurnCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
+    event RedemptionCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
      * @notice Emitted when a user withdraws reserve tokens after burning
@@ -162,35 +174,25 @@ interface IAssetPool {
      * @notice Allows users to deposit reserve tokens into the pool
      * @param amount Amount of reserve tokens to deposit
      */
-    function depositReserve(uint256 amount) external;
+    function depositRequest(uint256 amount) external;
 
     /**
-     * @notice Allows users to cancel their pending deposit request
-     */
-    function cancelDeposit() external;
-
-    /**
-     * @notice Mints asset tokens for a user based on their processed deposit
-     * @param user Address of the user to mint assets for
-     */
-    function mintAsset(address user) external;
-
-    /**
-     * @notice Burns asset tokens and creates a redemption request
+     * @notice Creates a redemption request for the user.
      * @param assetAmount Amount of asset tokens to burn
      */
-    function burnAsset(uint256 assetAmount) external;
+    function redemptionRequest(uint256 assetAmount) external;
 
     /**
-     * @notice Allows users to cancel their pending burn request
+     * @notice Allows users to cancel their pending request
      */
-    function cancelBurn() external;
+    function cancelRequest() external;
 
     /**
-     * @notice Allows users to withdraw reserve tokens after burning assets
-     * @param user Address of the user to process withdrawal for
+     * @notice Claim asset or reserve based on user's previous pending requests once they are processed
+     * @param user Address of the user for whom the asset or reserve is to be claimed
      */
-    function withdrawReserve(address user) external;
+    function claimAssetOrReserve(address user) external;
+
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
@@ -223,18 +225,6 @@ interface IAssetPool {
     // --------------------------------------------------------------------------------
     //                              GOVERNANCE ACTIONS
     // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Updates the duration of operational cycles
-     * @param newCycleTime New cycle duration in seconds
-     */
-    function updateCycleTime(uint256 newCycleTime) external;
-
-    /**
-     * @notice Updates the duration of rebalancing periods
-     * @param newRebalanceTime New rebalance period duration in seconds
-     */
-    function updateRebalanceTime(uint256 newRebalanceTime) external;
 
     /**
      * @notice Pauses all pool operations
@@ -373,36 +363,27 @@ interface IAssetPool {
     function lastRebalancedCycle(address lp) external view returns (uint256);
 
     /**
-     * @notice Returns total deposit requests for a specific cycle
-     * @param cycle Cycle index to query
+     * @notice Returns the pending request for a user
+     * @param user Address of the user
+     * @return amount Amount of tokens in the request
+     * @return isDeposit True if deposit request, false if redemption
+     * @return requestCycle Cycle when request was made
      */
-    function cycleTotalDepositRequests(uint256 cycle) external view returns (uint256);
+    function pendingRequests(address user) external view returns (
+        uint256 amount,
+        bool isDeposit,
+        uint256 requestCycle
+    );
 
     /**
-     * @notice Returns total redemption requests for a specific cycle
-     * @param cycle Cycle index to query
+     * @notice Returns total deposit requests of the current cycle
      */
-    function cycleTotalRedemptionRequests(uint256 cycle) external view returns (uint256);
+    function cycleTotalDepositRequests() external view returns (uint256);
 
     /**
-     * @notice Returns deposit requests for a specific user in a cycle
-     * @param cycle Cycle index to query
-     * @param user Address of the user to query
+     * @notice Returns total redemption requests for the cycle
      */
-    function cycleDepositRequests(uint256 cycle, address user) external view returns (uint256);
-
-    /**
-     * @notice Returns redemption requests for a specific user in a cycle
-     * @param cycle Cycle index to query
-     * @param user Address of the user to query
-     */
-    function cycleRedemptionRequests(uint256 cycle, address user) external view returns (uint256);
-
-    /**
-     * @notice Returns the last cycle index a user interacted with
-     * @param user Address of the user to query
-     */
-    function lastActionCycle(address user) external view returns (uint256);
+    function cycleTotalRedemptionRequests() external view returns (uint256);
 
     /**
      * @notice Returns the rebalance price for a specific cycle
