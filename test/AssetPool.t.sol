@@ -106,12 +106,22 @@ contract AssetPoolTest is Test {
         
         vm.startPrank(user1);
         reserveToken.approve(address(pool), depositAmount);
-        pool.depositReserve(depositAmount);
+        pool.depositRequest(depositAmount);
         vm.stopPrank();
 
-        assertEq(pool.cycleDepositRequests(0, user1), depositAmount);
-        assertEq(pool.cycleTotalDepositRequests(0), depositAmount);
-        assertEq(pool.lastActionCycle(user1), 0);
+        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
+
+        // Assert the request details
+        assertEq(amount, depositAmount);
+        assertTrue(isDeposit);
+        assertEq(requestCycle, 0); // First cycle
+
+        // Assert total deposit requests for the cycle
+        assertEq(pool.cycleTotalDepositRequests(), depositAmount);
+
+        // Assert the reserve tokens were transferred
+        assertEq(reserveToken.balanceOf(address(pool)), depositAmount);
+        assertEq(reserveToken.balanceOf(user1), INITIAL_BALANCE - depositAmount);
     }
 
     function testDepositReserveReverts() public {
@@ -119,7 +129,7 @@ contract AssetPoolTest is Test {
         
         // Test zero amount
         vm.expectRevert(IAssetPool.InvalidAmount.selector);
-        pool.depositReserve(0);
+        pool.depositRequest(0);
 
         // Test insufficient allowance
         bytes memory error = abi.encodeWithSignature(
@@ -127,29 +137,31 @@ contract AssetPoolTest is Test {
             address(pool), 0, 100e18
         );
         vm.expectRevert(error);
-        pool.depositReserve(100e18);
+        pool.depositRequest(100e18);
 
         vm.stopPrank();
     }
 
-    function testCancelDeposit() public {
+    function testCancelDepositRequest() public {
         uint256 depositAmount = 100e18;
         
         // Setup deposit
         vm.startPrank(user1);
         reserveToken.approve(address(pool), depositAmount);
-        pool.depositReserve(depositAmount);
+        pool.depositRequest(depositAmount);
         
         // Cancel deposit
-        pool.cancelDeposit();
+        pool.cancelRequest();
         vm.stopPrank();
 
-        assertEq(pool.cycleDepositRequests(0, user1), 0);
-        assertEq(pool.cycleTotalDepositRequests(0), 0);
-        assertEq(pool.lastActionCycle(user1), 0);
+        (uint256 amount,,) = pool.pendingRequests(user1);
+
+        // Assert the request details
+        assertEq(amount, 0);
+ 
     }
 
-    function testMintAsset() public {
+    function testClaimAsset() public {
 
         // Verify user has assets before minting
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -157,7 +169,7 @@ contract AssetPoolTest is Test {
 
         setupCompleteDepositCycle();
 
-        pool.mintAsset(user1);
+        pool.claimAssetOrReserve(user1);
 
         // Verify assets were minted
         uint256 newUserBalance = assetToken.balanceOf(user1);
@@ -172,7 +184,7 @@ contract AssetPoolTest is Test {
         // Setup initial deposits
         vm.startPrank(user1);
         reserveToken.approve(address(pool), 100e18);
-        pool.depositReserve(100e18);
+        pool.depositRequest(100e18);
         vm.stopPrank();
 
         // Move time to rebalance period
@@ -189,7 +201,7 @@ contract AssetPoolTest is Test {
         // Setup initial deposits
         vm.startPrank(user1);
         reserveToken.approve(address(pool), 100e18);
-        pool.depositReserve(100e18);
+        pool.depositRequest(100e18);
         vm.stopPrank();
 
         // Move time to after rebalance start
@@ -218,11 +230,11 @@ contract AssetPoolTest is Test {
     //                              REDEMPTION TESTS
     // --------------------------------------------------------------------------------
 
-    function testBurnAsset() public {
+    function testRedemptionRequest() public {
         // Setup: Complete a cycle first to have assets to burn
         setupCompleteDepositCycle();
 
-        pool.mintAsset(user1);
+        pool.claimAssetOrReserve(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -232,17 +244,22 @@ contract AssetPoolTest is Test {
         
         vm.startPrank(user1);
         assetToken.approve(address(pool), burnAmount);
-        pool.burnAsset(burnAmount);
+        pool.redemptionRequest(burnAmount);
         vm.stopPrank();
 
-        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
+        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
+
+        // Assert the request details
+        assertEq(amount, burnAmount);
+        assertFalse(isDeposit);
+        assertEq(requestCycle, 1);
     }
 
-    function testCancelBurn() public {
+    function testCancelRedemptionRequest() public {
         // Setup: Complete a cycle first to have assets to burn
         setupCompleteDepositCycle();
 
-        pool.mintAsset(user1);
+        pool.claimAssetOrReserve(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -252,23 +269,26 @@ contract AssetPoolTest is Test {
 
         vm.startPrank(user1);
         assetToken.approve(address(pool), burnAmount);
-        pool.burnAsset(burnAmount);
-        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), burnAmount);
+        pool.redemptionRequest(burnAmount);
+        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
+        assertEq(amount, burnAmount);
 
         // Cancel burn
-        pool.cancelBurn();
+        pool.cancelRequest();
         vm.stopPrank();
 
-        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), 0);
+        (amount, isDeposit, requestCycle) = pool.pendingRequests(user1);
+        assertEq(amount, 0);
     }
 
-    function testWithdrawReserve() public {
+    function testClaimReserve() public {
         // complete the deposit & burn cycle
         setupCompleteBurnCycle();
 
         // withdraw the reserve tokens
-        pool.withdrawReserve(user1);
-        assertEq(pool.cycleRedemptionRequests(pool.cycleIndex(), user1), 0);
+        pool.claimAssetOrReserve(user1);
+        (uint256 amount,,) = pool.pendingRequests(user1);
+        assertEq(amount, 0);
 
         // assert that the user has received the reserve tokens
         uint256 userBalance = reserveToken.balanceOf(user1);
@@ -281,14 +301,6 @@ contract AssetPoolTest is Test {
     //                              GOVERNANCE TESTS
     // --------------------------------------------------------------------------------
 
-    function testUpdateCycleTime() public {
-        uint256 newCycleTime = 14 days;
-        
-        vm.prank(owner);
-        pool.updateCycleTime(newCycleTime);
-        
-        assertEq(pool.cycleTime(), newCycleTime);
-    }
 
     function testPausePool() public {
         vm.prank(owner);
@@ -299,7 +311,7 @@ contract AssetPoolTest is Test {
         // Test that operations revert when paused
         bytes memory error = abi.encodeWithSignature("EnforcedPause()");
         vm.expectRevert(error);
-        pool.depositReserve(100e18);
+        pool.depositRequest(100e18);
     }
 
     // --------------------------------------------------------------------------------
@@ -313,7 +325,7 @@ contract AssetPoolTest is Test {
         // Setup deposit
         vm.startPrank(user1);
         reserveToken.approve(address(pool), depositAmount);
-        pool.depositReserve(depositAmount);
+        pool.depositRequest(depositAmount);
         vm.stopPrank();
 
         // Move to after rebalance start
@@ -345,7 +357,7 @@ contract AssetPoolTest is Test {
     function setupCompleteBurnCycle() internal {
 
         setupCompleteDepositCycle();
-        pool.mintAsset(user1);
+        pool.claimAssetOrReserve(user1);
 
         // Verify user has assets before burning
         uint256 userBalance = assetToken.balanceOf(user1);
@@ -355,7 +367,7 @@ contract AssetPoolTest is Test {
 
         vm.startPrank(user1);
         assetToken.approve(address(pool), burnAmount);
-        pool.burnAsset(burnAmount);
+        pool.redemptionRequest(burnAmount);
 
         // Move to after rebalance start
         vm.warp(block.timestamp + CYCLE_PERIOD + 1);
