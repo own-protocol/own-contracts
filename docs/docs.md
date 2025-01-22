@@ -11,6 +11,7 @@ AssetPoolFactory: 0xda62cb7c018505042eF56B02A8207A9a704e734c
 
 AssetPool: 0x5C387fA6c1304f82AB6c1d01A6325DfF2aB1B5b6
 xToken: 0xe54c25e05f8B4Fd8CbebF7127876b4c4Af2cc968
+USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
 
 ##Commands:
 Deploy Oracle:
@@ -46,4 +47,4 @@ forge script script/UpdateOracleSourceHash.s.sol:UpdateOracleSourceHashScript --
 Forge Commands:
 forge clean
 forge build
-forge verify-check $GUID --chain-id $CHAIN_ID // to check verification status
+forge verify-check $GUID --chain-id $CHAIN_ID // to check contract verification status

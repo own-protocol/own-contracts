@@ -105,6 +105,21 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     uint256 public rebalancedLPs;
 
     /**
+     * @notice Total deposit requests in the current cycle.
+     */
+    uint256 public cycleTotalDepositRequests;
+
+    /**
+     * @notice Total redemption requests in the current cycle.
+     */
+    uint256 public cycleTotalRedemptionRequests;
+
+    /**
+     * @notice Mapping of users to their request
+     */
+    mapping(address => UserRequest) public pendingRequests;
+
+    /**
      * @notice Tracks the last cycle an lp rebalanced.
      */
     mapping(address => uint256) public lastRebalancedCycle;
@@ -113,31 +128,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @notice Individual user reserve balances.
      */
     mapping(address => uint256) public reserveBalance;
-
-    /**
-     * @notice Total pending deposit requests for each cycle.
-     */
-    mapping(uint256 => uint256) public cycleTotalDepositRequests;
-
-    /**
-     * @notice Total pending redemption requests for each cycle.
-     */
-    mapping(uint256 => uint256) public cycleTotalRedemptionRequests;
-
-    /**
-     * @notice Pending deposit requests by user for each cycle.
-     */
-    mapping(uint256 => mapping(address => uint256)) public cycleDepositRequests;
-
-    /**
-     * @notice Pending redemption requests by user for each cycle.
-     */
-    mapping(uint256 => mapping(address => uint256)) public cycleRedemptionRequests;
-
-    /**
-     * @notice Tracks the last cycle a user interacted with.
-     */
-    mapping(address => uint256) public lastActionCycle;
 
     /**
      * @notice Rebalance price for each cycle.
@@ -222,108 +212,103 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      *         The deposited amount will be processed in the next cycle.
      * @param amount Amount of reserve tokens to deposit.
      */
-    function depositReserve(uint256 amount) external whenNotPaused notRebalancing {
-        uint256 userCycle = lastActionCycle[msg.sender];
+    function depositRequest(uint256 amount) external whenNotPaused notRebalancing {
         if (amount == 0) revert InvalidAmount();
-        if (userCycle > 0 && userCycle != cycleIndex) revert MintOrBurnPending();
+
+        UserRequest storage request = pendingRequests[msg.sender];
+
+        if (request.amount > 0) revert MintOrBurnPending();
         reserveToken.transferFrom(msg.sender, address(this), amount);
-        cycleDepositRequests[cycleIndex][msg.sender] += amount;
-        cycleTotalDepositRequests[cycleIndex] += amount;
-        lastActionCycle[msg.sender] = cycleIndex;
+
+        request.amount = amount;
+        request.isDeposit = true;
+        request.requestCycle = cycleIndex;
+        cycleTotalDepositRequests += amount;
         
         emit DepositRequested(msg.sender, amount, cycleIndex);
     }
 
     /**
-     * @notice Allows a user to cancel a pending deposit request for the current cycle.
-     */
-    function cancelDeposit() external notRebalancing {
-        uint256 amount = cycleDepositRequests[cycleIndex][msg.sender];
-        if (amount == 0) revert NothingToCancel();
-        
-        cycleDepositRequests[cycleIndex][msg.sender] = 0;
-        cycleTotalDepositRequests[cycleIndex] -= amount;
-        reserveToken.transfer(msg.sender, amount);
-        lastActionCycle[msg.sender] = 0;
-        
-        emit DepositCancelled(msg.sender, amount, cycleIndex);
-    }
-
-    /**
-     * @notice Mints asset tokens for a user based on their processed deposit requests.
-     * @param user Address of the user claiming the asset tokens.
-     */
-    function mintAsset(address user) external whenNotPaused notRebalancing {
-        uint256 userCycle = lastActionCycle[user];
-        if (userCycle >= cycleIndex) revert NothingToClaim();
-        uint256 reserveAmount = cycleDepositRequests[userCycle][user];
-        if (reserveAmount == 0) revert NothingToClaim();
-
-        cycleDepositRequests[userCycle][user] = 0;
-        cycleTotalDepositRequests[userCycle] -= reserveAmount;
-        uint256 rebalancePrice = cycleRebalancePrice[userCycle];
-        lastActionCycle[user] = 0;
-
-        uint256 assetAmount = Math.mulDiv(reserveAmount, PRECISION, rebalancePrice);
-
-        assetToken.mint(user, assetAmount, reserveAmount);
-        
-        emit AssetClaimed(user, assetAmount, userCycle);
-    }
-
-    /**
-     * @notice Burn asset tokens for a user and creates a redemption request for the current cycle.
+     * @notice Creates a redemption request for the user. The user must have enough asset tokens that want to redeem for reserve tokens.
      *         The redemption request will be processed in the next cycle.
      * @param assetAmount Amount of asset tokens to burn.
      */
-    function burnAsset(uint256 assetAmount) external whenNotPaused notRebalancing {
-        uint256 userBalance = assetToken.balanceOf(msg.sender);
-        uint256 userCycle = lastActionCycle[msg.sender];
+    function redemptionRequest(uint256 assetAmount) external whenNotPaused notRebalancing {
         if (assetAmount == 0) revert InvalidAmount();
+
+        uint256 userBalance = assetToken.balanceOf(msg.sender);
         if (userBalance < assetAmount) revert InsufficientBalance();
-        if (userCycle > 0 && userCycle != cycleIndex) revert MintOrBurnPending();
+
+        UserRequest storage request = pendingRequests[msg.sender];
+        if (request.amount > 0) revert MintOrBurnPending();
 
         assetToken.transferFrom(msg.sender, address(this), assetAmount);
-        cycleRedemptionRequests[cycleIndex][msg.sender] = assetAmount;
-        cycleTotalRedemptionRequests[cycleIndex] += assetAmount;
-        lastActionCycle[msg.sender] = cycleIndex;
         
-        emit BurnRequested(msg.sender, assetAmount, cycleIndex);
+        request.amount = assetAmount;
+        request.isDeposit = false;
+        request.requestCycle = cycleIndex;
+        cycleTotalRedemptionRequests += assetAmount;
+        
+        emit RedemptionRequested(msg.sender, assetAmount, cycleIndex);
     }
 
     /**
-     * @notice Allows a user to cancel a pending burn request for the current cycle.
+     * @notice Allows a user to cancel a pending request.
      */
-    function cancelBurn() external notRebalancing {
-        uint256 assetAmount = cycleRedemptionRequests[cycleIndex][msg.sender];
-        if (assetAmount == 0) revert NothingToCancel();
+    function cancelRequest() external notRebalancing {
 
-        cycleRedemptionRequests[cycleIndex][msg.sender] = 0;
-        cycleTotalRedemptionRequests[cycleIndex] -= assetAmount;
-        lastActionCycle[msg.sender] = 0;
-        
-        assetToken.transfer(msg.sender, assetAmount);
-        
-        emit BurnCancelled(msg.sender, assetAmount, cycleIndex);
+        UserRequest storage request = pendingRequests[msg.sender];
+        uint256 amount = request.amount;
+        bool isDeposit = request.isDeposit;
+        uint256 requestCycle = request.requestCycle;
+
+        if (requestCycle != cycleIndex) revert NothingToCancel();
+        if (amount == 0) revert NothingToCancel();
+
+        delete pendingRequests[msg.sender];
+
+        if (isDeposit) {
+            cycleTotalDepositRequests -= amount;
+            // Return reserve tokens
+            reserveToken.transfer(msg.sender, amount);
+            emit DepositCancelled(msg.sender, amount, cycleIndex);
+        } else {
+            cycleTotalRedemptionRequests -= amount;
+            // Return asset tokens
+            assetToken.transfer(msg.sender, amount);
+            emit RedemptionCancelled(msg.sender, amount, cycleIndex);
+        }
     }
 
     /**
-     * @notice Allows a user to withdraw reserve tokens after their redemption request is processed.
-     * @param user Address of the user withdrawing the reserve tokens.
+     * @notice Claim asset or reserve based on user's previous pending requests once they are processed
+     * @param user Address of the user for whom the asset or reserve is to be claimed
      */
-    function withdrawReserve(address user) external whenNotPaused notRebalancing {
-        uint256 userCycle = lastActionCycle[user];
-        if (userCycle >= cycleIndex) revert NothingToClaim();
-        uint256 assetAmount = cycleRedemptionRequests[userCycle][user];
-        if (assetAmount == 0) revert NothingToClaim();
-        
-        uint256 reserveAmountToTransfer = Math.mulDiv(assetAmount, cycleRebalancePrice[userCycle], PRECISION);
-        cycleRedemptionRequests[userCycle][user] = 0;
-        cycleTotalRedemptionRequests[userCycle] -= assetAmount;
-        lastActionCycle[user] = 0;
-        reserveToken.transfer(user, reserveAmountToTransfer);
-        
-        emit ReserveWithdrawn(user, reserveAmountToTransfer, cycleIndex);
+    function claimRequest(address user) external whenNotPaused notRebalancing {
+
+        UserRequest storage request = pendingRequests[user];
+        uint256 amount = request.amount;
+        bool isDeposit = request.isDeposit;
+        uint256 requestCycle = request.requestCycle;
+
+        if (requestCycle >= cycleIndex) revert NothingToClaim();
+        if (amount == 0) revert NothingToClaim();
+
+        delete pendingRequests[user];
+
+        uint256 rebalancePrice = cycleRebalancePrice[requestCycle];
+
+        if (isDeposit) {
+            // Mint case - convert reserve to asset using exact price
+            uint256 assetAmount = Math.mulDiv(amount, PRECISION, rebalancePrice);
+            assetToken.mint(user, assetAmount, amount);
+            emit AssetClaimed(user, assetAmount, requestCycle);
+        } else {
+            // Withdraw case - convert asset to reserve using exact price
+            uint256 reserveAmount = Math.mulDiv(amount, rebalancePrice, PRECISION);
+            reserveToken.transfer(user, reserveAmount);
+            emit ReserveWithdrawn(user, reserveAmount, requestCycle);
+        }
     }
 
     // --------------------------------------------------------------------------------
@@ -339,8 +324,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         if (block.timestamp < nextRebalanceStartDate) revert CycleInProgress();
         cycleState = CycleState.REBALANCING;
         uint256 assetPrice = assetOracle.assetPrice();
-        uint256 depositRequests = cycleTotalDepositRequests[cycleIndex];
-        uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests[cycleIndex];
+        uint256 depositRequests = cycleTotalDepositRequests;
+        uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests;
         uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequestsInAsset, assetPrice, PRECISION);
         uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
 
@@ -393,10 +378,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
-            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
             uint256 assetBalance = assetToken.balanceOf(address(this));
             uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
             cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
             
             _startNewCycle();
@@ -419,8 +404,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      */
     function startNewCycle() external {
         if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
-        if (cycleTotalDepositRequests[cycleIndex] > 0) revert InvalidCycleRequest();
-        if (cycleTotalRedemptionRequests[cycleIndex] > 0) revert InvalidCycleRequest();
+        if (cycleTotalDepositRequests > 0) revert InvalidCycleRequest();
+        if (cycleTotalRedemptionRequests > 0) revert InvalidCycleRequest();
         
         _startNewCycle();
     }
@@ -428,24 +413,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     // --------------------------------------------------------------------------------
     //                            GOVERNANCE FUNCTIONS
     // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Updates the duration of each cycle.
-     * @param newCycleTime New cycle duration in seconds.
-     */
-    function updateCycleTime(uint256 newCycleTime) external onlyOwner {
-        cycleTime = newCycleTime;
-        emit CycleTimeUpdated(newCycleTime);
-    }
-
-    /**
-     * @notice Updates the duration of the rebalance period.
-     * @param newRebalanceTime New rebalance duration in seconds.
-     */
-    function updateRebalanceTime(uint256 newRebalanceTime) external onlyOwner {
-        rebalanceTime = newRebalanceTime;
-        emit RebalanceTimeUpdated(newRebalanceTime);
-    }
 
     /**
      * @notice Pauses the pool, disabling all user actions.
@@ -460,6 +427,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     function unpausePool() external onlyOwner {
         _unpause();
     }
+
+    /**
+     * Todo: Add a function to clean old rebalance prices to free up storage.
+     */
 
     // --------------------------------------------------------------------------------
     //                            INTERNAL FUNCTIONS
@@ -493,6 +464,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         cycleIndex++;
         cycleState = CycleState.ACTIVE;
         rebalancedLPs = 0;
+        cycleTotalDepositRequests = 0;
+        cycleTotalRedemptionRequests = 0;
         cycleWeightedSum = 0;
         nextRebalanceStartDate = block.timestamp + cycleTime;
         nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
@@ -548,8 +521,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
             int256 _rebalanceAmount
         )
     {
-        _totalDepositRequests = cycleTotalDepositRequests[cycleIndex];
-        _totalRedemptionRequests = cycleTotalRedemptionRequests[cycleIndex];
+        _totalDepositRequests = cycleTotalDepositRequests;
+        _totalRedemptionRequests = cycleTotalRedemptionRequests;
         _netReserveDelta = netReserveDelta;
         _rebalanceAmount = rebalanceAmount;
     }
