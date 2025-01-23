@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
+import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -14,12 +15,12 @@ import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {xToken} from "./xToken.sol";
 
 /**
- * @title AssetPool
+ * @title AssetPoolImplementation
  * @notice Manages the lifecycle of assets and reserves in a decentralized pool.
  *         Facilitates deposits, minting, redemptions, and rebalancing of assets.
  *         Includes governance controls for updating operational parameters.
  */
-contract AssetPool is IAssetPool, Ownable, Pausable {
+contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -27,22 +28,22 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
     /**
      * @notice Address of the reserve token (e.g., USDC).
      */
-    IERC20 public immutable reserveToken;
+    IERC20 public reserveToken;
 
     /**
      * @notice Address of the xToken contract used for asset representation.
      */
-    IXToken public immutable assetToken;
+    IXToken public assetToken;
 
     /**
      * @notice Address of the LP Registry contract for managing LPs.
      */
-    ILPRegistry public immutable lpRegistry;
+    ILPRegistry public lpRegistry;
 
     /**
      * @notice Address of the Asset Oracle contract for fetching asset prices.
      */
-    IAssetOracle public immutable assetOracle;
+    IAssetOracle public assetOracle;
 
     /**
      * @notice Index of the current operational cycle.
@@ -144,8 +145,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      */
     uint256 private constant PRECISION = 1e18;
 
+    constructor() Ownable(msg.sender) {
+        // Disable the implementation contract
+        _disableInitializers();
+    }
+
     // --------------------------------------------------------------------------------
-    //                                    CONSTRUCTOR
+    //                                    INITIALIZER
     // --------------------------------------------------------------------------------
 
     /**
@@ -157,9 +163,8 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
      * @param _lpRegistry Address of the LP registry contract.
      * @param _cyclePeriod Duration of each operational cycle.
      * @param _rebalancingPeriod Duration of the rebalance period.
-     * @param _owner Address of the contract owner.
      */
-    constructor(
+    function initialize (
         address _reserveToken,
         string memory _xTokenName,
         string memory _xTokenSymbol,
@@ -168,9 +173,11 @@ contract AssetPool is IAssetPool, Ownable, Pausable {
         uint256 _cyclePeriod,
         uint256 _rebalancingPeriod,
         address _owner
-    ) Ownable(_owner) {
+    ) external initializer {
         if (_reserveToken == address(0) || _assetOracle == address(0) || _lpRegistry == address(0)) 
             revert ZeroAddress();
+
+        _transferOwnership(_owner);
 
         reserveToken = IERC20(_reserveToken);
         assetToken = new xToken(_xTokenName, _xTokenSymbol);

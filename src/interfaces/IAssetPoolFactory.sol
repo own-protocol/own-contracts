@@ -52,6 +52,11 @@ interface IAssetPoolFactory {
     function lpRegistry() external view returns (ILPRegistry);
 
     /**
+     * @return address The address of the asset pool implementation contract.
+     */
+    function assetPoolImplementation() external view returns (address);
+
+    /**
      * @dev Creates a new asset pool with the specified parameters.
      * @param depositToken Address of the token used for deposits.
      * @param assetName Name of the token representing the asset.

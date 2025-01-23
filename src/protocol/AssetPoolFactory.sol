@@ -4,9 +4,11 @@
 pragma solidity ^0.8.20;
 
 import 'openzeppelin-contracts/contracts/access/Ownable.sol';
+import 'openzeppelin-contracts/contracts/proxy/Clones.sol';
 import {ILPRegistry} from '../interfaces/ILPRegistry.sol';
 import {IAssetPoolFactory} from '../interfaces/IAssetPoolFactory.sol';
-import {AssetPool} from './AssetPool.sol';
+import {AssetPoolImplementation} from "../protocol/AssetPoolImplementation.sol";
+
 
 /**
  * @title PoolFactory
@@ -16,15 +18,18 @@ import {AssetPool} from './AssetPool.sol';
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     /// @notice Reference to the LP Registry contract.
     ILPRegistry public lpRegistry;
+    /// @notice Address of the asset pool implementation contract.
+    address public immutable assetPoolImplementation;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
      * @param _lpRegistry Address of the LP Registry contract.
      * Reverts if the address is zero.
      */
-    constructor(address _lpRegistry) Ownable(msg.sender) {
+    constructor(address _lpRegistry, address _assetPoolImplementation) Ownable(msg.sender) {
         if (_lpRegistry == address(0)) revert ZeroAddress();
         lpRegistry = ILPRegistry(_lpRegistry);
+        assetPoolImplementation = _assetPoolImplementation;
     }
 
     /**
@@ -58,8 +63,11 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             rebalancingPeriod >= cyclePeriod
         ) revert InvalidParams();
 
-        // Deploy a new AssetPool contract instance.
-        AssetPool pool = new AssetPool(
+        address owner = owner();
+
+        // Clones a new AssetPool contract instance.
+        address pool = Clones.clone(assetPoolImplementation);
+        AssetPoolImplementation(pool).initialize(
             depositToken,
             assetName,
             assetSymbol,
@@ -67,7 +75,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             address(lpRegistry),
             cyclePeriod,
             rebalancingPeriod,
-            msg.sender
+            owner
         );
 
         // Emit the AssetPoolCreated event to notify listeners.
