@@ -63,6 +63,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             rebalancingPeriod >= cyclePeriod
         ) revert InvalidParams();
 
+        address owner = owner();
+
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPoolImplementation);
         AssetPoolImplementation(pool).initialize(
@@ -73,7 +75,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             address(lpRegistry),
             cyclePeriod,
             rebalancingPeriod,
-            msg.sender
+            owner
         );
 
         // Emit the AssetPoolCreated event to notify listeners.
