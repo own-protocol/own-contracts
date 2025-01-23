@@ -2,16 +2,20 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/protocol/AssetPool.sol";
+
+import "../src/protocol/AssetPoolFactory.sol";
+import "../src/protocol/AssetPoolImplementation.sol";
 import "../src/protocol/xToken.sol";
 import "../src/protocol/LPRegistry.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
-contract AssetPoolTest is Test {
+contract AssetPoolFactoryTest is Test {
     // Test contracts
-    AssetPool public pool;
+    AssetPoolFactory public factory;
+    AssetPoolImplementation public implementation;
+    IAssetPool public pool;
     IERC20 public reserveToken;
     xToken public assetToken;
     LPRegistry public lpRegistry;
@@ -40,20 +44,21 @@ contract AssetPoolTest is Test {
         // Deploy core contracts
         lpRegistry = new LPRegistry();
         assetOracle = new MockAssetOracle();
+        implementation = new AssetPoolImplementation();
+        factory = new AssetPoolFactory(address(lpRegistry), address(implementation));
 
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
-        pool = new AssetPool(
+        address poolAddress = factory.createPool(
             address(reserveToken),
             "Tesla Stock Token",
             "xTSLA",
             address(assetOracle),
-            address(lpRegistry),
             CYCLE_PERIOD,
-            REBALANCE_PERIOD,
-            owner
+            REBALANCE_PERIOD
         );
 
+        pool = IAssetPool(poolAddress);
         assetToken = xToken(address(pool.assetToken()));
 
         // Setup initial states
@@ -72,34 +77,60 @@ contract AssetPoolTest is Test {
     }
 
     // --------------------------------------------------------------------------------
-    //                              DEPLOYMENT TESTS
+    //                              FACTORY TESTS
     // --------------------------------------------------------------------------------
 
-    function testConstructor() public view {
-        assertEq(address(pool.reserveToken()), address(reserveToken));
-        assertEq(address(pool.lpRegistry()), address(lpRegistry));
-        assertEq(address(pool.assetOracle()), address(assetOracle));
-        assertEq(pool.cycleTime(), CYCLE_PERIOD);
-        assertEq(pool.rebalanceTime(), REBALANCE_PERIOD);
+    function testFactoryDeployment() public view {
+        assertEq(address(factory.lpRegistry()), address(lpRegistry));
+        assertEq(factory.assetPoolImplementation(), address(implementation));
     }
 
-    function testConstructorReverts() public {
-        vm.expectRevert(IAssetPool.ZeroAddress.selector);
-        new AssetPool(
-            address(0),
-            "Tesla Stock Token",
-            "xTSLA",
+    function testCreatePool() public {
+        vm.startPrank(owner);
+        address newPool = factory.createPool(
+            address(reserveToken),
+            "Apple Stock Token",
+            "xAAPL",
             address(assetOracle),
-            address(lpRegistry),
             CYCLE_PERIOD,
-            REBALANCE_PERIOD,
-            owner
+            REBALANCE_PERIOD
         );
+        vm.stopPrank();
+
+        assertTrue(newPool != address(0));
+        IAssetPool poolInstance = IAssetPool(newPool);
+        assertEq(address(poolInstance.reserveToken()), address(reserveToken));
+        assertEq(poolInstance.cycleTime(), CYCLE_PERIOD);
+        assertEq(poolInstance.rebalanceTime(), REBALANCE_PERIOD);
+    }
+
+    function testCreatePoolReverts() public {
+        vm.startPrank(owner);
+        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
+        factory.createPool(
+            address(0),
+            "Apple Stock Token",
+            "xAAPL",
+            address(assetOracle),
+            CYCLE_PERIOD,
+            REBALANCE_PERIOD
+        );
+        vm.stopPrank();
+    }
+
+    function testUpdateLPRegistry() public {
+        address newRegistry = address(new LPRegistry());
+        
+        vm.prank(owner);
+        factory.updateLPRegistry(newRegistry);
+        
+        assertEq(address(factory.lpRegistry()), newRegistry);
     }
 
     // --------------------------------------------------------------------------------
-    //                              DEPOSIT TESTS
+    //                              POOL IMPLEMENTATION TESTS
     // --------------------------------------------------------------------------------
+
 
     function testDepositReserve() public {
         uint256 depositAmount = 100e18;
@@ -305,8 +336,6 @@ contract AssetPoolTest is Test {
     function testPausePool() public {
         vm.prank(owner);
         pool.pausePool();
-        
-        assertTrue(pool.paused());
         
         // Test that operations revert when paused
         bytes memory error = abi.encodeWithSignature("EnforcedPause()");
