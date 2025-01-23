@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
+import "../src/interfaces/IAssetPool.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 import "../src/protocol/LPRegistry.sol";
-import "../src/protocol/AssetPool.sol";
 
 contract CreatePoolScript is Script {
     // Pool configuration'
@@ -78,8 +78,8 @@ contract CreatePoolScript is Script {
         console.log("----------------------------------------------------");
 
         // Verify the pool was created correctly
-        AssetPool pool = AssetPool(poolAddress);
-        (uint256 supply, AssetPool.CycleState state, uint256 cycle,,, uint256 price) = pool.getGeneralInfo();
+        IAssetPool pool = IAssetPool(poolAddress);
+        (uint256 supply, IAssetPool.CycleState state, uint256 cycle,,, uint256 price) = pool.getGeneralInfo();
         console.log("Pool Initial State:");
         console.log("Supply:", supply);
         console.log("State:", uint256(state));

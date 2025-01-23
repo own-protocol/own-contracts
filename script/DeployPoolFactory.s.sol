@@ -5,7 +5,8 @@ import "forge-std/Script.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 
 contract AssetPoolDeployScript is Script {
-    address constant lpRegistry = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9;
+    address constant lpRegistry = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9; // Replace with actual LPRegistry address
+    address constant assetPoolImplementation = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9; // Replace with actual implementation address
 
     function setUp() public {}
 
@@ -17,7 +18,7 @@ contract AssetPoolDeployScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy AssetPoolFactory with the LPRegistry address
-        AssetPoolFactory poolFactory = new AssetPoolFactory(lpRegistry);
+        AssetPoolFactory poolFactory = new AssetPoolFactory(lpRegistry, assetPoolImplementation);
         console.log("AssetPoolFactory deployed at:", address(poolFactory));
 
         // Stop broadcasting transactions
