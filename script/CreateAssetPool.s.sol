@@ -12,8 +12,8 @@ contract CreatePoolScript is Script {
     string constant ASSET_SYMBOL = "xTSLA";
     string constant ASSET_NAME = "xTesla";
     address constant PRICE_ORACLE = 0x453cD289694c036980226FDEDF3A7a3eC686Ae05; // Replace with actual oracle address
-    uint256 constant CYCLE_PERIOD = 2 hours;
-    uint256 constant REBALANCING_PERIOD = 30 minutes;
+    uint256 constant CYCLE_LENGTH = 2 hours;
+    uint256 constant REBALANCING_LENGTH = 30 minutes;
 
     // Deployed contract addresses (replace with actual addresses after deployment)
     address constant ASSET_POOL_FACTORY = 0xda62cb7c018505042eF56B02A8207A9a704e734c; // Replace with deployed PoolFactory address
@@ -44,8 +44,8 @@ contract CreatePoolScript is Script {
             ASSET_NAME,
             ASSET_SYMBOL,
             PRICE_ORACLE,
-            CYCLE_PERIOD,
-            REBALANCING_PERIOD
+            CYCLE_LENGTH,
+            REBALANCING_LENGTH
         );
 
         registry.addPool(poolAddress);
@@ -73,13 +73,13 @@ contract CreatePoolScript is Script {
         console.log("Asset Token Name:", ASSET_NAME);
         console.log("Asset Token Symbol:", ASSET_SYMBOL);
         console.log("Price Oracle:", PRICE_ORACLE);
-        console.log("Cycle Period:", CYCLE_PERIOD);
-        console.log("Rebalancing Period:", REBALANCING_PERIOD);
+        console.log("Cycle Period:", CYCLE_LENGTH);
+        console.log("Rebalancing Period:", REBALANCING_LENGTH);
         console.log("----------------------------------------------------");
 
         // Verify the pool was created correctly
         IAssetPool pool = IAssetPool(poolAddress);
-        (uint256 supply, IAssetPool.CycleState state, uint256 cycle,,, uint256 price) = pool.getGeneralInfo();
+        (uint256 supply, IAssetPool.CycleState state, uint256 cycle,uint256 price,) = pool.getGeneralInfo();
         console.log("Pool Initial State:");
         console.log("Supply:", supply);
         console.log("State:", uint256(state));

@@ -56,24 +56,19 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     CycleState public cycleState;
 
     /**
-     * @notice Timestamp when the next rebalance is scheduled to start.
-     */
-    uint256 public nextRebalanceStartDate;
-
-    /**
-     * @notice Timestamp when the next rebalance is scheduled to end.
-     */
-    uint256 public nextRebalanceEndDate;
-
-    /**
      * @notice Duration of each operational cycle in seconds.
      */
-    uint256 public cycleTime;
+    uint256 public cycleLength;
 
     /**
      * @notice Duration of the rebalance period in seconds.
      */
-    uint256 public rebalanceTime;
+    uint256 public rebalanceLength;
+
+    /**
+     * @notice Timestamp of the last cycle action.
+     */
+    uint256 public lastCycleActionDateTime;
 
     /**
      * @notice Total reserve token balance in the pool.
@@ -161,8 +156,8 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      * @param _xTokenSymbol Symbol of the xToken to be created.
      * @param _assetOracle Address of the asset price oracle contract.
      * @param _lpRegistry Address of the LP registry contract.
-     * @param _cyclePeriod Duration of each operational cycle.
-     * @param _rebalancingPeriod Duration of the rebalance period.
+     * @param _cycleLength Duration of each operational cycle.
+     * @param _rebalanceLength Duration of the rebalance period.
      */
     function initialize (
         address _reserveToken,
@@ -170,8 +165,8 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         string memory _xTokenSymbol,
         address _assetOracle,
         address _lpRegistry,
-        uint256 _cyclePeriod,
-        uint256 _rebalancingPeriod,
+        uint256 _cycleLength,
+        uint256 _rebalanceLength,
         address _owner
     ) external initializer {
         if (_reserveToken == address(0) || _assetOracle == address(0) || _lpRegistry == address(0)) 
@@ -184,10 +179,9 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         lpRegistry = ILPRegistry(_lpRegistry);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
-        cycleTime = _cyclePeriod;
-        rebalanceTime = _rebalancingPeriod;
-        nextRebalanceStartDate = block.timestamp + _cyclePeriod;
-        nextRebalanceEndDate = nextRebalanceStartDate + _rebalancingPeriod;
+        cycleLength = _cycleLength;
+        rebalanceLength = _rebalanceLength;
+        lastCycleActionDateTime = block.timestamp;
     }
 
     // --------------------------------------------------------------------------------
@@ -206,7 +200,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      * @dev Ensures the pool is not in a rebalancing state.
      */
     modifier notRebalancing() {
-        if (cycleState == CycleState.REBALANCING) revert InvalidCycleState();
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         _;
     }
 
@@ -323,13 +317,26 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Initiates the rebalance, calculates how much asset & stablecoin
+     * @notice Initiates the off-chain rebalance process.
+     */
+    function initiateOffchainRebalance() external {
+        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
+        cycleState = CycleState.REBALANCING_OFFCHAIN;
+        lastCycleActionDateTime = block.timestamp;
+    }
+
+    /**
+     * @notice Initiates the onchain rebalance, calculates how much asset & stablecoin
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
-    function initiateRebalance() external {
-        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        if (block.timestamp < nextRebalanceStartDate) revert CycleInProgress();
-        cycleState = CycleState.REBALANCING;
+    function initiateOnchainRebalance() external {
+        if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        uint256 expectedDateTime = lastCycleActionDateTime + rebalanceLength;
+        if (block.timestamp < expectedDateTime) revert OffChainRebalanceInProgress();
+        uint256 oracleLastUpdated = assetOracle.lastUpdated();
+        if (oracleLastUpdated < expectedDateTime) revert OracleNotUpdated();
+
         uint256 assetPrice = assetOracle.assetPrice();
         uint256 depositRequests = cycleTotalDepositRequests;
         uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests;
@@ -339,6 +346,9 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
         newReserveSupply =  assetToken.totalReserveSupply() + depositRequests - assetReserveSupplyInPool; 
         rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
+
+        lastCycleActionDateTime = block.timestamp;
+        cycleState = CycleState.REBALANCING_ONCHAIN;
 
         emit RebalanceInitiated(
             cycleIndex,
@@ -361,9 +371,9 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      */
 
     function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
-        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
+        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (block.timestamp > nextRebalanceEndDate) revert RebalancingExpired();
+        if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
         uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
 
         _validateRebalancing(lp, amount, isDeposit);
@@ -400,8 +410,8 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      * ToDo: Slash the LPs who didn't rebalance within the rebalance window, rebalance the pool and start the next cycle
      */
     function settlePool() external onlyLP {
-        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
-        if (block.timestamp < nextRebalanceEndDate) revert RebalancingInProgress();
+        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
         _startNewCycle();
     }
@@ -410,7 +420,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      * @notice If there is nothing to rebalance, start the next cycle.
      */
     function startNewCycle() external {
-        if (cycleState != CycleState.REBALANCING) revert InvalidCycleState();
+        if (cycleState == CycleState.ACTIVE) revert InvalidCycleState();
         if (cycleTotalDepositRequests > 0) revert InvalidCycleRequest();
         if (cycleTotalRedemptionRequests > 0) revert InvalidCycleRequest();
         
@@ -474,8 +484,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         cycleTotalDepositRequests = 0;
         cycleTotalRedemptionRequests = 0;
         cycleWeightedSum = 0;
-        nextRebalanceStartDate = block.timestamp + cycleTime;
-        nextRebalanceEndDate = nextRebalanceStartDate + rebalanceTime;
+        lastCycleActionDateTime = block.timestamp;
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -489,25 +498,22 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
      * @return _xTokenSupply Total supply of the xToken.
      * @return _cycleState Current state of the pool.
      * @return _cycleIndex Current cycle index.
-     * @return _nextRebalanceStartDate Timestamp of the next rebalance start.
-     * @return _nextRebalanceEndDate Timestamp of the next rebalance end.
      * @return _assetPrice Current price of the asset.
+     * @return _lastCycleActionDateTime Timestamp of the last cycle action.
      */
     function getGeneralInfo() external view returns (
         uint256 _xTokenSupply,
         CycleState _cycleState,
         uint256 _cycleIndex,
-        uint256 _nextRebalanceStartDate,
-        uint256 _nextRebalanceEndDate,
-        uint256 _assetPrice
+        uint256 _assetPrice,
+        uint256 _lastCycleActionDateTime
     ) {
         return (
             assetToken.totalSupply(),
             cycleState,
             cycleIndex,
-            nextRebalanceStartDate,
-            nextRebalanceEndDate,
-            assetOracle.assetPrice()
+            assetOracle.assetPrice(),
+            lastCycleActionDateTime
         );
     }
 

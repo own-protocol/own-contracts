@@ -30,8 +30,8 @@ contract AssetPoolFactoryTest is Test {
 
     // Test constants
     uint256 constant INITIAL_BALANCE = 1000000e18;
-    uint256 constant CYCLE_PERIOD = 7 days;
-    uint256 constant REBALANCE_PERIOD = 1 days;
+    uint256 constant CYCLE_LENGTH = 7 days;
+    uint256 constant REBALANCE_LENGTH = 1 days;
 
     function setUp() public {
 
@@ -54,8 +54,8 @@ contract AssetPoolFactoryTest is Test {
             "Tesla Stock Token",
             "xTSLA",
             address(assetOracle),
-            CYCLE_PERIOD,
-            REBALANCE_PERIOD
+            CYCLE_LENGTH,
+            REBALANCE_LENGTH
         );
 
         pool = IAssetPool(poolAddress);
@@ -92,16 +92,16 @@ contract AssetPoolFactoryTest is Test {
             "Apple Stock Token",
             "xAAPL",
             address(assetOracle),
-            CYCLE_PERIOD,
-            REBALANCE_PERIOD
+            CYCLE_LENGTH,
+            REBALANCE_LENGTH
         );
         vm.stopPrank();
 
         assertTrue(newPool != address(0));
         IAssetPool poolInstance = IAssetPool(newPool);
         assertEq(address(poolInstance.reserveToken()), address(reserveToken));
-        assertEq(poolInstance.cycleTime(), CYCLE_PERIOD);
-        assertEq(poolInstance.rebalanceTime(), REBALANCE_PERIOD);
+        assertEq(poolInstance.cycleLength(), CYCLE_LENGTH);
+        assertEq(poolInstance.rebalanceLength(), REBALANCE_LENGTH);
     }
 
     function testCreatePoolReverts() public {
@@ -112,8 +112,8 @@ contract AssetPoolFactoryTest is Test {
             "Apple Stock Token",
             "xAAPL",
             address(assetOracle),
-            CYCLE_PERIOD,
-            REBALANCE_PERIOD
+            CYCLE_LENGTH,
+            REBALANCE_LENGTH
         );
         vm.stopPrank();
     }
@@ -219,12 +219,18 @@ contract AssetPoolFactoryTest is Test {
         vm.stopPrank();
 
         // Move time to rebalance period
-        vm.warp(block.timestamp + CYCLE_PERIOD + 1);
+        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
         
         // Initiate rebalance
-        pool.initiateRebalance();
+        pool.initiateOffchainRebalance(); 
+        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.REBALANCING_OFFCHAIN));
         
-        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.REBALANCING));
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
+        assetOracle.setAssetPrice(1e18);
+
+        pool.initiateOnchainRebalance();
+        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.REBALANCING_ONCHAIN));
+
         assertEq(pool.rebalancedLPs(), 0);
     }
 
@@ -236,10 +242,15 @@ contract AssetPoolFactoryTest is Test {
         vm.stopPrank();
 
         // Move time to after rebalance start
-        vm.warp(block.timestamp + CYCLE_PERIOD + 1);
+        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
         
         // Initiate rebalance
-        pool.initiateRebalance();
+        pool.initiateOffchainRebalance(); 
+        
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
+        assetOracle.setAssetPrice(1e18);
+
+        pool.initiateOnchainRebalance();
 
         // Get rebalance info
         (, , , int256 rebalanceAmount) = pool.getLPInfo();
@@ -358,10 +369,15 @@ contract AssetPoolFactoryTest is Test {
         vm.stopPrank();
 
         // Move to after rebalance start
-        vm.warp(block.timestamp + CYCLE_PERIOD + 1);
+        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
         
         // Complete rebalancing
-        pool.initiateRebalance();
+        pool.initiateOffchainRebalance(); 
+        
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
+        assetOracle.setAssetPrice(1e18);
+
+        pool.initiateOnchainRebalance();
         
         // Get rebalance info
         (, , , int256 rebalanceAmount) = pool.getLPInfo();
@@ -399,12 +415,15 @@ contract AssetPoolFactoryTest is Test {
         pool.redemptionRequest(burnAmount);
 
         // Move to after rebalance start
-        vm.warp(block.timestamp + CYCLE_PERIOD + 1);
-
-        assetOracle.setAssetPrice(2e18);
+        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
         
         // Complete rebalancing
-        pool.initiateRebalance();
+        pool.initiateOffchainRebalance(); 
+        
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
+        assetOracle.setAssetPrice(2e18);
+
+        pool.initiateOnchainRebalance();
         
         // Get rebalance info
         (, , , int256 rebalanceAmount) = pool.getLPInfo();
@@ -444,13 +463,16 @@ contract MockERC20 is ERC20 {
 // Mock asset oracle contract for testing
 contract MockAssetOracle {
     uint256 public assetPrice;
+    uint256 public lastUpdated;
     
     constructor() {
         assetPrice = 1e18; // Default to 1.0
+        lastUpdated = block.timestamp;
     }
     
     // Test helper to set price
     function setAssetPrice(uint256 newPrice) external {
         assetPrice = newPrice;
+        lastUpdated = block.timestamp;
     }
 }
