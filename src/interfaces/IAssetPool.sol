@@ -16,12 +16,14 @@ import {IAssetOracle} from "./IAssetOracle.sol";
 interface IAssetPool {
     /**
      * @notice Enum representing the current state of the pool's operational cycle
-     * @param ACTIVE Normal operation state where users can deposit and withdraw
-     * @param REBALANCING State during which LPs adjust their reserve positions
+     * @param ACTIVE Normal operation state where users can deposit and redeem
+     * @param REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
+     * @param REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
      */
     enum CycleState {
         ACTIVE,
-        REBALANCING
+        REBALANCING_OFFCHAIN,
+        REBALANCING_ONCHAIN
     }
 
     /**
@@ -106,18 +108,6 @@ interface IAssetPool {
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
 
     /**
-     * @notice Emitted when the cycle duration is updated
-     * @param newCycleTime New duration for operational cycles
-     */
-    event CycleTimeUpdated(uint256 newCycleTime);
-
-    /**
-     * @notice Emitted when the rebalance period duration is updated
-     * @param newRebalanceTime New duration for rebalancing periods
-     */
-    event RebalanceTimeUpdated(uint256 newRebalanceTime);
-
-    /**
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
      * @param assetPrice Current price of the asset
@@ -163,8 +153,12 @@ interface IAssetPool {
     error RebalanceMismatch();
     /// @notice Thrown when a user attempts to interact with an LP's rebalance
     error InvalidCycleRequest();
-    /// @notice Thrown when an LP tries to settle a rebalance before the rebalance ends
-    error RebalancingInProgress();
+    /// @notice Thrown when an someone tries to start a onchain rebalance before offchain rebalance ends
+    error OffChainRebalanceInProgress();
+     /// @notice Thrown when an someone tries to settle before onchain rebalance ends
+    error OnChainRebalancingInProgress();
+    /// @notice Thrown when oracle price is not updated
+    error OracleNotUpdated();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -199,9 +193,14 @@ interface IAssetPool {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Initiates the rebalancing period for LPs
+     * @notice Initiates the off-chain rebalancing period for LPs
      */
-    function initiateRebalance() external;
+    function initiateOffchainRebalance() external;
+
+    /**
+     * @notice Initiates the onchain rebalancing period for LPs
+     */
+    function initiateOnchainRebalance() external;
 
     /**
      * @notice Allows LPs to perform their rebalancing actions
@@ -245,17 +244,15 @@ interface IAssetPool {
      * @return _xTokenSupply Total supply of asset tokens
      * @return _cycleState Current state of the pool
      * @return _cycleIndex Current operational cycle index
-     * @return _nextRebalanceStartDate Start time of next rebalance
-     * @return _nextRebalanceEndDate End time of next rebalance
      * @return _assetPrice Current price of the asset
+     * @return _lastCycleActionDateTime Timestamp of the last cycle action
      */
     function getGeneralInfo() external view returns (
         uint256 _xTokenSupply,
         CycleState _cycleState,
         uint256 _cycleIndex,
-        uint256 _nextRebalanceStartDate,
-        uint256 _nextRebalanceEndDate,
-        uint256 _assetPrice
+        uint256 _assetPrice,
+        uint256 _lastCycleActionDateTime
     );
 
     /**
@@ -307,24 +304,19 @@ interface IAssetPool {
     function cycleState() external view returns (CycleState);
 
     /**
-     * @notice Returns the start time of the next rebalance
+     * @notice Returns the timestamp of the last cycle action
      */
-    function nextRebalanceStartDate() external view returns (uint256);
-
-    /**
-     * @notice Returns the end time of the next rebalance
-     */
-    function nextRebalanceEndDate() external view returns (uint256);
+    function lastCycleActionDateTime() external view returns (uint256);
 
     /**
      * @notice Returns the duration of operational cycles
      */
-    function cycleTime() external view returns (uint256);
+    function cycleLength() external view returns (uint256);
 
     /**
      * @notice Returns the duration of rebalance periods
      */
-    function rebalanceTime() external view returns (uint256);
+    function rebalanceLength() external view returns (uint256);
 
     /**
      * @notice Returns the total balance of reserve tokens

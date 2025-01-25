@@ -37,15 +37,15 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * Only callable by the owner of the contract.
      * Reverts if:
      * - Any address parameter is zero.
-     * - `cyclePeriod` is zero.
-     * - `rebalancingPeriod` is greater than or equal to `cyclePeriod`.
+     * - `cycleLength` is zero.
+     * - `rebalancingLength` is greater than or equal to `cycleLength`.
      * 
      * @param depositToken Address of the token used for deposits.
      * @param assetName Name of the token representing the asset.
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
-     * @param cyclePeriod Length of each investment cycle in seconds.
-     * @param rebalancingPeriod Length of the rebalancing period within a cycle in seconds.
+     * @param cycleLength Length of each investment cycle in seconds.
+     * @param rebalanceLength Length of the rebalancing period within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
@@ -53,14 +53,14 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         string memory assetName,
         string memory assetSymbol,
         address oracle,
-        uint256 cyclePeriod,
-        uint256 rebalancingPeriod
+        uint256 cycleLength,
+        uint256 rebalanceLength
     ) external onlyOwner returns (address) {
         if (
             depositToken == address(0) ||
             oracle == address(0) ||
-            cyclePeriod == 0 ||
-            rebalancingPeriod >= cyclePeriod
+            cycleLength == 0 ||
+            rebalanceLength >= cycleLength
         ) revert InvalidParams();
 
         address owner = owner();
@@ -73,8 +73,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             assetSymbol,
             oracle,
             address(lpRegistry),
-            cyclePeriod,
-            rebalancingPeriod,
+            cycleLength,
+            rebalanceLength,
             owner
         );
 
@@ -84,8 +84,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             assetSymbol,
             depositToken,
             oracle,
-            cyclePeriod,
-            rebalancingPeriod
+            cycleLength,
+            rebalanceLength
         );
 
         return address(pool);
