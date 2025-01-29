@@ -11,18 +11,18 @@ contract CreatePoolScript is Script {
     address constant DEPOSIT_TOKEN = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on base sepolia
     string constant ASSET_SYMBOL = "xTSLA";
     string constant ASSET_NAME = "xTesla";
-    address constant PRICE_ORACLE = 0x453cD289694c036980226FDEDF3A7a3eC686Ae05; // Replace with actual oracle address
+    address constant PRICE_ORACLE = 0x453cD289694c036980226FDEDF3A7a3eC686Ae05;
     uint256 constant CYCLE_LENGTH = 2 hours;
     uint256 constant REBALANCING_LENGTH = 30 minutes;
 
     // Deployed contract addresses (replace with actual addresses after deployment)
-    address constant ASSET_POOL_FACTORY = 0xda62cb7c018505042eF56B02A8207A9a704e734c; // Replace with deployed PoolFactory address
-    address constant LP_REGISTRY = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9;  // Replace with deployed LPRegistry address
+    address constant ASSET_POOL_FACTORY = 0xC75324D1949E004963Bb158c1Bc9A702b591a21A; 
+    address constant LP_REGISTRY = 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721;
 
     function setUp() public pure {
         // Validate addresses
-        require(ASSET_POOL_FACTORY == 0xda62cb7c018505042eF56B02A8207A9a704e734c, "AssetPoolFactory address not set");
-        require(LP_REGISTRY == 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9, "LPRegistry address not set");
+        require(ASSET_POOL_FACTORY == 0xC75324D1949E004963Bb158c1Bc9A702b591a21A, "AssetPoolFactory address not set");
+        require(LP_REGISTRY == 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721, "LPRegistry address not set");
         require(DEPOSIT_TOKEN == 0x036CbD53842c5426634e7929541eC2318f3dCF7e, "Deposit token address not set");
         require(PRICE_ORACLE == 0x453cD289694c036980226FDEDF3A7a3eC686Ae05, "Oracle address not set");
     }

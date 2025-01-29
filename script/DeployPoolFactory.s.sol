@@ -5,8 +5,8 @@ import "forge-std/Script.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 
 contract AssetPoolDeployScript is Script {
-    address constant lpRegistry = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9; // Replace with actual LPRegistry address
-    address constant assetPoolImplementation = 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9; // Replace with actual implementation address
+    address constant lpRegistry = 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721; 
+    address constant assetPoolImplementation = 0x6D2a971099314b2dB9a78138ac1b3Bd52AfB597e;
 
     function setUp() public {}
 

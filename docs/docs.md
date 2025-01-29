@@ -6,11 +6,12 @@ Subscription ID: 254
 ##Contract Addresses:
 #Base Sepolia:
 AssetOracle: 0x453cD289694c036980226FDEDF3A7a3eC686Ae05
-LPRegistry: 0x82d533e4a2973D5c1E29eB207af0B6f387E395C9
-AssetPoolFactory: 0xda62cb7c018505042eF56B02A8207A9a704e734c
+AssetPoolImplementation: 0x6D2a971099314b2dB9a78138ac1b3Bd52AfB597e
+LPRegistry: 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721
+AssetPoolFactory: 0xC75324D1949E004963Bb158c1Bc9A702b591a21A
 
-AssetPool: 0x5C387fA6c1304f82AB6c1d01A6325DfF2aB1B5b6
-xToken: 0xe54c25e05f8B4Fd8CbebF7127876b4c4Af2cc968
+AssetPool: 0xcA18c8a2f554c57950C8944228F4db262Ea24D5a
+xToken: 0x463011e877e7C2cd95E2a61b444752f62981E071
 USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
 
 ##Commands:
@@ -19,6 +20,9 @@ forge script script/DeployOracle.s.sol:DeployScript --rpc-url base_sepolia --bro
 
 Fetch Asset Price:
 forge script script/RequestAssetPrice.s.sol:RequestAssetPrice --rpc-url base_sepolia --broadcast
+
+Deploy AssetPool Implementation:
+forge script script/DeployAssetPoolImplementation.s.sol:AssetPoolImplementationDeployScript --rpc-url base_sepolia --broadcast --verify
 
 Deploy LP Registry:
 forge script script/DeployLPRegistry.s.sol:LPRegistryDeployScript --rpc-url base_sepolia --broadcast --verify
