@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: GPL-3.0-or-later
 // author: bhargavaparoksham
 
 pragma solidity ^0.8.20;
@@ -8,7 +8,7 @@ import "../src/protocol/AssetOracle.sol";
 
 contract RequestAssetPrice is Script {
 
-    address constant ORACLE_CONTRACT_ADDRESS = 0x453cD289694c036980226FDEDF3A7a3eC686Ae05; // Deployed AssetOracle contract address
+    address constant ORACLE_CONTRACT_ADDRESS = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0; // Deployed AssetOracle contract address
     address constant ROUTER_ADDRESS = 0xf9B8fc078197181C841c296C876945aaa425B278; // Chainlink Functions router address
     uint64 constant SUBSCRIPTION_ID = 254; // Your Chainlink subscription ID
     uint32 constant GAS_LIMIT = 300_000;

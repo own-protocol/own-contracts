@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
@@ -11,20 +11,20 @@ contract CreatePoolScript is Script {
     address constant DEPOSIT_TOKEN = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on base sepolia
     string constant ASSET_SYMBOL = "xTSLA";
     string constant ASSET_NAME = "xTesla";
-    address constant PRICE_ORACLE = 0x453cD289694c036980226FDEDF3A7a3eC686Ae05;
+    address constant PRICE_ORACLE = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
     uint256 constant CYCLE_LENGTH = 2 hours;
     uint256 constant REBALANCING_LENGTH = 30 minutes;
 
     // Deployed contract addresses (replace with actual addresses after deployment)
-    address constant ASSET_POOL_FACTORY = 0xC75324D1949E004963Bb158c1Bc9A702b591a21A; 
-    address constant LP_REGISTRY = 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721;
+    address constant ASSET_POOL_FACTORY = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c; 
+    address constant LP_REGISTRY = 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b;
 
     function setUp() public pure {
         // Validate addresses
-        require(ASSET_POOL_FACTORY == 0xC75324D1949E004963Bb158c1Bc9A702b591a21A, "AssetPoolFactory address not set");
-        require(LP_REGISTRY == 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721, "LPRegistry address not set");
+        require(ASSET_POOL_FACTORY == 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c, "AssetPoolFactory address not set");
+        require(LP_REGISTRY == 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b, "LPRegistry address not set");
         require(DEPOSIT_TOKEN == 0x036CbD53842c5426634e7929541eC2318f3dCF7e, "Deposit token address not set");
-        require(PRICE_ORACLE == 0x453cD289694c036980226FDEDF3A7a3eC686Ae05, "Oracle address not set");
+        require(PRICE_ORACLE == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Oracle address not set");
     }
 
     function run() public {

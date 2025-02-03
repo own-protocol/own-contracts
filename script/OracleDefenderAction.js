@@ -2,7 +2,7 @@ const { Defender } = require("@openzeppelin/defender-sdk");
 const { ethers } = require("ethers");
 
 // Constants
-const ORACLE_CONTRACT_ADDRESS = "0x453cD289694c036980226FDEDF3A7a3eC686Ae05";
+const ORACLE_CONTRACT_ADDRESS = "0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0";
 const SUBSCRIPTION_ID = 254;
 const GAS_LIMIT = 300_000;
 const DON_ID =

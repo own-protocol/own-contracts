@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 
 contract AssetPoolDeployScript is Script {
-    address constant lpRegistry = 0xfA6bD97e1662Df409d15EEaa5654BDA6b319D721; 
-    address constant assetPoolImplementation = 0x6D2a971099314b2dB9a78138ac1b3Bd52AfB597e;
+    address constant lpRegistry = 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b;
+    address constant assetPoolImplementation = 0x105B599CDbC0B6EFa4C04C8dbbc4313894487713;
 
     function setUp() public {}
 
