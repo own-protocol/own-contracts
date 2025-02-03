@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: BUSL-1.1
 // author: bhargavaparoksham
 // Token design where balance remains constant matching the asset supply
 
