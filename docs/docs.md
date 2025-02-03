@@ -1,15 +1,6 @@
-# BASE Sepolia Testnet Configuration
+# Own Protocol Documentation
 
-## Network Details
-
-- **Functions Router:** `0xf9B8fc078197181C841c296C876945aaa425B278`
-- **DON ID:** `0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000`
-  - Human-readable: `fun-base-sepolia-1`
-- **Subscription ID:** `254`
-
-## Contract Addresses
-
-### Base Sepolia
+## Contract Addresses (Base Sepolia)
 
 | Contract                | Address                                      |
 | ----------------------- | -------------------------------------------- |
@@ -18,13 +9,20 @@
 | LPRegistry              | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
 | AssetPoolFactory        | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
 
-### Tokens
+### Test Pool Contracts
 
-| Token     | Address                                      |
+| Contract  | Address                                      |
 | --------- | -------------------------------------------- |
 | AssetPool | `0xf6AF07a6d2Fd6551c2eb0f2DA7644F4d5dd0FB65` |
 | xToken    | `0xF2809722104D4a0D5E300546dF2489832512fFa4` |
 | USDC      | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+
+### Chainlink Oracle Details
+
+- **Functions Router:** `0xf9B8fc078197181C841c296C876945aaa425B278`
+- **DON ID:** `0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000`
+  - Human-readable: `fun-base-sepolia-1`
+- **Subscription ID:** `254`
 
 ## Deployment Commands
 
