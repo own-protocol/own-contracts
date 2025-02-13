@@ -4,7 +4,6 @@
 
 | Contract                | Address                                      |
 | ----------------------- | -------------------------------------------- |
-| AssetOracle             | `0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0` |
 | AssetPoolImplementation | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
 | LPRegistry              | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
 | AssetPoolFactory        | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
@@ -16,6 +15,7 @@
 | AssetPool | `0xf6AF07a6d2Fd6551c2eb0f2DA7644F4d5dd0FB65` |
 | xToken    | `0xF2809722104D4a0D5E300546dF2489832512fFa4` |
 | USDC      | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| Oracle    | `0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0` |
 
 ### Chainlink Oracle Details
 
