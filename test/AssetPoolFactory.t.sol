@@ -9,14 +9,14 @@ import "../src/protocol/xToken.sol";
 import "../src/protocol/LPRegistry.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 contract AssetPoolFactoryTest is Test {
     // Test contracts
     AssetPoolFactory public factory;
     AssetPoolImplementation public implementation;
     IAssetPool public pool;
-    IERC20 public reserveToken;
+    IERC20Metadata public reserveToken;
     xToken public assetToken;
     LPRegistry public lpRegistry;
     MockAssetOracle assetOracle;
@@ -39,7 +39,7 @@ contract AssetPoolFactoryTest is Test {
 
         // Deploy mock USDC
         MockERC20 mockUSDC = new MockERC20("USDC", "USDC", 18);
-        reserveToken = IERC20(address(mockUSDC));
+        reserveToken = IERC20Metadata(address(mockUSDC));
 
         // Deploy core contracts
         lpRegistry = new LPRegistry();
