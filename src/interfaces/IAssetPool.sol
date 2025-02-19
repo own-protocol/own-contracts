@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.20;
 
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IXToken} from "./IXToken.sol";
 import {ILPRegistry} from "./ILPRegistry.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
@@ -276,7 +276,7 @@ interface IAssetPool {
     /**
      * @notice Returns the reserve token contract
      */
-    function reserveToken() external view returns (IERC20);
+    function reserveToken() external view returns (IERC20Metadata);
 
     /**
      * @notice Returns the asset token contract
