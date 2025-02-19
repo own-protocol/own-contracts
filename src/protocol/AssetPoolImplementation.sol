@@ -4,7 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
@@ -28,7 +28,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     /**
      * @notice Address of the reserve token (e.g., USDC).
      */
-    IERC20 public reserveToken;
+    IERC20Metadata public reserveToken;
 
     /**
      * @notice Address of the xToken contract used for asset representation.
@@ -136,6 +136,11 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     uint256 private cycleWeightedSum;
 
     /**
+     * @notice Decimal factor used for calculations.
+     */
+    uint256 public reserveToAssetDecimalFactor;
+
+    /**
      * @notice Precision used for calculations.
      */
     uint256 private constant PRECISION = 1e18;
@@ -174,7 +179,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
 
         _transferOwnership(_owner);
 
-        reserveToken = IERC20(_reserveToken);
+        reserveToken = IERC20Metadata(_reserveToken);
         assetToken = new xToken(_xTokenName, _xTokenSymbol);
         lpRegistry = ILPRegistry(_lpRegistry);
         assetOracle = IAssetOracle(_assetOracle);
@@ -182,6 +187,10 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         cycleLength = _cycleLength;
         rebalanceLength = _rebalanceLength;
         lastCycleActionDateTime = block.timestamp;
+
+        uint8 reserveDecimals = reserveToken.decimals();
+        uint8 assetDecimals = assetToken.decimals();
+        reserveToAssetDecimalFactor = 10 ** uint256(assetDecimals - reserveDecimals);
     }
 
     // --------------------------------------------------------------------------------
@@ -301,12 +310,12 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
 
         if (isDeposit) {
             // Mint case - convert reserve to asset using exact price
-            uint256 assetAmount = Math.mulDiv(amount, PRECISION, rebalancePrice);
+            uint256 assetAmount = Math.mulDiv(amount, PRECISION * reserveToAssetDecimalFactor, rebalancePrice);
             assetToken.mint(user, assetAmount, amount);
             emit AssetClaimed(user, assetAmount, requestCycle);
         } else {
             // Withdraw case - convert asset to reserve using exact price
-            uint256 reserveAmount = Math.mulDiv(amount, rebalancePrice, PRECISION);
+            uint256 reserveAmount = Math.mulDiv(amount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
             reserveToken.transfer(user, reserveAmount);
             emit ReserveWithdrawn(user, reserveAmount, requestCycle);
         }
@@ -340,7 +349,7 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         uint256 assetPrice = assetOracle.assetPrice();
         uint256 depositRequests = cycleTotalDepositRequests;
         uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests;
-        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequestsInAsset, assetPrice, PRECISION);
+        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequestsInAsset, assetPrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
 
         netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
