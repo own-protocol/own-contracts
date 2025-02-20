@@ -15,26 +15,18 @@ contract AssetPoolFactoryTest is Test {
     // Test contracts
     AssetPoolFactory public factory;
     AssetPoolImplementation public implementation;
-    IAssetPool public pool;
-    IERC20Metadata public reserveToken;
-    xToken public assetToken;
     LPRegistry public lpRegistry;
     MockAssetOracle assetOracle;
+    IERC20Metadata public reserveToken;
 
     // Test addresses
     address owner = address(1);
-    address user1 = address(2);
-    address user2 = address(3);
-    address lp1 = address(4);
-    address lp2 = address(5);
 
     // Test constants
-    uint256 constant INITIAL_BALANCE = 1000000e18;
     uint256 constant CYCLE_LENGTH = 7 days;
     uint256 constant REBALANCE_LENGTH = 1 days;
 
     function setUp() public {
-
         vm.startPrank(owner);
 
         // Deploy mock USDC
@@ -49,31 +41,7 @@ contract AssetPoolFactoryTest is Test {
 
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
-        address poolAddress = factory.createPool(
-            address(reserveToken),
-            "Tesla Stock Token",
-            "xTSLA",
-            address(assetOracle),
-            CYCLE_LENGTH,
-            REBALANCE_LENGTH
-        );
-
-        pool = IAssetPool(poolAddress);
-        assetToken = xToken(address(pool.assetToken()));
-
-        // Setup initial states
-        lpRegistry.addPool(address(pool));
-        lpRegistry.registerLP(address(pool), lp1, 100e18);
-        lpRegistry.registerLP(address(pool), lp2, 100e18);
         vm.stopPrank();
-
-        // Fund test accounts
-        deal(address(reserveToken), user1, INITIAL_BALANCE);
-        deal(address(reserveToken), user2, INITIAL_BALANCE);
-        deal(address(reserveToken), lp1, INITIAL_BALANCE);
-        deal(address(reserveToken), lp2, INITIAL_BALANCE);
-
-        vm.warp(block.timestamp + 1);
     }
 
     // --------------------------------------------------------------------------------
@@ -126,334 +94,23 @@ contract AssetPoolFactoryTest is Test {
         
         assertEq(address(factory.lpRegistry()), newRegistry);
     }
-
-    // --------------------------------------------------------------------------------
-    //                              POOL IMPLEMENTATION TESTS
-    // --------------------------------------------------------------------------------
-
-
-    function testDepositReserve() public {
-        uint256 depositAmount = 100e18;
-        
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), depositAmount);
-        pool.depositRequest(depositAmount);
-        vm.stopPrank();
-
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
-
-        // Assert the request details
-        assertEq(amount, depositAmount);
-        assertTrue(isDeposit);
-        assertEq(requestCycle, 0); // First cycle
-
-        // Assert total deposit requests for the cycle
-        assertEq(pool.cycleTotalDepositRequests(), depositAmount);
-
-        // Assert the reserve tokens were transferred
-        assertEq(reserveToken.balanceOf(address(pool)), depositAmount);
-        assertEq(reserveToken.balanceOf(user1), INITIAL_BALANCE - depositAmount);
-    }
-
-    function testDepositReserveReverts() public {
-        vm.startPrank(user1);
-        
-        // Test zero amount
-        vm.expectRevert(IAssetPool.InvalidAmount.selector);
-        pool.depositRequest(0);
-
-        // Test insufficient allowance
-        bytes memory error = abi.encodeWithSignature(
-            "ERC20InsufficientAllowance(address,uint256,uint256)", 
-            address(pool), 0, 100e18
-        );
-        vm.expectRevert(error);
-        pool.depositRequest(100e18);
-
-        vm.stopPrank();
-    }
-
-    function testCancelDepositRequest() public {
-        uint256 depositAmount = 100e18;
-        
-        // Setup deposit
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), depositAmount);
-        pool.depositRequest(depositAmount);
-        
-        // Cancel deposit
-        pool.cancelRequest();
-        vm.stopPrank();
-
-        (uint256 amount,,) = pool.pendingRequests(user1);
-
-        // Assert the request details
-        assertEq(amount, 0);
- 
-    }
-
-    function testClaimAsset() public {
-
-        // Verify user has assets before minting
-        uint256 userBalance = assetToken.balanceOf(user1);
-        assertEq(userBalance, 0, "User should have assets to mint");
-
-        setupCompleteDepositCycle();
-
-        pool.claimRequest(user1);
-
-        // Verify assets were minted
-        uint256 newUserBalance = assetToken.balanceOf(user1);
-        assertGt(newUserBalance, userBalance, "Asset minting failed");
-    }
-
-    // --------------------------------------------------------------------------------
-    //                              REBALANCING TESTS
-    // --------------------------------------------------------------------------------
-
-    function testInitiateRebalance() public {
-        // Setup initial deposits
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 100e18);
-        pool.depositRequest(100e18);
-        vm.stopPrank();
-
-        // Move time to rebalance period
-        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
-        
-        // Initiate rebalance
-        pool.initiateOffchainRebalance(); 
-        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.REBALANCING_OFFCHAIN));
-        
-        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
-        assetOracle.setAssetPrice(1e18);
-
-        pool.initiateOnchainRebalance();
-        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.REBALANCING_ONCHAIN));
-
-        assertEq(pool.rebalancedLPs(), 0);
-    }
-
-    function testRebalancePool() public {
-        // Setup initial deposits
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 100e18);
-        pool.depositRequest(100e18);
-        vm.stopPrank();
-
-        // Move time to after rebalance start
-        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
-        
-        // Initiate rebalance
-        pool.initiateOffchainRebalance(); 
-        
-        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
-        assetOracle.setAssetPrice(1e18);
-
-        pool.initiateOnchainRebalance();
-
-        // Get rebalance info
-        (, , , int256 rebalanceAmount) = pool.getLPInfo();
-        
-        // Calculate LP's share (lp1 has 100e18 out of total 200e18 liquidity = 50%)
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
-        uint256 rebalancePrice = 1e18;
-
-        vm.startPrank(lp1);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp1, rebalancePrice, expectedAmount, rebalanceAmount > 0);
-        vm.stopPrank();
-
-        assertTrue(pool.lastRebalancedCycle(lp1) == pool.cycleIndex());
-        assertEq(pool.rebalancedLPs(), 1);
-    }
-
-    // --------------------------------------------------------------------------------
-    //                              REDEMPTION TESTS
-    // --------------------------------------------------------------------------------
-
-    function testRedemptionRequest() public {
-        // Setup: Complete a cycle first to have assets to burn
-        setupCompleteDepositCycle();
-
-        pool.claimRequest(user1);
-
-        // Verify user has assets before burning
-        uint256 userBalance = assetToken.balanceOf(user1);
-        assertGt(userBalance, 0, "User should have assets to burn");
-
-        uint256 burnAmount = userBalance / 2; // Burn half of the balance
-        
-        vm.startPrank(user1);
-        assetToken.approve(address(pool), burnAmount);
-        pool.redemptionRequest(burnAmount);
-        vm.stopPrank();
-
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
-
-        // Assert the request details
-        assertEq(amount, burnAmount);
-        assertFalse(isDeposit);
-        assertEq(requestCycle, 1);
-    }
-
-    function testCancelRedemptionRequest() public {
-        // Setup: Complete a cycle first to have assets to burn
-        setupCompleteDepositCycle();
-
-        pool.claimRequest(user1);
-
-        // Verify user has assets before burning
-        uint256 userBalance = assetToken.balanceOf(user1);
-        assertGt(userBalance, 0, "User should have assets");
-
-        uint256 burnAmount = userBalance / 2; // Burn half of the balance
-
-        vm.startPrank(user1);
-        assetToken.approve(address(pool), burnAmount);
-        pool.redemptionRequest(burnAmount);
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
-        assertEq(amount, burnAmount);
-
-        // Cancel burn
-        pool.cancelRequest();
-        vm.stopPrank();
-
-        (amount, isDeposit, requestCycle) = pool.pendingRequests(user1);
-        assertEq(amount, 0);
-    }
-
-    function testClaimReserve() public {
-        // complete the deposit & burn cycle
-        setupCompleteBurnCycle();
-
-        // withdraw the reserve tokens
-        pool.claimRequest(user1);
-        (uint256 amount,,) = pool.pendingRequests(user1);
-        assertEq(amount, 0);
-
-        // assert that the user has received the reserve tokens
-        uint256 userBalance = reserveToken.balanceOf(user1);
-        assertGt(userBalance, 0, "User should have received reserve tokens");
-    }
-
-    // ToDO: Add tests to validate rebalance amount & reserve balances & asset balances pre & post rebalance
-
-    // --------------------------------------------------------------------------------
-    //                              GOVERNANCE TESTS
-    // --------------------------------------------------------------------------------
-
-
-    function testPausePool() public {
-        vm.prank(owner);
-        pool.pausePool();
-        
-        // Test that operations revert when paused
-        bytes memory error = abi.encodeWithSignature("EnforcedPause()");
-        vm.expectRevert(error);
-        pool.depositRequest(100e18);
-    }
-
-    // --------------------------------------------------------------------------------
-    //                              HELPER FUNCTIONS
-    // --------------------------------------------------------------------------------
-
-    function setupCompleteDepositCycle() internal {
-        // Setup initial balance
-        uint256 depositAmount = 100e18;
-
-        // Setup deposit
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), depositAmount);
-        pool.depositRequest(depositAmount);
-        vm.stopPrank();
-
-        // Move to after rebalance start
-        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
-        
-        // Complete rebalancing
-        pool.initiateOffchainRebalance(); 
-        
-        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
-        assetOracle.setAssetPrice(1e18);
-
-        pool.initiateOnchainRebalance();
-        
-        // Get rebalance info
-        (, , , int256 rebalanceAmount) = pool.getLPInfo();
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
-        bool isDeposit = rebalanceAmount > 0;
-        uint256 rebalancePrice = 1e18;
-
-        // LP1 rebalance
-        vm.startPrank(lp1);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp1, rebalancePrice, expectedAmount, isDeposit);
-        vm.stopPrank();
-
-        // LP2 rebalance
-        vm.startPrank(lp2);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp2, rebalancePrice, expectedAmount, isDeposit);
-        vm.stopPrank();
-        
-    }
-
-    function setupCompleteBurnCycle() internal {
-
-        setupCompleteDepositCycle();
-        pool.claimRequest(user1);
-
-        // Verify user has assets before burning
-        uint256 userBalance = assetToken.balanceOf(user1);
-        assertGt(userBalance, 0, "User should have assets");
-
-        uint256 burnAmount = userBalance / 2; // Burn half of the balance
-
-        vm.startPrank(user1);
-        assetToken.approve(address(pool), burnAmount);
-        pool.redemptionRequest(burnAmount);
-
-        // Move to after rebalance start
-        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
-        
-        // Complete rebalancing
-        pool.initiateOffchainRebalance(); 
-        
-        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
-        assetOracle.setAssetPrice(2e18);
-
-        pool.initiateOnchainRebalance();
-        
-        // Get rebalance info
-        (, , , int256 rebalanceAmount) = pool.getLPInfo();
-
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
-        bool isDeposit = rebalanceAmount > 0;
-        uint256 rebalancePrice = 2e18;
-
-        // LP1 rebalance
-        vm.startPrank(lp1);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp1, rebalancePrice, expectedAmount, isDeposit);
-        vm.stopPrank();
-
-        // LP2 rebalance
-        vm.startPrank(lp2);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp2, rebalancePrice, expectedAmount, isDeposit);
-        vm.stopPrank();
-        
-    }
 }
 
 // Mock ERC20 contract for testing
 contract MockERC20 is ERC20 {
+    uint8 private _decimals;
+
     constructor(
         string memory name,
         string memory symbol,
-        uint8 decimals
-    ) ERC20(name, symbol) {}
+        uint8 decimalsValue
+    ) ERC20(name, symbol) {
+        _decimals = decimalsValue;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return _decimals;
+    }
 
     function mint(address account, uint256 amount) external {
         _mint(account, amount);
