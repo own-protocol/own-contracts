@@ -350,10 +350,14 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         uint256 depositRequests = cycleTotalDepositRequests;
         uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests;
         uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequestsInAsset, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        // The balance of the asset token in the pool represents the amount of redemption requests in asset.
+        // Asset reserve represents the value the asset token was minted at.
         uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
 
+        // Calculate the net change in reserves post-rebalance
         netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
-        newReserveSupply =  assetToken.totalReserveSupply() + depositRequests - assetReserveSupplyInPool; 
+        newReserveSupply =  assetToken.totalReserveSupply() + depositRequests - assetReserveSupplyInPool;
+        // Calculate the total amount to rebalance
         rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
 
         lastCycleActionDateTime = block.timestamp;
