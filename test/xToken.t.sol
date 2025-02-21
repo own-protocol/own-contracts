@@ -92,8 +92,9 @@ contract xTokenTest is Test {
         assertEq(xtoken.totalReserveSupply(), 1750 * 1e18);
     }
     
-    function testFail_MintNotPool() public {
+    function test_RevertWhen_MintNotPool() public {
         vm.prank(alice);
+        vm.expectRevert(IXToken.NotPool.selector);
         xtoken.mint(alice, 1000 * 1e18, 500 * 1e18);
     }
     
@@ -126,13 +127,14 @@ contract xTokenTest is Test {
         assertEq(xtoken.totalReserveSupply(), 250 * 1e18);
     }
     
-    function testFail_BurnNotPool() public {
+    function test_RevertWhen_BurnNotPool() public {
         // Mint tokens first
         vm.prank(address(pool));
         xtoken.mint(alice, 1000 * 1e18, 500 * 1e18);
         
         // Try to burn as non-pool
         vm.prank(alice);
+        vm.expectRevert(IXToken.NotPool.selector);
         xtoken.burn(alice, 500 * 1e18, 250 * 1e18);
     }
     
