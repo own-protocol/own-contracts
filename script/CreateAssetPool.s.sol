@@ -7,7 +7,7 @@ import "../src/protocol/AssetPoolFactory.sol";
 import "../src/protocol/LPRegistry.sol";
 
 contract CreatePoolScript is Script {
-    // Pool configuration'
+    // Pool configuration
     address constant DEPOSIT_TOKEN = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on base sepolia
     string constant ASSET_SYMBOL = "xTSLA";
     string constant ASSET_NAME = "xTesla";
@@ -79,11 +79,31 @@ contract CreatePoolScript is Script {
 
         // Verify the pool was created correctly
         IAssetPool pool = IAssetPool(poolAddress);
-        (uint256 supply, IAssetPool.CycleState state, uint256 cycle,uint256 price,) = pool.getGeneralInfo();
+        (
+            IAssetPool.CycleState _cycleState,
+            uint256 _cycleIndex,
+            uint256 _assetPrice,
+            uint256 _lastCycleActionDateTime,
+            uint256 _reserveBalance,
+            uint256 _assetBalance,
+            uint256 _totalDepositRequests,
+            uint256 _totalRedemptionRequests,
+            int256 _netReserveDelta,
+            int256 _netAssetDelta,
+            int256 _rebalanceAmount
+        ) = pool.getPoolInfo();
+
         console.log("Pool Initial State:");
-        console.log("Supply:", supply);
-        console.log("State:", uint256(state));
-        console.log("Cycle:", cycle);
-        console.log("Current Asset Price:", price);
+        console.log("Cycle State:", uint256(_cycleState));
+        console.log("Cycle Index:", _cycleIndex);
+        console.log("Asset Price:", _assetPrice);
+        console.log("Last Action Time:", _lastCycleActionDateTime);
+        console.log("Reserve Balance:", _reserveBalance);
+        console.log("Asset Balance:", _assetBalance);
+        console.log("Total Deposit Requests:", _totalDepositRequests);
+        console.log("Total Redemption Requests:", _totalRedemptionRequests);
+        console.log("Net Reserve Delta:", _netReserveDelta < 0 ? "-" : "+", uint256(_netReserveDelta < 0 ? -_netReserveDelta : _netReserveDelta));
+        console.log("Net Asset Delta:", _netAssetDelta < 0 ? "-" : "+", uint256(_netAssetDelta < 0 ? -_netAssetDelta : _netAssetDelta));
+        console.log("Rebalance Amount:", _rebalanceAmount < 0 ? "-" : "+", uint256(_rebalanceAmount < 0 ? -_rebalanceAmount : _rebalanceAmount));
     }
 }
