@@ -71,24 +71,24 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     uint256 public lastCycleActionDateTime;
 
     /**
-     * @notice Total reserve token balance in the pool.
+     * @notice Reserve token balance of the pool (excluding new deposits).
      */
-    uint256 public totalReserveBalance;
+    uint256 public poolReserveBalance;
 
     /**
-     * @notice New reserve supply post-rebalance.
-     */
-    uint256 public newReserveSupply;
-
-    /**
-     * @notice New asset supply post-rebalance.
-     */
-    uint256 public newAssetSupply;
-
-    /**
-     * @notice Net change in reserves post-rebalance.
+     * @notice Net expected change in reserves post-rebalance.
      */
     int256 public netReserveDelta;
+
+    /**
+     * @notice Asset token balance of the pool.
+     */
+    uint256 public poolAssetBalance;
+
+    /**
+     * @notice Net expected change in assets post-rebalance.
+     */
+    int256 public netAssetDelta;
 
     /**
      * @notice Total amount to rebalance (PnL from reserves).
@@ -348,15 +348,19 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
 
         uint256 assetPrice = assetOracle.assetPrice();
         uint256 depositRequests = cycleTotalDepositRequests;
-        uint256 redemptionRequestsInAsset = cycleTotalRedemptionRequests;
-        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequestsInAsset, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        // The balance of the asset token in the pool represents the amount of redemption requests in asset.
-        // Asset reserve represents the value the asset token was minted at.
+        uint256 redemptionRequests = cycleTotalRedemptionRequests;
+
+        // Value of redemption requests in reserve tokens
+        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequests, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        // Initial purchase value of redemption requests i.e asset tokens in the pool
         uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
+        // Expected new asset mints
+        uint256 expectedNewAssetMints = Math.mulDiv(depositRequests, PRECISION * reserveToAssetDecimalFactor, assetPrice);
 
         // Calculate the net change in reserves post-rebalance
         netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
-        newReserveSupply =  assetToken.totalReserveSupply() + depositRequests - assetReserveSupplyInPool;
+        // Calculate the net change in assets post-rebalance
+        netAssetDelta = int256(expectedNewAssetMints) - int256(redemptionRequests);
         // Calculate the total amount to rebalance
         rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
 
@@ -498,6 +502,11 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
         cycleTotalRedemptionRequests = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
+        poolReserveBalance = reserveToken.balanceOf(address(this));
+        poolAssetBalance = assetToken.totalSupply();
+        netReserveDelta = 0;
+        netAssetDelta = 0;
+        rebalanceAmount = 0;
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -507,50 +516,44 @@ contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Returns the general information about the pool.
-     * @return _xTokenSupply Total supply of the xToken.
+     * @notice Returns the information about the pool.
      * @return _cycleState Current state of the pool.
      * @return _cycleIndex Current cycle index.
      * @return _assetPrice Current price of the asset.
      * @return _lastCycleActionDateTime Timestamp of the last cycle action.
+    * @return _reserveBalance Reserve token balance of the pool.
+    * @return _assetBalance Asset token balance of the pool.
+    * @return _totalDepositRequests Total deposit requests in the current cycle.
+    * @return _totalRedemptionRequests Total redemption requests in the current cycle.
+    * @return _netReserveDelta Net expected change in reserves post-rebalance.
+    * @return _netAssetDelta Net expected change in assets post-rebalance.
+    * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
      */
-    function getGeneralInfo() external view returns (
-        uint256 _xTokenSupply,
+    function getPoolInfo() external view returns (
         CycleState _cycleState,
         uint256 _cycleIndex,
         uint256 _assetPrice,
-        uint256 _lastCycleActionDateTime
+        uint256 _lastCycleActionDateTime,
+        uint256 _reserveBalance,
+        uint256 _assetBalance,
+        uint256 _totalDepositRequests,
+        uint256 _totalRedemptionRequests,
+        int256 _netReserveDelta,
+        int256 _netAssetDelta,
+        int256 _rebalanceAmount
     ) {
-        return (
-            assetToken.totalSupply(),
-            cycleState,
-            cycleIndex,
-            assetOracle.assetPrice(),
-            lastCycleActionDateTime
-        );
-    }
+            _cycleState = cycleState;
+            _cycleIndex = cycleIndex;
+            _assetPrice = assetOracle.assetPrice();
+            _lastCycleActionDateTime = lastCycleActionDateTime;
+            _reserveBalance = poolReserveBalance;
+            _assetBalance = assetToken.totalSupply();
+            _totalDepositRequests = cycleTotalDepositRequests;
+            _totalRedemptionRequests = cycleTotalRedemptionRequests;
+            _netReserveDelta = netReserveDelta;
+            _netAssetDelta = netAssetDelta;
+            _rebalanceAmount = rebalanceAmount;
 
-    /**
-     * @notice Returns the LP-specific information about the pool.
-     * @return _totalDepositRequests Total pending deposit requests.
-     * @return _totalRedemptionRequests Total pending redemption requests.
-     * @return _netReserveDelta Net change in reserves post-rebalance.
-     * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
-     */
-    function getLPInfo()
-        external
-        view
-        returns (
-            uint256 _totalDepositRequests,
-            uint256 _totalRedemptionRequests,
-            int256 _netReserveDelta,
-            int256 _rebalanceAmount
-        )
-    {
-        _totalDepositRequests = cycleTotalDepositRequests;
-        _totalRedemptionRequests = cycleTotalRedemptionRequests;
-        _netReserveDelta = netReserveDelta;
-        _rebalanceAmount = rebalanceAmount;
     }
 
 }
