@@ -208,7 +208,7 @@ contract AssetPoolImplementationTest is Test {
         pool.initiateOnchainRebalance();
 
         // Get rebalance info
-        (, , , int256 rebalanceAmount) = pool.getLPInfo();
+        (, , , , , , , , , , int256 rebalanceAmount) = pool.getPoolInfo();
         
         // Calculate LP's share (lp1 has 100e18 out of total 200e18 liquidity = 50%)
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
@@ -617,7 +617,7 @@ contract AssetPoolImplementationTest is Test {
         _targetPool.initiateOnchainRebalance();
         
         // Get rebalance info
-        (, , , int256 rebalanceAmount) = _targetPool.getLPInfo();
+        (, , , , , , , , , , int256 rebalanceAmount) = _targetPool.getPoolInfo();
         
         uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
         bool isDeposit = rebalanceAmount > 0;
