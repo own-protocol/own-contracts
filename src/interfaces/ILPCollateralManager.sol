@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.20;
 
-interface ILPStaking {
+interface ILPCollateralManager {
     /**
-     * @notice LP's current staking information
+     * @notice LP's current collateral information
      */
-    struct StakeInfo {
-        uint256 stakedAmount;      // Amount of reserve tokens staked
+    struct CollateralInfo {
+        uint256 collateralAmount;      // Amount of collateral deposited
         uint256 assetsHeld;        // Amount of assets LP is responsible for
         uint256 lastRebalanceTime; // Last time LP submitted rebalance
     }
 
     /**
-     * @notice Emitted when an LP stakes collateral
+     * @notice Emitted when an LP deposits collateral
      */
-    event Staked(address indexed lp, uint256 amount);
+    event CollateralDeposited(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when an LP withdraws collateral
      */
-    event Withdrawn(address indexed lp, uint256 amount);
+    event CollateralWithdrawn(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when an LP's asset position is updated
@@ -32,7 +32,7 @@ interface ILPStaking {
     event RebalancePriceSubmitted(address indexed lp, uint256 price);
 
     /**
-     * @notice Emitted when rebalance amount is deducted from LP's stake
+     * @notice Emitted when rebalance amount is deducted from LP's collateral
      */
     event RebalanceDeducted(address indexed lp, uint256 amount);
 
@@ -61,7 +61,7 @@ interface ILPStaking {
     error Unauthorized();
 
     /**
-     * @notice Error when trying to stake 0
+     * @notice Error when trying to deposit 0 collateral
      */
     error ZeroAmount();
 
@@ -76,9 +76,9 @@ interface ILPStaking {
     function COLLATERAL_THRESHOLD() external view returns (uint256);
 
     /**
-     * @notice Get LP's current stake info
+     * @notice Get LP's current collateral info
      */
-    function getStakeInfo(address lp) external view returns (StakeInfo memory);
+    function getCollateralInfo(address lp) external view returns (CollateralInfo memory);
 
     /**
      * @notice Calculate required collateral for given asset amount
@@ -91,9 +91,9 @@ interface ILPStaking {
     function getCurrentRatio(address lp) external view returns (uint256);
 
     /**
-     * @notice Stake collateral
+     * @notice Deposit collateral
      */
-    function stake(uint256 amount) external;
+    function deposit(uint256 amount) external;
 
     /**
      * @notice Withdraw excess collateral
@@ -111,7 +111,7 @@ interface ILPStaking {
     function submitRebalancePrice(uint256 price) external;
 
     /**
-     * @notice Deduct rebalance amount from stake
+     * @notice Deduct rebalance amount from collateral
      */
     function deductRebalanceAmount(address lp, uint256 amount) external;
 }

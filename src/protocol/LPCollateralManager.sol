@@ -3,16 +3,16 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
-import "../interfaces/ILPStaking.sol";
+import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "../interfaces/ILPCollateralManager.sol";
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
 
 /**
- * @title LPStaking
- * @notice Manages LP staking and collateral requirements for the asset pool
+ * @title LPCollateralManager
+ * @notice Manages LP collateral requirements for the asset pool
  */
-contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
+contract LPCollateralManager is ILPCollateralManager, Ownable, ReentrancyGuard {
     // Minimum collateral ratio required (50%)
     uint256 public constant MIN_COLLATERAL_RATIO = 50_00;
     
@@ -34,8 +34,8 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
     // Reserve token (USDC, USDT etc)
     IERC20 public immutable reserveToken;
 
-    // LP stake information
-    mapping(address => StakeInfo) private lpStakes;
+    // LP collateral information
+    mapping(address => CollateralInfo) private lpDeposits;
 
     constructor(
         address _assetPool,
@@ -52,10 +52,10 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Get LP's current stake info
+     * @notice Get LP's current collateral info
      */
-    function getStakeInfo(address lp) external view returns (StakeInfo memory) {
-        return lpStakes[lp];
+    function getCollateralInfo(address lp) external view returns (CollateralInfo memory) {
+        return lpDeposits[lp];
     }
 
     /**
@@ -70,45 +70,45 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
      * @notice Calculate current collateral ratio for an LP
      */
     function getCurrentRatio(address lp) public view returns (uint256) {
-        StakeInfo storage info = lpStakes[lp];
+        CollateralInfo storage info = lpDeposits[lp];
         if (info.assetsHeld == 0) return 0;
         
         uint256 assetValue = (info.assetsHeld * assetOracle.assetPrice()) / PRECISION;
-        return (info.stakedAmount * 100_00) / assetValue;
+        return (info.collateralAmount * 100_00) / assetValue;
     }
 
     /**
-     * @notice Stake collateral
+     * @notice Deposit collateral
      */
-    function stake(uint256 amount) external nonReentrant {
+    function deposit(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         
         reserveToken.transferFrom(msg.sender, address(this), amount);
         
-        lpStakes[msg.sender].stakedAmount += amount;
+        lpDeposits[msg.sender].collateralAmount += amount;
         
-        emit Staked(msg.sender, amount);
+        emit CollateralDeposited(msg.sender, amount);
     }
 
     /**
      * @notice Withdraw excess collateral
      */
     function withdraw(uint256 amount) external nonReentrant {
-        StakeInfo storage info = lpStakes[msg.sender];
+        CollateralInfo storage info = lpDeposits[msg.sender];
         
-        if (amount == 0 || amount > info.stakedAmount) 
+        if (amount == 0 || amount > info.collateralAmount) 
             revert ZeroAmount();
             
         uint256 assetValue = (info.assetsHeld * assetOracle.assetPrice()) / PRECISION;
-        uint256 remainingRatio = ((info.stakedAmount - amount) * 100_00) / assetValue;
+        uint256 remainingRatio = ((info.collateralAmount - amount) * 100_00) / assetValue;
         
         if (remainingRatio < MIN_COLLATERAL_RATIO)
             revert InsufficientCollateral(remainingRatio, MIN_COLLATERAL_RATIO);
         
-        info.stakedAmount -= amount;
+        info.collateralAmount -= amount;
         reserveToken.transfer(msg.sender, amount);
         
-        emit Withdrawn(msg.sender, amount);
+        emit CollateralWithdrawn(msg.sender, amount);
     }
 
     /**
@@ -118,7 +118,7 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
         if (msg.sender != address(assetPool)) 
             revert Unauthorized();
             
-        StakeInfo storage info = lpStakes[lp];
+        CollateralInfo storage info = lpDeposits[lp];
         info.assetsHeld = newAssetAmount;
         
         uint256 currentRatio = getCurrentRatio(lp);
@@ -130,7 +130,7 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
         // Check warning threshold
         if (currentRatio < COLLATERAL_THRESHOLD) {
             uint256 assetValue = (newAssetAmount * assetOracle.assetPrice()) / PRECISION;
-            uint256 requiredTopUp = (assetValue * MIN_COLLATERAL_RATIO / 100_00) - info.stakedAmount;
+            uint256 requiredTopUp = (assetValue * MIN_COLLATERAL_RATIO / 100_00) - info.collateralAmount;
             emit CollateralWarning(lp, currentRatio, requiredTopUp);
         }
         
@@ -141,7 +141,7 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
      * @notice Submit rebalance price
      */
     function submitRebalancePrice(uint256 price) external {
-        if (lpStakes[msg.sender].assetsHeld == 0)
+        if (lpDeposits[msg.sender].assetsHeld == 0)
             revert Unauthorized();
             
         uint256 oraclePrice = assetOracle.assetPrice();
@@ -150,24 +150,24 @@ contract LPStaking is ILPStaking, Ownable, ReentrancyGuard {
         if (deviation > MAX_PRICE_DEVIATION)
             revert PriceDeviationTooHigh(price, oraclePrice);
             
-        lpStakes[msg.sender].lastRebalanceTime = block.timestamp;
+        lpDeposits[msg.sender].lastRebalanceTime = block.timestamp;
         
         emit RebalancePriceSubmitted(msg.sender, price);
     }
 
     /**
-     * @notice Deduct rebalance amount from stake
+     * @notice Deduct rebalance amount from collateral
      */
     function deductRebalanceAmount(address lp, uint256 amount) external {
         if (msg.sender != address(assetPool))
             revert Unauthorized();
             
-        StakeInfo storage info = lpStakes[lp];
+        CollateralInfo storage info = lpDeposits[lp];
         
-        if (amount > info.stakedAmount)
-            revert InsufficientCollateral(info.stakedAmount, amount);
+        if (amount > info.collateralAmount)
+            revert InsufficientCollateral(info.collateralAmount, amount);
             
-        info.stakedAmount -= amount;
+        info.collateralAmount -= amount;
         reserveToken.transfer(address(assetPool), amount);
         
         // Check remaining ratio
