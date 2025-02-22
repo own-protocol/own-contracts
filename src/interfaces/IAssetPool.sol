@@ -240,32 +240,30 @@ interface IAssetPool {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Returns general information about the pool's state
-     * @return _xTokenSupply Total supply of asset tokens
+     * @notice Returns information about the pool
      * @return _cycleState Current state of the pool
      * @return _cycleIndex Current operational cycle index
      * @return _assetPrice Current price of the asset
      * @return _lastCycleActionDateTime Timestamp of the last cycle action
+    * @return _reserveBalance Reserve token balance of the pool
+    * @return _assetBalance Asset token balance of the pool
+    * @return _totalDepositRequests Total deposit requests for the cycle
+    * @return _totalRedemptionRequests Total redemption requests for the cycle
+    * @return _netReserveDelta Net change in reserves after rebalance
+    * @return _netAssetDelta Net change in assets after rebalance
+    * @return _rebalanceAmount Total amount to be rebalanced
      */
-    function getGeneralInfo() external view returns (
-        uint256 _xTokenSupply,
+    function getPoolInfo() external view returns (
         CycleState _cycleState,
         uint256 _cycleIndex,
         uint256 _assetPrice,
-        uint256 _lastCycleActionDateTime
-    );
-
-    /**
-     * @notice Returns LP-specific information about the pool
-     * @return _totalDepositRequests Total pending deposits
-     * @return _totalRedemptionRequests Total pending redemptions
-     * @return _netReserveDelta Net change in reserves
-     * @return _rebalanceAmount Amount to be rebalanced
-     */
-    function getLPInfo() external view returns (
+        uint256 _lastCycleActionDateTime,
+        uint256 _reserveBalance,
+        uint256 _assetBalance,
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests,
         int256 _netReserveDelta,
+        int256 _netAssetDelta,
         int256 _rebalanceAmount
     );
 
@@ -319,24 +317,24 @@ interface IAssetPool {
     function rebalanceLength() external view returns (uint256);
 
     /**
-     * @notice Returns the total balance of reserve tokens
+     * @notice Returns reserve token balance of the pool (excluding new deposits).
      */
-    function totalReserveBalance() external view returns (uint256);
-
-    /**
-     * @notice Returns the new supply of reserve tokens after rebalance
-     */
-    function newReserveSupply() external view returns (uint256);
-
-    /**
-     * @notice Returns the new supply of asset tokens after rebalance
-     */
-    function newAssetSupply() external view returns (uint256);
+    function poolReserveBalance() external view returns (uint256);
 
     /**
      * @notice Returns the net change in reserves after rebalance
      */
     function netReserveDelta() external view returns (int256);
+
+    /**
+     * @notice Returns the asset token balance of the pool
+     */
+    function poolAssetBalance() external view returns (uint256);
+
+    /**
+     * @notice Returns the net change in assets after rebalance
+     */
+    function netAssetDelta() external view returns (int256);
 
     /**
      * @notice Returns the total amount to be rebalanced
@@ -382,4 +380,9 @@ interface IAssetPool {
      * @param cycle Cycle index to query
      */
     function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
+
+    /**
+     * @notice Returns the reserve token decimal factor
+     */
+    function reserveToAssetDecimalFactor() external view returns (uint256);
 }
