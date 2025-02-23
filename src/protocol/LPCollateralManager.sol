@@ -18,12 +18,18 @@ contract LPCollateralManager is ILPCollateralManager, Ownable, ReentrancyGuard {
     
     // Warning threshold for collateral ratio (30%)
     uint256 public constant COLLATERAL_THRESHOLD = 30_00;
+
+    // Registration percentage (10%)
+    uint256 public constant REGISTRATION_COLLATERAL_RATIO = 10_00;
+    
+    // Liquidation reward percentage (5%)
+    uint256 public constant LIQUIDATION_REWARD_PERCENTAGE = 5_00;
     
     // Precision for calculations
     uint256 private constant PRECISION = 1e18;
     
-    // Max price deviation allowed from oracle (5%)
-    uint256 private constant MAX_PRICE_DEVIATION = 5_00;
+    // Max price deviation allowed from oracle (3%)
+    uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     // Asset pool contract
     IAssetPool public immutable assetPool;
@@ -35,75 +41,56 @@ contract LPCollateralManager is ILPCollateralManager, Ownable, ReentrancyGuard {
     IERC20 public immutable reserveToken;
 
     // LP collateral information
-    mapping(address => CollateralInfo) private lpDeposits;
+    ILPRegistry public immutable lpRegistry;
+
+    // LP collateral information
+    mapping(address => CollateralInfo) private lpCollateral;
 
     constructor(
         address _assetPool,
         address _assetOracle,
+        address _lpRegistry,
         address _reserveToken,
         address _owner
     ) Ownable(_owner) {
-        if (_assetPool == address(0) || _assetOracle == address(0) || _reserveToken == address(0))
-            revert Unauthorized();
+        if (_assetPool == address(0) || _assetOracle == address(0) || 
+            _lpRegistry == address(0) || _reserveToken == address(0)) {
+            revert ZeroAddress();
+        }
             
         assetPool = IAssetPool(_assetPool);
         assetOracle = IAssetOracle(_assetOracle);
+        lpRegistry = ILPRegistry(_lpRegistry);
         reserveToken = IERC20(_reserveToken);
     }
 
     /**
-     * @notice Get LP's current collateral info
-     */
-    function getCollateralInfo(address lp) external view returns (CollateralInfo memory) {
-        return lpDeposits[lp];
-    }
-
-    /**
-     * @notice Calculate required collateral for given asset amount
-     */
-    function getRequiredCollateral(uint256 assetAmount) public view returns (uint256) {
-        uint256 assetValue = (assetAmount * assetOracle.assetPrice()) / PRECISION;
-        return (assetValue * MIN_COLLATERAL_RATIO) / 100_00;
-    }
-
-    /**
-     * @notice Calculate current collateral ratio for an LP
-     */
-    function getCurrentRatio(address lp) public view returns (uint256) {
-        CollateralInfo storage info = lpDeposits[lp];
-        if (info.assetsHeld == 0) return 0;
-        
-        uint256 assetValue = (info.assetsHeld * assetOracle.assetPrice()) / PRECISION;
-        return (info.collateralAmount * 100_00) / assetValue;
-    }
-
-    /**
-     * @notice Deposit collateral
+     * @notice Deposit collateral for LP
+     * @param amount Amount of collateral to deposit
      */
     function deposit(uint256 amount) external nonReentrant {
+        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
         if (amount == 0) revert ZeroAmount();
         
         reserveToken.transferFrom(msg.sender, address(this), amount);
-        
-        lpDeposits[msg.sender].collateralAmount += amount;
+        lpCollateral[msg.sender].collateralAmount += amount;
         
         emit CollateralDeposited(msg.sender, amount);
     }
 
     /**
-     * @notice Withdraw excess collateral
+     * @notice Withdraw excess collateral if above minimum requirements
+     * @param amount Amount of collateral to withdraw
      */
     function withdraw(uint256 amount) external nonReentrant {
-        CollateralInfo storage info = lpDeposits[msg.sender];
+        CollateralInfo storage info = lpCollateral[msg.sender];
+        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
+        if (amount == 0 || amount > info.collateralAmount) revert InvalidWithdrawalAmount();
         
-        if (amount == 0 || amount > info.collateralAmount) 
-            revert ZeroAmount();
-            
-        uint256 assetValue = (info.assetsHeld * assetOracle.assetPrice()) / PRECISION;
-        uint256 remainingRatio = ((info.collateralAmount - amount) * 100_00) / assetValue;
-        
-        if (remainingRatio < MIN_COLLATERAL_RATIO)
-            revert InsufficientCollateral(remainingRatio, MIN_COLLATERAL_RATIO);
+        uint256 requiredCollateral = getRequiredCollateral(msg.sender);
+        if (info.collateralAmount - amount < requiredCollateral) {
+            revert InsufficientCollateral();
+        }
         
         info.collateralAmount -= amount;
         reserveToken.transfer(msg.sender, amount);
@@ -112,81 +99,109 @@ contract LPCollateralManager is ILPCollateralManager, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update LP's asset position from pool
+     * @notice Liquidate an LP below threshold
+     * @param lp Address of the LP to liquidate
      */
-    function updateLPPosition(address lp, uint256 newAssetAmount) external {
-        if (msg.sender != address(assetPool)) 
-            revert Unauthorized();
-            
-        CollateralInfo storage info = lpDeposits[lp];
-        info.assetsHeld = newAssetAmount;
+    function liquidateLP(address lp) external nonReentrant {
+        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
+        CollateralInfo storage info = lpCollateral[lp];
         
+        // Check if LP is below threshold
         uint256 currentRatio = getCurrentRatio(lp);
+        if (currentRatio >= COLLATERAL_THRESHOLD) revert NotEligibleForLiquidation();
+
+        // Calculate liquidation amounts
+        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(assetPool), lp);
+        uint256 liquidationReward = (lpLiquidity * LIQUIDATION_REWARD_PERCENTAGE) / 100_00;
         
-        // Check minimum ratio
-        if (currentRatio < MIN_COLLATERAL_RATIO)
-            revert InsufficientCollateral(currentRatio, MIN_COLLATERAL_RATIO);
-            
-        // Check warning threshold
-        if (currentRatio < COLLATERAL_THRESHOLD) {
-            uint256 assetValue = (newAssetAmount * assetOracle.assetPrice()) / PRECISION;
-            uint256 requiredTopUp = (assetValue * MIN_COLLATERAL_RATIO / 100_00) - info.collateralAmount;
-            emit CollateralWarning(lp, currentRatio, requiredTopUp);
+        // Transfer reward
+        if (liquidationReward > info.collateralAmount) {
+            liquidationReward = info.collateralAmount;
         }
+        info.collateralAmount -= liquidationReward;
+        reserveToken.transfer(msg.sender, liquidationReward);
         
-        emit PositionUpdated(lp, newAssetAmount);
+        emit LPLiquidated(lp, msg.sender, liquidationReward);
     }
 
     /**
-     * @notice Submit rebalance price
-     */
-    function submitRebalancePrice(uint256 price) external {
-        if (lpDeposits[msg.sender].assetsHeld == 0)
-            revert Unauthorized();
-            
-        uint256 oraclePrice = assetOracle.assetPrice();
-        uint256 deviation = calculateDeviation(price, oraclePrice);
-        
-        if (deviation > MAX_PRICE_DEVIATION)
-            revert PriceDeviationTooHigh(price, oraclePrice);
-            
-        lpDeposits[msg.sender].lastRebalanceTime = block.timestamp;
-        
-        emit RebalancePriceSubmitted(msg.sender, price);
-    }
-
-    /**
-     * @notice Deduct rebalance amount from collateral
+     * @notice Deduct rebalance amount from LP's collateral
+     * @param lp Address of the LP
+     * @param amount Amount to deduct
      */
     function deductRebalanceAmount(address lp, uint256 amount) external {
-        if (msg.sender != address(assetPool))
-            revert Unauthorized();
+        if (msg.sender != address(assetPool)) revert Unauthorized();
             
-        CollateralInfo storage info = lpDeposits[lp];
-        
-        if (amount > info.collateralAmount)
-            revert InsufficientCollateral(info.collateralAmount, amount);
+        CollateralInfo storage info = lpCollateral[lp];
+        if (amount > info.collateralAmount) revert InsufficientCollateral();
             
         info.collateralAmount -= amount;
         reserveToken.transfer(address(assetPool), amount);
         
         // Check remaining ratio
         uint256 currentRatio = getCurrentRatio(lp);
-        if (currentRatio < MIN_COLLATERAL_RATIO)
-            revert InsufficientCollateral(currentRatio, MIN_COLLATERAL_RATIO);
-            
+        if (currentRatio < MIN_COLLATERAL_RATIO) revert InsufficientCollateral();
+        
         emit RebalanceDeducted(lp, amount);
     }
 
     /**
-     * @notice Calculate deviation between two prices
+     * @notice Add rebalance amount to LP's collateral
+     * @param lp Address of the LP
+     * @param amount Amount to add
      */
-    function calculateDeviation(uint256 price1, uint256 price2) 
-        internal pure returns (uint256) 
-    {
-        if (price1 > price2) {
-            return ((price1 - price2) * 100_00) / price2;
+    function addToCollateral(address lp, uint256 amount) external {
+        if (msg.sender != address(assetPool)) revert Unauthorized();
+        
+        lpCollateral[lp].collateralAmount += amount;
+        
+        emit RebalanceAdded(lp, amount);
+    }
+
+    /**
+     * @notice Calculate required collateral for an LP
+     * @param lp Address of the LP
+     */
+    function getRequiredCollateral(address lp) public view returns (uint256) {
+        uint256 totalSupply = IXToken(assetPool.assetToken()).totalSupply();
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 lpShare = lpRegistry.getLPLiquidity(address(assetPool), lp);
+        uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(assetPool));
+        
+        return (totalSupply * assetPrice * lpShare * MIN_COLLATERAL_RATIO) / 
+               (totalLiquidity * 100_00 * PRECISION);
+    }
+
+    /**
+     * @notice Calculate current collateral ratio for an LP
+     * @param lp Address of the LP
+     */
+    function getCurrentRatio(address lp) public view returns (uint256) {
+        CollateralInfo storage info = lpCollateral[lp];
+        uint256 requiredCollateral = getRequiredCollateral(lp);
+        
+        if (requiredCollateral == 0) return 0;
+        return (info.collateralAmount * 100_00) / requiredCollateral;
+    }
+
+    /**
+     * @notice Check LP's collateral status
+     * @param lp Address of the LP
+     */
+    function checkCollateralStatus(address lp) public {
+        uint256 currentRatio = getCurrentRatio(lp);
+        
+        if (currentRatio < MIN_COLLATERAL_RATIO) {
+            uint256 requiredTopUp = getRequiredCollateral(lp) - lpCollateral[lp].collateralAmount;
+            emit CollateralWarning(lp, currentRatio, requiredTopUp);
+            revert InsufficientCollateral();
         }
-        return ((price2 - price1) * 100_00) / price2;
+    }
+    
+    /**
+     * @notice Get LP's current collateral info
+     */
+    function getCollateralInfo(address lp) external view returns (CollateralInfo memory) {
+        return lpCollateral[lp];
     }
 }
