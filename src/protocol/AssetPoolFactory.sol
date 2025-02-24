@@ -66,12 +66,11 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
 
         address owner = owner();
 
-        address lpManager = Clones.clone(lpLiquidtyManager);
-        // Initialize the LP liquidity manager contract.
-        // LPLiquidityManager(lpManager).initialize(owner); 
-
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
+        // Clones a new LP liquidity manager contract instance.
+        address lpManager = Clones.clone(lpLiquidtyManager);
+
         AssetPool(pool).initialize(
             depositToken,
             assetName,
@@ -82,6 +81,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             rebalanceLength,
             owner
         );
+
+        LPLiquidityManager(lpManager).initialize(pool, oracle, depositToken, owner);
 
         // Emit the AssetPoolCreated event to notify listeners.
         emit AssetPoolCreated(
