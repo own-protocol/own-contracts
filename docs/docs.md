@@ -2,11 +2,11 @@
 
 ## Contract Addresses (Base Sepolia)
 
-| Contract                | Address                                      |
-| ----------------------- | -------------------------------------------- |
-| AssetPoolImplementation | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
-| LPRegistry              | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
-| AssetPoolFactory        | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
+| Contract         | Address                                      |
+| ---------------- | -------------------------------------------- |
+| AssetPool        | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
+| LPRegistry       | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
+| AssetPoolFactory | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
 
 ### Test Pool Contracts
 

@@ -15,12 +15,12 @@ import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {xToken} from "./xToken.sol";
 
 /**
- * @title AssetPoolImplementation
+ * @title AssetPool
  * @notice Manages the lifecycle of assets and reserves in a decentralized pool.
  *         Facilitates deposits, minting, redemptions, and rebalancing of assets.
  *         Includes governance controls for updating operational parameters.
  */
-contract AssetPoolImplementation is IAssetPool, Ownable, Pausable, Initializable {
+contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
