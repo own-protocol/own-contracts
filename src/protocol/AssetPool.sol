@@ -10,7 +10,7 @@ import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
-import {ILPRegistry} from "../interfaces/ILPRegistry.sol";
+import {ILPLiquidityManager} from "../interfaces/ILPLiquidityManager.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {xToken} from "./xToken.sol";
 
@@ -36,9 +36,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
     IXToken public assetToken;
 
     /**
-     * @notice Address of the LP Registry contract for managing LPs.
+     * @notice Address of the LP Liquidity Manager contract for managing LPs.
      */
-    ILPRegistry public lpRegistry;
+    ILPLiquidityManager public lpLiquidityManager;
 
     /**
      * @notice Address of the Asset Oracle contract for fetching asset prices.
@@ -141,6 +141,11 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
     uint256 public reserveToAssetDecimalFactor;
 
     /**
+     * @notice Maximum deviation allowed in the rebalance price.
+     */
+    uint256 private constant MAX_PRICE_DEVIATION = 3_00;
+
+    /**
      * @notice Precision used for calculations.
      */
     uint256 private constant PRECISION = 1e18;
@@ -160,28 +165,29 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @param _xTokenName Name of the xToken to be created.
      * @param _xTokenSymbol Symbol of the xToken to be created.
      * @param _assetOracle Address of the asset price oracle contract.
-     * @param _lpRegistry Address of the LP registry contract.
+     * @param _lpLiquidityManager Address of the LP liquidity manager contract.
      * @param _cycleLength Duration of each operational cycle.
      * @param _rebalanceLength Duration of the rebalance period.
+     * @param _owner Owner of the contract.
      */
     function initialize (
         address _reserveToken,
         string memory _xTokenName,
         string memory _xTokenSymbol,
         address _assetOracle,
-        address _lpRegistry,
+        address _lpLiquidityManager,
         uint256 _cycleLength,
         uint256 _rebalanceLength,
         address _owner
     ) external initializer {
-        if (_reserveToken == address(0) || _assetOracle == address(0) || _lpRegistry == address(0)) 
+        if (_reserveToken == address(0) || _assetOracle == address(0) || _lpLiquidityManager == address(0)) 
             revert ZeroAddress();
 
         _transferOwnership(_owner);
 
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = new xToken(_xTokenName, _xTokenSymbol);
-        lpRegistry = ILPRegistry(_lpRegistry);
+        lpLiquidityManager = ILPLiquidityManager(_lpLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
         cycleLength = _cycleLength;
@@ -201,7 +207,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @dev Ensures the caller is a registered LP.
      */
     modifier onlyLP() {
-        if (!lpRegistry.isLP(address(this), msg.sender)) revert NotLP();
+        if (!lpLiquidityManager.isLP(msg.sender)) revert NotLP();
         _;
     }
 
@@ -266,7 +272,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @notice Allows a user to cancel a pending request.
      */
     function cancelRequest() external notRebalancing {
-
         UserRequest storage request = pendingRequests[msg.sender];
         uint256 amount = request.amount;
         bool isDeposit = request.isDeposit;
@@ -295,7 +300,6 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @param user Address of the user for whom the asset or reserve is to be claimed
      */
     function claimRequest(address user) external whenNotPaused notRebalancing {
-
         UserRequest storage request = pendingRequests[user];
         uint256 amount = request.amount;
         bool isDeposit = request.isDeposit;
@@ -373,49 +377,65 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
             netReserveDelta,
             rebalanceAmount
         );
-
     }
 
     /**
      * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
-     * @param amount Amount of stablecoin they are sending to (or withdrawing from) the pool
-     * @param isDeposit True if depositing stable, false if withdrawing
      *
      * ToDo: lpLiquidty should be based on how much being asset being rebalanced during the cycle
      * ToDo: Need to handle the case when LP doesn't rebalance within the rebalance window
      */
-
-    function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external onlyLP {
+    function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
-        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
 
-        _validateRebalancing(lp, amount, isDeposit);
+        _validateRebalancingPrice(rebalancePrice);
+
+        uint8 lpCollateralHealth = lpLiquidityManager.checkCollateralHealth(lp);
+        if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
+        uint256 lpLiquidity = lpLiquidityManager.getLPLiquidity(lp);
+        uint256 totalLiquidity = lpLiquidityManager.getTotalLPLiquidity();
+
+        // Calculate the LP's share of the rebalance amount
+        uint256 amount = 0;
+        bool isDeposit = false;
+
+
+        if (rebalanceAmount > 0) {
+            // Positive rebalance amount means Pool needs to withdraw from LP collateral
+            // The LP needs to cover the difference with their collateral
+            amount = uint256(rebalanceAmount) * lpLiquidity / totalLiquidity;
+            
+            // Deduct from LP's collateral and transfer to pool
+            lpLiquidityManager.deductRebalanceAmount(lp, amount);
+
+        } else if (rebalanceAmount < 0) {
+            // Negative rebalance amount means Pool needs to add to LP collateral
+            // The LP gets back funds which are added to their collateral
+            amount = uint256(-rebalanceAmount) * lpLiquidity / totalLiquidity;
+            
+            // Transfer from pool to LP's collateral
+            reserveToken.transfer(lp, amount);
+            
+            // Add to LP's collateral
+            lpLiquidityManager.addToCollateral(lp, amount);
+        }
+        // If rebalanceAmount is 0, no action needed
 
         cycleWeightedSum += rebalancePrice * lpLiquidity;
-
-        if (isDeposit) {
-            // If depositing stable, transfer from LP
-            reserveToken.transferFrom(lp, address(this), amount);
-        } else {
-            // If withdrawing stable, ensure the pool has enough
-            reserveToken.transfer(lp, amount);
-        }
-
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
         emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
 
         // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == lpRegistry.getLPCount(address(this))) {
+        if (rebalancedLPs == lpLiquidityManager.getLPCount()) {
             uint256 assetBalance = assetToken.balanceOf(address(this));
             uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-            uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(this));
             cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
             
             _startNewCycle();
@@ -472,23 +492,21 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
 
 
     /**
-     * @notice Validates the rebalancing action performed by an LP.
-     * @param lp Address of the LP performing the rebalance.
-     * @param amount Amount of reserve being deposited or withdrawn.
-     * @param isDeposit True if depositing reserve, false if withdrawing.
+     * @notice Validates the rebalancing price against the asset oracle.
+     * @param rebalancePrice Price at which the LP is rebalancing.
      */
-    function _validateRebalancing(address lp, uint256 amount, bool isDeposit) internal view {
-        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(this), lp);
-        if (lpLiquidity == 0) revert InsufficientLPLiquidity();
-
-        // Check if the rebalance direction aligns with the rebalanceAmount
-        if (rebalanceAmount > 0 && !isDeposit) revert RebalanceMismatch();
-        if (rebalanceAmount < 0 && isDeposit) revert RebalanceMismatch();
-
-        // Calculate the expected amount based on LP's liquidity share
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) * lpLiquidity / lpRegistry.getTotalLPLiquidity(address(this));
-        if (amount != expectedAmount) revert RebalanceMismatch();
-
+    function _validateRebalancingPrice(uint256 rebalancePrice) internal view {
+        uint256 oraclePrice = assetOracle.assetPrice();
+        
+        // Calculate the allowed deviation range
+        uint256 maxDeviation = (oraclePrice * MAX_PRICE_DEVIATION) / 100_00;
+        uint256 minAllowedPrice = oraclePrice > maxDeviation ? oraclePrice - maxDeviation : 0;
+        uint256 maxAllowedPrice = oraclePrice + maxDeviation;
+        
+        // Check if the rebalance price is within the allowed range
+        if (rebalancePrice < minAllowedPrice || rebalancePrice > maxAllowedPrice) {
+            revert PriceDeviationTooHigh();
+        }
     }
 
     /**
@@ -521,13 +539,13 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @return _cycleIndex Current cycle index.
      * @return _assetPrice Current price of the asset.
      * @return _lastCycleActionDateTime Timestamp of the last cycle action.
-    * @return _reserveBalance Reserve token balance of the pool.
-    * @return _assetBalance Asset token balance of the pool.
-    * @return _totalDepositRequests Total deposit requests in the current cycle.
-    * @return _totalRedemptionRequests Total redemption requests in the current cycle.
-    * @return _netReserveDelta Net expected change in reserves post-rebalance.
-    * @return _netAssetDelta Net expected change in assets post-rebalance.
-    * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
+     * @return _reserveBalance Reserve token balance of the pool.
+     * @return _assetBalance Asset token balance of the pool.
+     * @return _totalDepositRequests Total deposit requests in the current cycle.
+     * @return _totalRedemptionRequests Total redemption requests in the current cycle.
+     * @return _netReserveDelta Net expected change in reserves post-rebalance.
+     * @return _netAssetDelta Net expected change in assets post-rebalance.
+     * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
      */
     function getPoolInfo() external view returns (
         CycleState _cycleState,
@@ -553,7 +571,5 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
             _netReserveDelta = netReserveDelta;
             _netAssetDelta = netAssetDelta;
             _rebalanceAmount = rebalanceAmount;
-
     }
-
 }

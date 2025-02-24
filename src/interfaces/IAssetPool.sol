@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IXToken} from "./IXToken.sol";
-import {ILPRegistry} from "./ILPRegistry.sol";
+import {ILPLiquidityManager} from "./ILPLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
 
 /**
@@ -149,6 +149,8 @@ interface IAssetPool {
     error CycleInProgress();
     /// @notice Thrown when an LP has insufficient liquidity for an operation
     error InsufficientLPLiquidity();
+    /// @notice Thrown when an LP has insufficient collateral for an operation
+    error InsufficientLPCollateral();
     /// @notice Thrown when rebalance parameters don't match requirements
     error RebalanceMismatch();
     /// @notice Thrown when a user attempts to interact with an LP's rebalance
@@ -159,6 +161,8 @@ interface IAssetPool {
     error OnChainRebalancingInProgress();
     /// @notice Thrown when oracle price is not updated
     error OracleNotUpdated();
+    /// @notice Thrown when price deviation is too high
+    error PriceDeviationTooHigh();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -206,10 +210,8 @@ interface IAssetPool {
      * @notice Allows LPs to perform their rebalancing actions
      * @param lp Address of the LP performing the rebalance
      * @param rebalancePrice Price at which the rebalance is executed
-     * @param amount Amount of tokens involved in the rebalance
-     * @param isDeposit True if depositing, false if withdrawing
      */
-    function rebalancePool(address lp, uint256 rebalancePrice, uint256 amount, bool isDeposit) external;
+    function rebalancePool(address lp, uint256 rebalancePrice) external;
 
     /**
      * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
@@ -282,9 +284,9 @@ interface IAssetPool {
     function assetToken() external view returns (IXToken);
 
     /**
-     * @notice Returns the LP registry contract
+     * @notice Returns the LP liquidity manager contract
      */
-    function lpRegistry() external view returns (ILPRegistry);
+    function lpLiquidityManager() external view returns (ILPLiquidityManager);
 
     /**
      * @notice Returns the asset oracle contract
