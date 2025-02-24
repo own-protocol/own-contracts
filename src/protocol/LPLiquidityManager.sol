@@ -4,15 +4,15 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "../interfaces/ILPCollateralManager.sol";
+import "../interfaces/ILPLiquidityManager.sol";
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
 
 /**
- * @title LPCollateralManager
+ * @title LPLiquidityManager
  * @notice Manages LP collateral requirements for the asset pool
  */
-contract LPCollateralManager is ILPCollateralManager, Ownable, ReentrancyGuard {
+contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
     // Minimum collateral ratio required (50%)
     uint256 public constant MIN_COLLATERAL_RATIO = 50_00;
     
