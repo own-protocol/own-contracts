@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
@@ -14,8 +15,9 @@ import "../interfaces/ILPLiquidityManager.sol";
 /**
  * @title LPLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
+ * @dev Implementation contract designed to be used with Clones.clone
  */
-contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
+contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, Initializable {
     
     // Expected minimum collateral ratio (50%)
     uint256 public constant override MIN_COLLATERAL_RATIO = 50_00;
@@ -33,13 +35,13 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     // Asset pool contract
-    IAssetPool public immutable override assetPool;
+    IAssetPool public override assetPool;
     
     // Asset oracle
-    IAssetOracle public immutable override assetOracle;
+    IAssetOracle public override assetOracle;
     
     // Reserve token (USDC, USDT etc)
-    IERC20 public immutable override reserveToken;
+    IERC20 public override reserveToken;
 
     // Total liquidity in the pool
     uint256 public override totalLPLiquidity;
@@ -53,7 +55,10 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
 
-
+    /**
+     * @notice Error when contract is already initialized
+     */
+    error AlreadyInitialized();
 
     /**
      * @notice Modifier to ensure the caller is a registered LP
@@ -63,20 +68,39 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(
+    /**
+     * @dev Empty constructor that transfers ownership to the deployer
+     * Used for the implementation contract only, not for clones
+     */
+    constructor() Ownable(msg.sender) {
+        // This disables initialization of the implementation contract
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize the contract - replaces the constructor for clones
+     * @param _assetPool Address of the asset pool
+     * @param _assetOracle Address of the asset oracle
+     * @param _reserveToken Address of the reserve token
+     * @param _owner Address of the owner
+     */
+    function initialize(
         address _assetPool,
         address _assetOracle,
         address _reserveToken,
         address _owner
-    ) Ownable(_owner) {
+    ) external initializer {
         if (_assetPool == address(0) || _assetOracle == address(0) || 
-            _reserveToken == address(0)) {
+            _reserveToken == address(0) || _owner == address(0)) {
             revert ZeroAddress();
         }
             
         assetPool = IAssetPool(_assetPool);
         assetOracle = IAssetOracle(_assetOracle);
         reserveToken = IERC20(_reserveToken);
+        
+        // Initialize Ownable
+        _transferOwnership(_owner);
     }
 
     /**
