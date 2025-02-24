@@ -5,9 +5,9 @@ pragma solidity ^0.8.20;
 
 import 'openzeppelin-contracts/contracts/access/Ownable.sol';
 import 'openzeppelin-contracts/contracts/proxy/Clones.sol';
-import {ILPRegistry} from '../interfaces/ILPRegistry.sol';
 import {IAssetPoolFactory} from '../interfaces/IAssetPoolFactory.sol';
-import {AssetPoolImplementation} from "../protocol/AssetPoolImplementation.sol";
+import {AssetPool} from "../protocol/AssetPool.sol";
+import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
 
 
 /**
@@ -16,20 +16,21 @@ import {AssetPoolImplementation} from "../protocol/AssetPoolImplementation.sol";
  * Responsible for creating and registering asset pools for liquidity provisioning.
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
-    /// @notice Reference to the LP Registry contract.
-    ILPRegistry public lpRegistry;
+    /// @notice Address to the LP liquidity manager contract.
+    address public immutable lpLiquidtyManager;
     /// @notice Address of the asset pool implementation contract.
-    address public immutable assetPoolImplementation;
+    address public immutable assetPool;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
-     * @param _lpRegistry Address of the LP Registry contract.
+     * @param _lpLiquidtyManager Address of the LP Registry contract.
      * Reverts if the address is zero.
      */
-    constructor(address _lpRegistry, address _assetPoolImplementation) Ownable(msg.sender) {
-        if (_lpRegistry == address(0)) revert ZeroAddress();
-        lpRegistry = ILPRegistry(_lpRegistry);
-        assetPoolImplementation = _assetPoolImplementation;
+    constructor(address _lpLiquidtyManager, address _assetPool) Ownable(msg.sender) {
+        if (lpLiquidtyManager == address(0)) revert ZeroAddress();
+        if (assetPool == address(0)) revert ZeroAddress();
+        lpLiquidtyManager = lpLiquidtyManager;
+        assetPool = _assetPool;
     }
 
     /**
@@ -65,14 +66,18 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
 
         address owner = owner();
 
+        address lpManager = Clones.clone(lpLiquidtyManager);
+        // Initialize the LP liquidity manager contract.
+        // LPLiquidityManager(lpManager).initialize(owner); 
+
         // Clones a new AssetPool contract instance.
-        address pool = Clones.clone(assetPoolImplementation);
-        AssetPoolImplementation(pool).initialize(
+        address pool = Clones.clone(assetPool);
+        AssetPool(pool).initialize(
             depositToken,
             assetName,
             assetSymbol,
             oracle,
-            address(lpRegistry),
+            lpManager,
             cycleLength,
             rebalanceLength,
             owner
@@ -91,17 +96,4 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         return address(pool);
     }
 
-    /**
-    * @dev Updates the LP Registry contract address.
-    * Only callable by the owner of the contract.
-    * Reverts if the new address is zero.
-    * 
-    * @param newLPRegistry Address of the new LP Registry contract.
-    */
-    function updateLPRegistry(address newLPRegistry) external onlyOwner {
-        if (newLPRegistry == address(0)) revert ZeroAddress();
-        address oldRegistry = address(lpRegistry);
-        lpRegistry = ILPRegistry(newLPRegistry);
-        emit LPRegistryUpdated(oldRegistry, newLPRegistry);
-    }
 }
