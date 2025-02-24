@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// author: bhargavaparoksham
+
 pragma solidity ^0.8.20;
 
-interface ILPLiquidityManager{
+/**
+ * @title ILPLiquidityManager
+ * @notice Interface for the combined LP registry and liquidity manager
+ */
+interface ILPLiquidityManager {
     /**
-     * @notice LP's current collateral information
+     * @notice LP's current collateral and liquidity information
      */
     struct CollateralInfo {
         uint256 collateralAmount;      // Amount of collateral deposited
+        uint256 liquidityAmount;       // Amount of liquidity provided
     }
 
     /**
@@ -42,6 +49,26 @@ interface ILPLiquidityManager{
         uint256 currentRatio,
         uint256 requiredTopUp
     );
+    
+    /**
+     * @notice Emitted when a new LP is registered
+     */
+    event LPRegistered(address indexed lp, uint256 liquidityAmount, uint256 collateralAmount);
+
+    /**
+     * @notice Emitted when an LP is removed
+     */
+    event LPRemoved(address indexed lp);
+
+    /**
+     * @notice Emitted when an LP increases their liquidity
+     */
+    event LiquidityIncreased(address indexed lp, uint256 amount);
+
+    /**
+     * @notice Emitted when an LP decreases their liquidity
+     */
+    event LiquidityDecreased(address indexed lp, uint256 amount);
 
     /**
      * @notice Error when zero amount is provided
@@ -77,6 +104,21 @@ interface ILPLiquidityManager{
      * @notice Error when zero address is provided
      */
     error ZeroAddress();
+    
+    /**
+     * @notice Error when LP is already registered
+     */
+    error AlreadyRegistered();
+    
+    /**
+     * @notice Error when trying to decrease liquidity more than available
+     */
+    error InsufficientLiquidity();
+    
+    /**
+     * @notice Error when an invalid amount is provided
+     */
+    error InvalidAmount();
 
     /**
      * @notice Minimum required collateral ratio (50%)
@@ -87,49 +129,145 @@ interface ILPLiquidityManager{
      * @notice Warning threshold for collateral ratio (30%)
      */
     function COLLATERAL_THRESHOLD() external view returns (uint256);
-
+    
     /**
-     * @notice Get LP's current collateral info
+     * @notice Registration collateral ratio (20%)
      */
-    function getCollateralInfo(address lp) external view returns (CollateralInfo memory);
-
+    function REGISTRATION_COLLATERAL_RATIO() external view returns (uint256);
+    
     /**
-     * @notice Calculate required collateral for an LP
+     * @notice Liquidation reward percentage (5%)
      */
-    function getRequiredCollateral(address lp) external view returns (uint256);
-
+    function LIQUIDATION_REWARD_PERCENTAGE() external view returns (uint256);
+    
     /**
-     * @notice Calculate current collateral ratio for an LP
+     * @notice Asset pool contract
      */
-    function getCurrentRatio(address lp) external view returns (uint256);
-
+    function assetPool() external view returns (address);
+    
     /**
-     * @notice Check LP's collateral status
+     * @notice Asset oracle
      */
-    function checkCollateralStatus(address lp) external;
+    function assetOracle() external view returns (address);
+    
+    /**
+     * @notice Reserve token (USDC, USDT etc)
+     */
+    function reserveToken() external view returns (address);
+    
+    /**
+     * @notice Total liquidity in the pool
+     */
+    function totalLPLiquidity() external view returns (uint256);
+    
+    /**
+     * @notice Number of registered LPs
+     */
+    function lpCount() external view returns (uint256);
 
     /**
-     * @notice Deposit collateral
+     * @notice Register as a liquidity provider
+     * @param liquidityAmount The amount of liquidity to provide
+     */
+    function registerLP(uint256 liquidityAmount) external;
+
+    /**
+     * @notice Remove LP from registry (only owner)
+     * @param lp The address of the LP to remove
+     */
+    function removeLP(address lp) external;
+
+    /**
+     * @notice Increase your liquidity amount
+     * @param amount The amount of liquidity to add
+     */
+    function increaseLiquidity(uint256 amount) external;
+
+    /**
+     * @notice Decrease your liquidity amount
+     * @param amount The amount of liquidity to remove
+     */
+    function decreaseLiquidity(uint256 amount) external;
+
+    /**
+     * @notice Deposit additional collateral beyond the minimum
+     * @param amount Amount of collateral to deposit
      */
     function deposit(uint256 amount) external;
 
     /**
-     * @notice Withdraw excess collateral
+     * @notice Withdraw excess collateral if above minimum requirements
+     * @param amount Amount of collateral to withdraw
      */
     function withdraw(uint256 amount) external;
 
     /**
      * @notice Liquidate an LP below threshold
+     * @param lp Address of the LP to liquidate
      */
     function liquidateLP(address lp) external;
 
     /**
      * @notice Deduct rebalance amount from LP's collateral
+     * @param lp Address of the LP
+     * @param amount Amount to deduct
      */
     function deductRebalanceAmount(address lp, uint256 amount) external;
 
     /**
      * @notice Add rebalance amount to LP's collateral
+     * @param lp Address of the LP
+     * @param amount Amount to add
      */
     function addToCollateral(address lp, uint256 amount) external;
+
+    /**
+     * @notice Calculate required collateral for an LP
+     * @param lp Address of the LP
+     */
+    function getRequiredCollateral(address lp) external view returns (uint256);
+
+    /**
+     * @notice Calculate current collateral ratio for an LP
+     * @param lp Address of the LP
+     */
+    function getCurrentRatio(address lp) external view returns (uint256);
+
+    /**
+     * @notice Check LP's collateral status
+     * @param lp Address of the LP
+     */
+    function checkCollateralStatus(address lp) external view;
+    
+    /**
+     * @notice Get LP's current collateral and liquidity info
+     * @param lp Address of the LP
+     */
+    function getLPInfo(address lp) external view returns (CollateralInfo memory);
+    
+    /**
+     * @notice Check if an address is a registered LP
+     * @param lp The address to check
+     * @return bool True if the address is a registered LP
+     */
+    function isLP(address lp) external view returns (bool);
+    
+    /**
+     * @notice Returns the number of LPs registered
+     * @return uint256 The number of registered LPs
+     */
+    function getLPCount() external view returns (uint256);
+    
+    /**
+     * @notice Returns the current liquidity amount for an LP
+     * @param lp The address of the LP
+     * @return uint256 The current liquidity amount
+     */
+    function getLPLiquidity(address lp) external view returns (uint256);
+    
+    /**
+     * @notice Returns the total liquidity amount
+     * @return uint256 The total liquidity amount
+     */
+    function getTotalLPLiquidity() external view returns (uint256);
 }

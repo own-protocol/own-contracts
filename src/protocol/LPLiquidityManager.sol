@@ -1,29 +1,30 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
+// author: bhargavaparoksham
+
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "../interfaces/ILPLiquidityManager.sol";
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
+import "../interfaces/IXToken.sol";
+import "../interfaces/ILPLiquidityManager.sol";
 
 /**
  * @title LPLiquidityManager
- * @notice Manages LP collateral requirements for the asset pool
+ * @notice Manages LP collateral requirements and registry for the asset pool
  */
 contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
-    // Minimum collateral ratio required (50%)
-    uint256 public constant MIN_COLLATERAL_RATIO = 50_00;
     
-    // Warning threshold for collateral ratio (30%)
-    uint256 public constant COLLATERAL_THRESHOLD = 30_00;
-
-    // Registration percentage (10%)
-    uint256 public constant REGISTRATION_COLLATERAL_RATIO = 10_00;
-    
+    // Expected minimum collateral ratio (50%)
+    uint256 public constant override MIN_COLLATERAL_RATIO = 50_00;
+    // Collateral threshold for liquidation (30%)   
+    uint256 public constant override COLLATERAL_THRESHOLD = 30_00; 
+    // Registration percentage (20%) 
+    uint256 public constant override REGISTRATION_COLLATERAL_RATIO = 20_00;
     // Liquidation reward percentage (5%)
-    uint256 public constant LIQUIDATION_REWARD_PERCENTAGE = 5_00;
+    uint256 public constant override LIQUIDATION_REWARD_PERCENTAGE = 5_00;
     
     // Precision for calculations
     uint256 private constant PRECISION = 1e18;
@@ -32,48 +33,169 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     // Asset pool contract
-    IAssetPool public immutable assetPool;
+    IAssetPool public immutable override assetPool;
     
     // Asset oracle
-    IAssetOracle public immutable assetOracle;
+    IAssetOracle public immutable override assetOracle;
     
     // Reserve token (USDC, USDT etc)
-    IERC20 public immutable reserveToken;
+    IERC20 public immutable override reserveToken;
 
-    // LP collateral information
-    ILPRegistry public immutable lpRegistry;
+    // Total liquidity in the pool
+    uint256 public override totalLPLiquidity;
+    
+    // Number of registered LPs
+    uint256 public override lpCount;
 
-    // LP collateral information
-    mapping(address => CollateralInfo) private lpCollateral;
+    // Mapping of LP addresses to their collateral info
+    mapping(address => CollateralInfo) private lpInfo;
+    
+    // Mapping to check if an address is a registered LP
+    mapping(address => bool) public registeredLPs;
+
+
+
+    /**
+     * @notice Modifier to ensure the caller is a registered LP
+     */
+    modifier onlyRegisteredLP() {
+        if (!registeredLPs[msg.sender]) revert NotRegisteredLP();
+        _;
+    }
 
     constructor(
         address _assetPool,
         address _assetOracle,
-        address _lpRegistry,
         address _reserveToken,
         address _owner
     ) Ownable(_owner) {
         if (_assetPool == address(0) || _assetOracle == address(0) || 
-            _lpRegistry == address(0) || _reserveToken == address(0)) {
+            _reserveToken == address(0)) {
             revert ZeroAddress();
         }
             
         assetPool = IAssetPool(_assetPool);
         assetOracle = IAssetOracle(_assetOracle);
-        lpRegistry = ILPRegistry(_lpRegistry);
         reserveToken = IERC20(_reserveToken);
     }
 
     /**
-     * @notice Deposit collateral for LP
+     * @notice Register as a liquidity provider
+     * @param liquidityAmount The amount of liquidity to provide
+     */
+    function registerLP(uint256 liquidityAmount) external override nonReentrant {
+        if (registeredLPs[msg.sender]) revert AlreadyRegistered();
+        if (liquidityAmount == 0) revert InvalidAmount();
+        
+        // Calculate required collateral (20% of liquidity)
+        uint256 requiredCollateral = (liquidityAmount * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+        
+        // Transfer collateral from LP to contract
+        reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
+        
+        // Update LP info
+        registeredLPs[msg.sender] = true;
+        lpInfo[msg.sender] = CollateralInfo({
+            collateralAmount: requiredCollateral,
+            liquidityAmount: liquidityAmount
+        });
+        
+        // Update pool stats
+        totalLPLiquidity += liquidityAmount;
+        lpCount++;
+        
+        emit LPRegistered(msg.sender, liquidityAmount, requiredCollateral);
+    }
+
+    /**
+     * @notice Remove LP from registry (can only be called by owner)
+     * @param lp The address of the LP to remove
+     */
+    function removeLP(address lp) external override onlyOwner {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
+        CollateralInfo storage info = lpInfo[lp];
+        if (info.liquidityAmount > 0) revert("LP has active liquidity");
+        
+        // Refund any remaining collateral
+        if (info.collateralAmount > 0) {
+            uint256 refundAmount = info.collateralAmount;
+            info.collateralAmount = 0;
+            reserveToken.transfer(lp, refundAmount);
+        }
+        
+        // Remove LP
+        registeredLPs[lp] = false;
+        lpCount--;
+        
+        emit LPRemoved(lp);
+    }
+
+    /**
+     * @notice Increase your liquidity amount
+     * @param amount The amount of liquidity to add
+     */
+    function increaseLiquidity(uint256 amount) external override nonReentrant onlyRegisteredLP {
+        if (amount == 0) revert InvalidAmount();
+        
+        CollateralInfo storage info = lpInfo[msg.sender];
+        
+        // Calculate additional required collateral (20% of new liquidity)
+        uint256 additionalCollateral = (amount * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+        
+        // Transfer additional collateral
+        reserveToken.transferFrom(msg.sender, address(this), additionalCollateral);
+        
+        // Update LP info
+        info.liquidityAmount += amount;
+        info.collateralAmount += additionalCollateral;
+        
+        // Update total liquidity
+        totalLPLiquidity += amount;
+        
+        emit LiquidityIncreased(msg.sender, amount);
+    }
+
+    /**
+     * @notice Decrease your liquidity amount
+     * @param amount The amount of liquidity to remove
+     */
+    function decreaseLiquidity(uint256 amount) external override nonReentrant onlyRegisteredLP {
+        if (amount == 0) revert InvalidAmount();
+        
+        CollateralInfo storage info = lpInfo[msg.sender];
+        if (amount > info.liquidityAmount) revert InsufficientLiquidity();
+        
+        // Calculate releasable collateral (20% of removed liquidity)
+        uint256 releasableCollateral = (amount * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+        
+        // Update LP info
+        info.liquidityAmount -= amount;
+        
+        // Ensure remaining collateral meets minimum requirements for remaining liquidity
+        uint256 requiredCollateral = getRequiredCollateral(msg.sender);
+        
+        // Can only release excess collateral if remaining above minimum required
+        if (info.collateralAmount - releasableCollateral >= requiredCollateral) {
+            info.collateralAmount -= releasableCollateral;
+            reserveToken.transfer(msg.sender, releasableCollateral);
+        }
+        
+        // Update total liquidity
+        totalLPLiquidity -= amount;
+        
+        emit LiquidityDecreased(msg.sender, amount);
+    }
+
+    /**
+     * @notice Deposit additional collateral beyond the minimum
      * @param amount Amount of collateral to deposit
      */
-    function deposit(uint256 amount) external nonReentrant {
-        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
+    function deposit(uint256 amount) external override nonReentrant onlyRegisteredLP {
         if (amount == 0) revert ZeroAmount();
         
         reserveToken.transferFrom(msg.sender, address(this), amount);
-        lpCollateral[msg.sender].collateralAmount += amount;
+        lpInfo[msg.sender].collateralAmount += amount;
         
         emit CollateralDeposited(msg.sender, amount);
     }
@@ -82,9 +204,8 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @notice Withdraw excess collateral if above minimum requirements
      * @param amount Amount of collateral to withdraw
      */
-    function withdraw(uint256 amount) external nonReentrant {
-        CollateralInfo storage info = lpCollateral[msg.sender];
-        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
+    function withdraw(uint256 amount) external override nonReentrant onlyRegisteredLP {
+        CollateralInfo storage info = lpInfo[msg.sender];
         if (amount == 0 || amount > info.collateralAmount) revert InvalidWithdrawalAmount();
         
         uint256 requiredCollateral = getRequiredCollateral(msg.sender);
@@ -102,16 +223,16 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @notice Liquidate an LP below threshold
      * @param lp Address of the LP to liquidate
      */
-    function liquidateLP(address lp) external nonReentrant {
-        if (!lpRegistry.isLP(address(assetPool), msg.sender)) revert NotRegisteredLP();
-        CollateralInfo storage info = lpCollateral[lp];
+    function liquidateLP(address lp) external override nonReentrant onlyRegisteredLP {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        CollateralInfo storage info = lpInfo[lp];
         
         // Check if LP is below threshold
         uint256 currentRatio = getCurrentRatio(lp);
         if (currentRatio >= COLLATERAL_THRESHOLD) revert NotEligibleForLiquidation();
 
         // Calculate liquidation amounts
-        uint256 lpLiquidity = lpRegistry.getLPLiquidity(address(assetPool), lp);
+        uint256 lpLiquidity = info.liquidityAmount;
         uint256 liquidationReward = (lpLiquidity * LIQUIDATION_REWARD_PERCENTAGE) / 100_00;
         
         // Transfer reward
@@ -129,10 +250,11 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @param lp Address of the LP
      * @param amount Amount to deduct
      */
-    function deductRebalanceAmount(address lp, uint256 amount) external {
+    function deductRebalanceAmount(address lp, uint256 amount) external override {
         if (msg.sender != address(assetPool)) revert Unauthorized();
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
             
-        CollateralInfo storage info = lpCollateral[lp];
+        CollateralInfo storage info = lpInfo[lp];
         if (amount > info.collateralAmount) revert InsufficientCollateral();
             
         info.collateralAmount -= amount;
@@ -150,10 +272,11 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToCollateral(address lp, uint256 amount) external {
+    function addToCollateral(address lp, uint256 amount) external override {
         if (msg.sender != address(assetPool)) revert Unauthorized();
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
         
-        lpCollateral[lp].collateralAmount += amount;
+        lpInfo[lp].collateralAmount += amount;
         
         emit RebalanceAdded(lp, amount);
     }
@@ -162,25 +285,36 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @notice Calculate required collateral for an LP
      * @param lp Address of the LP
      */
-    function getRequiredCollateral(address lp) public view returns (uint256) {
+    function getRequiredCollateral(address lp) public view override returns (uint256) {
+        if (!registeredLPs[lp]) return 0;
+        
+        CollateralInfo storage info = lpInfo[lp];
+        
+        // For normal operation, required collateral is 50% of their share of total supply
         uint256 totalSupply = IXToken(assetPool.assetToken()).totalSupply();
         uint256 assetPrice = assetOracle.assetPrice();
-        uint256 lpShare = lpRegistry.getLPLiquidity(address(assetPool), lp);
-        uint256 totalLiquidity = lpRegistry.getTotalLPLiquidity(address(assetPool));
+        
+        // Calculate LP's share of total supply based on their proportion of total liquidity
+        uint256 lpShare = info.liquidityAmount;
+        
+        // If no total liquidity, no collateral required
+        if (totalLPLiquidity == 0) return 0;
         
         return (totalSupply * assetPrice * lpShare * MIN_COLLATERAL_RATIO) / 
-               (totalLiquidity * 100_00 * PRECISION);
+               (totalLPLiquidity * 100_00 * PRECISION);
     }
 
     /**
      * @notice Calculate current collateral ratio for an LP
      * @param lp Address of the LP
      */
-    function getCurrentRatio(address lp) public view returns (uint256) {
-        CollateralInfo storage info = lpCollateral[lp];
+    function getCurrentRatio(address lp) public view override returns (uint256) {
+        if (!registeredLPs[lp]) return 0;
+        
+        CollateralInfo storage info = lpInfo[lp];
         uint256 requiredCollateral = getRequiredCollateral(lp);
         
-        if (requiredCollateral == 0) return 0;
+        if (requiredCollateral == 0) return type(uint256).max; // Consider fully collateralized if no requirement
         return (info.collateralAmount * 100_00) / requiredCollateral;
     }
 
@@ -188,20 +322,55 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard {
      * @notice Check LP's collateral status
      * @param lp Address of the LP
      */
-    function checkCollateralStatus(address lp) public {
+    function checkCollateralStatus(address lp) public view override {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
         uint256 currentRatio = getCurrentRatio(lp);
         
         if (currentRatio < MIN_COLLATERAL_RATIO) {
-            uint256 requiredTopUp = getRequiredCollateral(lp) - lpCollateral[lp].collateralAmount;
-            emit CollateralWarning(lp, currentRatio, requiredTopUp);
             revert InsufficientCollateral();
         }
     }
     
     /**
-     * @notice Get LP's current collateral info
+     * @notice Get LP's current collateral and liquidity info
+     * @param lp Address of the LP
      */
-    function getCollateralInfo(address lp) external view returns (CollateralInfo memory) {
-        return lpCollateral[lp];
+    function getLPInfo(address lp) external view override returns (CollateralInfo memory) {
+        return lpInfo[lp];
+    }
+    
+    /**
+     * @notice Check if an address is a registered LP
+     * @param lp The address to check
+     * @return bool True if the address is a registered LP
+     */
+    function isLP(address lp) external view override returns (bool) {
+        return registeredLPs[lp];
+    }
+    
+    /**
+     * @notice Returns the number of LPs registered
+     * @return uint256 The number of registered LPs
+     */
+    function getLPCount() external view override returns (uint256) {
+        return lpCount;
+    }
+    
+    /**
+     * @notice Returns the current liquidity amount for an LP
+     * @param lp The address of the LP
+     * @return uint256 The current liquidity amount
+     */
+    function getLPLiquidity(address lp) external view override returns (uint256) {
+        return lpInfo[lp].liquidityAmount;
+    }
+    
+    /**
+     * @notice Returns the total liquidity amount
+     * @return uint256 The total liquidity amount
+     */
+    function getTotalLPLiquidity() external view override returns (uint256) {
+        return totalLPLiquidity;
     }
 }
