@@ -234,10 +234,10 @@ interface ILPLiquidityManager {
     function getCurrentRatio(address lp) external view returns (uint256);
 
     /**
-     * @notice Check LP's collateral status
+     * @notice Check LP's collateral health
      * @param lp Address of the LP
      */
-    function checkCollateralStatus(address lp) external view;
+    function checkCollateralHealth(address lp) external view returns (uint8);
     
     /**
      * @notice Get LP's current collateral and liquidity info

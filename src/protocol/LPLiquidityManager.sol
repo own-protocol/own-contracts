@@ -15,12 +15,11 @@ import "../interfaces/ILPLiquidityManager.sol";
 /**
  * @title LPLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
- * @dev Implementation contract designed to be used with Clones.clone
  */
 contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, Initializable {
     
-    // Expected minimum collateral ratio (50%)
-    uint256 public constant override MIN_COLLATERAL_RATIO = 50_00;
+    // Healthy collateral ratio (50%)
+    uint256 public constant override HEALTHY_COLLATERAL_RATIO = 50_00;
     // Collateral threshold for liquidation (30%)   
     uint256 public constant override COLLATERAL_THRESHOLD = 30_00; 
     // Registration percentage (20%) 
@@ -30,9 +29,6 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
     
     // Precision for calculations
     uint256 private constant PRECISION = 1e18;
-    
-    // Max price deviation allowed from oracle (3%)
-    uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     // Asset pool contract
     IAssetPool public override assetPool;
@@ -286,7 +282,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         // Check remaining ratio
         uint256 currentRatio = getCurrentRatio(lp);
-        if (currentRatio < MIN_COLLATERAL_RATIO) revert InsufficientCollateral();
+        if (currentRatio < HEALTHY_COLLATERAL_RATIO) revert InsufficientCollateral();
         
         emit RebalanceDeducted(lp, amount);
     }
@@ -324,7 +320,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         // If no total liquidity, no collateral required
         if (totalLPLiquidity == 0) return 0;
         
-        return (totalSupply * assetPrice * lpShare * MIN_COLLATERAL_RATIO) / 
+        return (totalSupply * assetPrice * lpShare * HEALTHY_COLLATERAL_RATIO) / 
                (totalLPLiquidity * 100_00 * PRECISION);
     }
 
@@ -343,16 +339,23 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
     }
 
     /**
-     * @notice Check LP's collateral status
-     * @param lp Address of the LP
-     */
-    function checkCollateralStatus(address lp) public view override {
+    * @notice Check LP's collateral health
+    * @param lp Address of the LP
+    * @return uint8 3 = Great (>= HEALTHY_COLLATERAL_RATIO), 
+    *               2 = Good (>= COLLATERAL_THRESHOLD but < HEALTHY_COLLATERAL_RATIO), 
+    *               1 = Bad (< COLLATERAL_THRESHOLD)
+    */
+    function checkCollateralHealth(address lp) public view override returns (uint8) {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         uint256 currentRatio = getCurrentRatio(lp);
         
-        if (currentRatio < MIN_COLLATERAL_RATIO) {
-            revert InsufficientCollateral();
+        if (currentRatio >= HEALTHY_COLLATERAL_RATIO) {
+            return 3; // Great: At or above healthy ratio
+        } else if (currentRatio >= COLLATERAL_THRESHOLD) {
+            return 2; // Good: At or above minimum threshold but below healthy ratio
+        } else {
+            return 1; // Bad: Below minimum threshold
         }
     }
     
