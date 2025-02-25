@@ -40,10 +40,10 @@ interface IAssetPoolFactory {
     /**
      * @return address The address of the LP liquidity manager contract.
      */
-    function lpLiquidtyManager() external view returns (address);
+    function lpLiquidityManager() external view returns (address);
 
     /**
-     * @return address The address of the asset pool implementation contract.
+     * @return address The address of the asset pool contract.
      */
     function assetPool() external view returns (address);
 

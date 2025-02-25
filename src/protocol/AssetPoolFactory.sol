@@ -17,19 +17,19 @@ import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     /// @notice Address to the LP liquidity manager contract.
-    address public immutable lpLiquidtyManager;
-    /// @notice Address of the asset pool implementation contract.
+    address public immutable lpLiquidityManager;
+    /// @notice Address of the asset pool contract.
     address public immutable assetPool;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
-     * @param _lpLiquidtyManager Address of the LP Registry contract.
+     * @param _lpLiquidityManager Address of the LP Registry contract.
      * Reverts if the address is zero.
      */
-    constructor(address _lpLiquidtyManager, address _assetPool) Ownable(msg.sender) {
-        if (lpLiquidtyManager == address(0)) revert ZeroAddress();
+    constructor(address _lpLiquidityManager, address _assetPool) Ownable(msg.sender) {
+        if (lpLiquidityManager == address(0)) revert ZeroAddress();
         if (assetPool == address(0)) revert ZeroAddress();
-        lpLiquidtyManager = lpLiquidtyManager;
+        lpLiquidityManager = _lpLiquidityManager;
         assetPool = _assetPool;
     }
 
@@ -69,7 +69,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
         // Clones a new LP liquidity manager contract instance.
-        address lpManager = Clones.clone(lpLiquidtyManager);
+        address lpManager = Clones.clone(lpLiquidityManager);
 
         AssetPool(pool).initialize(
             depositToken,
