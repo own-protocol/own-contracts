@@ -4,9 +4,9 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 
 import "../src/protocol/AssetPoolFactory.sol";
-import "../src/protocol/AssetPoolImplementation.sol";
+import "../src/protocol/AssetPool.sol";
+import "../src/protocol/LPLiquidityManager.sol";
 import "../src/protocol/xToken.sol";
-import "../src/protocol/LPRegistry.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -14,8 +14,8 @@ import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.s
 contract AssetPoolFactoryTest is Test {
     // Test contracts
     AssetPoolFactory public factory;
-    AssetPoolImplementation public implementation;
-    LPRegistry public lpRegistry;
+    AssetPool public pool;
+    LPLiquidityManager public lpLiquidityManager;
     MockAssetOracle assetOracle;
     IERC20Metadata public reserveToken;
 
@@ -34,10 +34,10 @@ contract AssetPoolFactoryTest is Test {
         reserveToken = IERC20Metadata(address(mockUSDC));
 
         // Deploy core contracts
-        lpRegistry = new LPRegistry();
         assetOracle = new MockAssetOracle();
-        implementation = new AssetPoolImplementation();
-        factory = new AssetPoolFactory(address(lpRegistry), address(implementation));
+        lpLiquidityManager = new LPLiquidityManager();
+        pool = new AssetPool();
+        factory = new AssetPoolFactory(address(lpLiquidityManager), address(pool));
 
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
@@ -49,8 +49,8 @@ contract AssetPoolFactoryTest is Test {
     // --------------------------------------------------------------------------------
 
     function testFactoryDeployment() public view {
-        assertEq(address(factory.lpRegistry()), address(lpRegistry));
-        assertEq(factory.assetPoolImplementation(), address(implementation));
+        assertEq(address(factory.lpLiquidityManager()), address(lpLiquidityManager));
+        assertEq(factory.assetPool(), address(pool));
     }
 
     function testCreatePool() public {
@@ -86,14 +86,6 @@ contract AssetPoolFactoryTest is Test {
         vm.stopPrank();
     }
 
-    function testUpdateLPRegistry() public {
-        address newRegistry = address(new LPRegistry());
-        
-        vm.prank(owner);
-        factory.updateLPRegistry(newRegistry);
-        
-        assertEq(address(factory.lpRegistry()), newRegistry);
-    }
 }
 
 // Mock ERC20 contract for testing
