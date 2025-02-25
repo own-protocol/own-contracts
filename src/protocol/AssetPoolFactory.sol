@@ -56,7 +56,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         address oracle,
         uint256 cycleLength,
         uint256 rebalanceLength
-    ) external onlyOwner returns (address) {
+    ) external returns (address) {
         if (
             depositToken == address(0) ||
             oracle == address(0) ||
