@@ -3,6 +3,10 @@
 
 pragma solidity ^0.8.20;
 
+import "../interfaces/IAssetPool.sol";
+import "../interfaces/IAssetOracle.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @title ILPLiquidityManager
  * @notice Interface for the combined LP registry and liquidity manager
@@ -123,7 +127,7 @@ interface ILPLiquidityManager {
     /**
      * @notice Minimum required collateral ratio (50%)
      */
-    function MIN_COLLATERAL_RATIO() external view returns (uint256);
+    function HEALTHY_COLLATERAL_RATIO() external view returns (uint256);
 
     /**
      * @notice Warning threshold for collateral ratio (30%)
@@ -143,17 +147,17 @@ interface ILPLiquidityManager {
     /**
      * @notice Asset pool contract
      */
-    function assetPool() external view returns (address);
+    function assetPool() external view returns (IAssetPool);
     
     /**
      * @notice Asset oracle
      */
-    function assetOracle() external view returns (address);
+    function assetOracle() external view returns (IAssetOracle);
     
     /**
      * @notice Reserve token (USDC, USDT etc)
      */
-    function reserveToken() external view returns (address);
+    function reserveToken() external view returns (IERC20);
     
     /**
      * @notice Total liquidity in the pool

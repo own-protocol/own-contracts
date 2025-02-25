@@ -19,42 +19,37 @@ import "../interfaces/ILPLiquidityManager.sol";
 contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, Initializable {
     
     // Healthy collateral ratio (50%)
-    uint256 public constant override HEALTHY_COLLATERAL_RATIO = 50_00;
+    uint256 public constant HEALTHY_COLLATERAL_RATIO = 50_00;
     // Collateral threshold for liquidation (30%)   
-    uint256 public constant override COLLATERAL_THRESHOLD = 30_00; 
+    uint256 public constant COLLATERAL_THRESHOLD = 30_00; 
     // Registration percentage (20%) 
-    uint256 public constant override REGISTRATION_COLLATERAL_RATIO = 20_00;
+    uint256 public constant REGISTRATION_COLLATERAL_RATIO = 20_00;
     // Liquidation reward percentage (5%)
-    uint256 public constant override LIQUIDATION_REWARD_PERCENTAGE = 5_00;
+    uint256 public constant LIQUIDATION_REWARD_PERCENTAGE = 5_00;
     
     // Precision for calculations
     uint256 private constant PRECISION = 1e18;
 
     // Asset pool contract
-    IAssetPool public override assetPool;
+    IAssetPool public assetPool;
     
     // Asset oracle
-    IAssetOracle public override assetOracle;
+    IAssetOracle public assetOracle;
     
     // Reserve token (USDC, USDT etc)
-    IERC20 public override reserveToken;
+    IERC20 public reserveToken;
 
     // Total liquidity in the pool
-    uint256 public override totalLPLiquidity;
+    uint256 public totalLPLiquidity;
     
     // Number of registered LPs
-    uint256 public override lpCount;
+    uint256 public lpCount;
 
     // Mapping of LP addresses to their collateral info
     mapping(address => CollateralInfo) private lpInfo;
     
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
-
-    /**
-     * @notice Error when contract is already initialized
-     */
-    error AlreadyInitialized();
 
     /**
      * @notice Modifier to ensure the caller is a registered LP
