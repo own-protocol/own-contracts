@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/protocol/LPRegistry.sol";
+import "../src/protocol/LPLiquidityManager.sol";
 
-contract LPRegistryDeployScript is Script {
+contract LPLiquidityManagerDeployScript is Script {
     function setUp() public {}
 
     function run() public {
@@ -14,8 +14,8 @@ contract LPRegistryDeployScript is Script {
         // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
 
-        LPRegistry lpRegistry = new LPRegistry();
-        console.log("LPRegistry deployed at:", address(lpRegistry));
+        LPLiquidityManager lpManager = new LPLiquidityManager();
+        console.log("LPLiquidityManager deployed at:", address(lpManager));
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
@@ -23,7 +23,7 @@ contract LPRegistryDeployScript is Script {
         // Log deployment addresses to console
         console.log("Deployment completed!");
         console.log("----------------------------------------------------");
-        console.log("LPRegistry:", address(lpRegistry));
+        console.log("LPLiquidityManager:", address(lpManager));
         console.log("----------------------------------------------------");
     }
 }
