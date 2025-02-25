@@ -17,9 +17,9 @@ import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     /// @notice Address to the LP liquidity manager contract.
-    address public immutable lpLiquidityManager;
+    address public lpLiquidityManager;
     /// @notice Address of the asset pool contract.
-    address public immutable assetPool;
+    address public assetPool;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
@@ -27,8 +27,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * Reverts if the address is zero.
      */
     constructor(address _lpLiquidityManager, address _assetPool) Ownable(msg.sender) {
-        if (lpLiquidityManager == address(0)) revert ZeroAddress();
-        if (assetPool == address(0)) revert ZeroAddress();
+        if (_lpLiquidityManager == address(0)) revert ZeroAddress();
+        if (_assetPool == address(0)) revert ZeroAddress();
         lpLiquidityManager = _lpLiquidityManager;
         assetPool = _assetPool;
     }
