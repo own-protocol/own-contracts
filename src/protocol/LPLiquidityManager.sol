@@ -124,10 +124,11 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
     }
 
     /**
-     * @notice Remove LP from registry (can only be called by owner)
+     * @notice Remove LP from registry
      * @param lp The address of the LP to remove
      */
-    function removeLP(address lp) external onlyOwner {
+    function removeLP(address lp) external {
+        if (msg.sender != lp) revert Unauthorized();
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         CollateralInfo storage info = lpInfo[lp];
@@ -236,27 +237,57 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
     }
 
     /**
-     * @notice Liquidate an LP below threshold
-     * @param lp Address of the LP to liquidate
-     */
+    * @notice Liquidate an LP below threshold - Gas optimized version
+    * @param lp Address of the LP to liquidate
+    */
     function liquidateLP(address lp) external nonReentrant onlyRegisteredLP {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
-        CollateralInfo storage info = lpInfo[lp];
+        if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
         
-        // Check if LP is below threshold
-        uint256 currentRatio = getCurrentRatio(lp);
-        if (currentRatio >= COLLATERAL_THRESHOLD) revert NotEligibleForLiquidation();
-
-        // Calculate liquidation amounts
-        uint256 lpLiquidity = info.liquidityAmount;
-        uint256 liquidationReward = Math.mulDiv(lpLiquidity, LIQUIDATION_REWARD_PERCENTAGE, 100_00);
+        CollateralInfo memory targetInfo = lpInfo[lp];
+        uint256 lpLiquidity = targetInfo.liquidityAmount;
+        uint256 lpCollateral = targetInfo.collateralAmount;
         
-        // Transfer reward
-        if (liquidationReward > info.collateralAmount) {
-            liquidationReward = info.collateralAmount;
+        if (lpLiquidity == 0) revert NoLiquidityToLiquidate();
+        
+        uint256 lpAssetHolding = getLPAssetHolding(lp);
+        
+        // Check liquidation eligibility
+        if (lpCollateral * 100_00 >= lpAssetHolding * COLLATERAL_THRESHOLD) {
+            revert NotEligibleForLiquidation();
         }
-        info.collateralAmount -= liquidationReward;
-        reserveToken.transfer(msg.sender, liquidationReward);
+        
+        // Calculate liquidation reward
+        uint256 liquidationReward = lpCollateral * LIQUIDATION_REWARD_PERCENTAGE / 100_00;
+        
+        // Calculate remaining collateral
+        uint256 remainingCollateral = lpCollateral - liquidationReward;
+        
+        // Calculate liquidator's new position requirements
+        CollateralInfo memory callerInfo = lpInfo[msg.sender];
+        uint256 callerAssetHolding = getLPAssetHolding(msg.sender);
+        
+        // Add target LP's asset holding to caller's
+        uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
+        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00;
+        
+        // Check if additional collateral is needed
+        uint256 additionalCollateralNeeded = 0;
+        if (newRequiredCollateral > callerInfo.collateralAmount) {
+            additionalCollateralNeeded = newRequiredCollateral - callerInfo.collateralAmount;
+            
+            // Transfer additional collateral in one go if needed
+            reserveToken.transferFrom(msg.sender, address(this), additionalCollateralNeeded);
+        }
+        
+        lpInfo[msg.sender].liquidityAmount = callerInfo.liquidityAmount + lpLiquidity;
+        lpInfo[msg.sender].collateralAmount = callerInfo.collateralAmount + additionalCollateralNeeded + liquidationReward;
+        
+        // Reset liquidated LP's position
+        delete lpInfo[lp];
+        
+        if (remainingCollateral > 0) {
+            reserveToken.transfer(lp, remainingCollateral);
+        }
         
         emit LPLiquidated(lp, msg.sender, liquidationReward);
     }

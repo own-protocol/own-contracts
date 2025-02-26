@@ -113,6 +113,16 @@ interface ILPLiquidityManager {
      * @notice Error when LP is already registered
      */
     error AlreadyRegistered();
+
+    /**
+     * @notice Error when liquidation is invalid
+     */
+    error InvalidLiquidation();
+
+    /**
+     * @notice Error when LP has no liquidity to liquidate
+     */
+    error NoLiquidityToLiquidate();
     
     /**
      * @notice Error when trying to decrease liquidity more than available
