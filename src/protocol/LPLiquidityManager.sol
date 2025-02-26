@@ -252,7 +252,8 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         uint256 lpAssetHolding = getLPAssetHolding(lp);
         
         // Check liquidation eligibility
-        if (lpCollateral * 100_00 >= lpAssetHolding * COLLATERAL_THRESHOLD) {
+         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
+        if (lpCollateral * 100_00 * assetPool.reserveToAssetDecimalFactor() >= lpAssetHolding * COLLATERAL_THRESHOLD) {
             revert NotEligibleForLiquidation();
         }
         
@@ -268,7 +269,8 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         // Add target LP's asset holding to caller's
         uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
-        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00;
+         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
+        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00 * assetPool.reserveToAssetDecimalFactor();
         
         // Check if additional collateral is needed
         uint256 additionalCollateralNeeded = 0;
@@ -366,7 +368,8 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
 
         if (lpAssetHolding == 0) return 0;
         
-        return Math.mulDiv(lpAssetHolding, COLLATERAL_THRESHOLD, 100_00);
+        // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
+        return Math.mulDiv(lpAssetHolding, COLLATERAL_THRESHOLD, 100_00 * assetPool.reserveToAssetDecimalFactor());
     }
 
     /**
@@ -379,9 +382,11 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         CollateralInfo storage info = lpInfo[lp];
         uint256 lpAssetHolding = getLPAssetHolding(lp);
 
+        if (lpAssetHolding == 0 && info.collateralAmount > 0) return HEALTHY_COLLATERAL_RATIO;
         if (lpAssetHolding == 0) return 0;
         
-        return Math.mulDiv(info.collateralAmount, 100_00, lpAssetHolding);
+         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
+        return Math.mulDiv(info.collateralAmount, 100_00 * assetPool.reserveToAssetDecimalFactor(), lpAssetHolding);
     }
 
     /**
