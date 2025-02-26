@@ -232,6 +232,12 @@ interface ILPLiquidityManager {
     function getRequiredCollateral(address lp) external view returns (uint256);
 
     /**
+     * @notice Get LP asset holdings
+     * @param lp Address of the LP
+     */
+    function getLPAssetHolding(address lp) external view returns (uint256);
+
+    /**
      * @notice Calculate current collateral ratio for an LP
      * @param lp Address of the LP
      */
