@@ -309,7 +309,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         // Check remaining ratio
         uint256 currentRatio = getCurrentRatio(lp);
-        if (currentRatio < HEALTHY_COLLATERAL_RATIO) revert InsufficientCollateral();
+        if (currentRatio < COLLATERAL_THRESHOLD) revert InsufficientCollateral();
         
         emit RebalanceDeducted(lp, amount);
     }
