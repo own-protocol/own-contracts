@@ -366,6 +366,8 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         uint256 lpAssetHolding = getLPAssetHolding(lp);
 
+        //ToDo: Need to consider expectedNewAssetMints when calculating required collateral
+
         if (lpAssetHolding == 0) return 0;
         
         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
