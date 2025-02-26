@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/protocol/AssetPoolImplementation.sol";
+import "../src/protocol/AssetPool.sol";
 
-contract AssetPoolImplementationDeployScript is Script {
+contract AssetPoolDeployScript is Script {
     function setUp() public {}
 
     function run() public {
@@ -14,8 +14,8 @@ contract AssetPoolImplementationDeployScript is Script {
         // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
 
-        AssetPoolImplementation assetPoolImplementation = new AssetPoolImplementation();
-        console.log("AssetPoolImplementation deployed at:", address(assetPoolImplementation));
+        AssetPool assetPool = new AssetPool();
+        console.log("AssetPool deployed at:", address(assetPool));
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
@@ -23,7 +23,7 @@ contract AssetPoolImplementationDeployScript is Script {
         // Log deployment addresses to console
         console.log("Deployment completed!");
         console.log("----------------------------------------------------");
-        console.log("AssetPoolImplementation:", address(assetPoolImplementation));
+        console.log("AssetPool:", address(assetPool));
         console.log("----------------------------------------------------");
     }
 }

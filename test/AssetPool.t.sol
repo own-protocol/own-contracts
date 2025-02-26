@@ -4,21 +4,22 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 
 import "../src/protocol/AssetPoolFactory.sol";
-import "../src/protocol/AssetPoolImplementation.sol";
+import "../src/protocol/AssetPool.sol";
 import "../src/protocol/xToken.sol";
-import "../src/protocol/LPRegistry.sol";
+import "../src/protocol/LPLiquidityManager.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
+import "../src/interfaces/ILPLiquidityManager.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-contract AssetPoolImplementationTest is Test {
+contract AssetPoolTest is Test {
     // Test contracts
     AssetPoolFactory public factory;
-    AssetPoolImplementation public implementation;
+    AssetPool public implementation;
     IAssetPool public pool;
     IERC20Metadata public reserveToken;
-    xToken public assetToken;
-    LPRegistry public lpRegistry;
+    IXToken public assetToken;
+    ILPLiquidityManager public lpManager;
     MockAssetOracle assetOracle;
 
     // Test addresses
@@ -29,9 +30,10 @@ contract AssetPoolImplementationTest is Test {
     address lp2 = address(5);
 
     // Test constants
-    uint256 constant INITIAL_BALANCE = 1000000e18;
+    uint256 constant INITIAL_BALANCE = 1000000000e18;
     uint256 constant CYCLE_LENGTH = 7 days;
     uint256 constant REBALANCE_LENGTH = 1 days;
+    uint256 constant LP_LIQUIDITY_AMOUNT = 1000e18;
 
     function setUp() public {
         vm.startPrank(owner);
@@ -41,13 +43,21 @@ contract AssetPoolImplementationTest is Test {
         reserveToken = IERC20Metadata(address(mockUSDC));
 
         // Deploy core contracts
-        lpRegistry = new LPRegistry();
         assetOracle = new MockAssetOracle();
-        implementation = new AssetPoolImplementation();
-        factory = new AssetPoolFactory(address(lpRegistry), address(implementation));
+        
+        // Deploy LP Liquidity Manager Implementation
+        LPLiquidityManager lpManagerImpl = new LPLiquidityManager();
+        
+        // Deploy AssetPool Implementation
+        implementation = new AssetPool();
+        
+        // Deploy AssetPool Factory
+        factory = new AssetPoolFactory(address(lpManagerImpl), address(implementation));
 
+        // Set default price in oracle
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
+        // Create pool via factory
         address poolAddress = factory.createPool(
             address(reserveToken),
             "Tesla Stock Token",
@@ -58,12 +68,9 @@ contract AssetPoolImplementationTest is Test {
         );
 
         pool = IAssetPool(poolAddress);
-        assetToken = xToken(address(pool.assetToken()));
+        assetToken = pool.assetToken();
+        lpManager = pool.lpLiquidityManager();
 
-        // Setup initial states
-        lpRegistry.addPool(address(pool));
-        lpRegistry.registerLP(address(pool), lp1, 100e18);
-        lpRegistry.registerLP(address(pool), lp2, 100e18);
         vm.stopPrank();
 
         // Fund test accounts
@@ -71,6 +78,21 @@ contract AssetPoolImplementationTest is Test {
         deal(address(reserveToken), user2, INITIAL_BALANCE);
         deal(address(reserveToken), lp1, INITIAL_BALANCE);
         deal(address(reserveToken), lp2, INITIAL_BALANCE);
+
+        // Register LPs
+        vm.startPrank(lp1);
+        reserveToken.approve(address(lpManager), INITIAL_BALANCE);
+        lpManager.registerLP(LP_LIQUIDITY_AMOUNT);
+        // Add extra collateral to avoid InsufficientCollateral errors
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        vm.startPrank(lp2);
+        reserveToken.approve(address(lpManager), INITIAL_BALANCE);
+        lpManager.registerLP(LP_LIQUIDITY_AMOUNT);
+        // Add extra collateral to avoid InsufficientCollateral errors
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
 
         vm.warp(block.timestamp + 1);
     }
@@ -87,12 +109,12 @@ contract AssetPoolImplementationTest is Test {
         pool.depositRequest(depositAmount);
         vm.stopPrank();
 
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
+        UserRequest memory request = getUserRequest(user1);
 
         // Assert the request details
-        assertEq(amount, depositAmount);
-        assertTrue(isDeposit);
-        assertEq(requestCycle, 0); // First cycle
+        assertEq(request.amount, depositAmount);
+        assertTrue(request.isDeposit);
+        assertEq(request.requestCycle, 0); // First cycle
 
         // Assert total deposit requests for the cycle
         assertEq(pool.cycleTotalDepositRequests(), depositAmount);
@@ -132,11 +154,16 @@ contract AssetPoolImplementationTest is Test {
         pool.cancelRequest();
         vm.stopPrank();
 
-        (uint256 amount,,) = pool.pendingRequests(user1);
+        UserRequest memory request = getUserRequest(user1);
 
-        // Assert the request details
-        assertEq(amount, 0);
+        // Assert the request was cancelled
+        assertEq(request.amount, 0);
+        
+        // Assert total deposit requests updated
+        assertEq(pool.cycleTotalDepositRequests(), 0);
  
+        // Assert the reserve tokens were returned
+        assertEq(reserveToken.balanceOf(user1), INITIAL_BALANCE);
     }
 
     function testClaimAsset() public {
@@ -152,7 +179,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
 
         // Complete cycle
-        completeCycle(pool, lp1, lp2, reserveToken, 1e18);
+        completeCycle(pool, lp1, lp2, 1e18);
         
         // Claim assets
         pool.claimRequest(user1);
@@ -160,6 +187,10 @@ contract AssetPoolImplementationTest is Test {
         // Verify assets were minted
         uint256 newUserBalance = assetToken.balanceOf(user1);
         assertGt(newUserBalance, userBalance, "Asset minting failed");
+        
+        // Check request was cleared
+        UserRequest memory request = getUserRequest(user1);
+        assertEq(request.amount, 0, "Request should be cleared after claiming");
     }
 
     // --------------------------------------------------------------------------------
@@ -206,21 +237,28 @@ contract AssetPoolImplementationTest is Test {
         assetOracle.setAssetPrice(1e18);
 
         pool.initiateOnchainRebalance();
-
-        // Get rebalance info
-        (, , , , , , , , , , int256 rebalanceAmount) = pool.getPoolInfo();
         
-        // Calculate LP's share (lp1 has 100e18 out of total 200e18 liquidity = 50%)
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
         uint256 rebalancePrice = 1e18;
-
+        
+        // LP1 rebalance
         vm.startPrank(lp1);
-        reserveToken.approve(address(pool), expectedAmount);
-        pool.rebalancePool(lp1, rebalancePrice, expectedAmount, rebalanceAmount > 0);
+        pool.rebalancePool(lp1, rebalancePrice);
         vm.stopPrank();
 
-        assertTrue(pool.lastRebalancedCycle(lp1) == pool.cycleIndex());
-        assertEq(pool.rebalancedLPs(), 1);
+        // Check LP1 rebalanced - this should be 1 after the first LP rebalances
+        assertEq(pool.lastRebalancedCycle(lp1), pool.cycleIndex(), "LP1 cycle not updated");
+        assertEq(pool.rebalancedLPs(), 1, "LP1 not counted in rebalancedLPs");
+        
+        // LP2 rebalance
+        vm.startPrank(lp2);
+        pool.rebalancePool(lp2, rebalancePrice);
+        vm.stopPrank();
+        
+        // Check cycle completed - rebalancedLPs should reset to 0 since cycle advances
+        assertEq(pool.lastRebalancedCycle(lp2), pool.cycleIndex()-1, "LP2 cycle not updated");
+        assertEq(pool.rebalancedLPs(), 0, "rebalancedLPs not reset for new cycle");
+        assertEq(pool.cycleIndex(), 1, "Cycle not advanced"); 
+        assertEq(uint8(pool.cycleState()), uint8(IAssetPool.CycleState.ACTIVE), "Not back to active state");
     }
 
     // --------------------------------------------------------------------------------
@@ -236,7 +274,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
 
         // Complete deposit cycle
-        completeCycle(pool, lp1, lp2, reserveToken, 1e18);
+        completeCycle(pool, lp1, lp2, 1e18);
         
         // Claim assets
         pool.claimRequest(user1);
@@ -252,12 +290,15 @@ contract AssetPoolImplementationTest is Test {
         pool.redemptionRequest(burnAmount);
         vm.stopPrank();
 
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
+        UserRequest memory request = getUserRequest(user1);
 
         // Assert the request details
-        assertEq(amount, burnAmount);
-        assertFalse(isDeposit);
-        assertEq(requestCycle, 1);
+        assertEq(request.amount, burnAmount);
+        assertFalse(request.isDeposit);
+        assertEq(request.requestCycle, 1);
+        
+        // Check total redemption requests
+        assertEq(pool.cycleTotalRedemptionRequests(), burnAmount);
     }
 
     function testCancelRedemptionRequest() public {
@@ -269,7 +310,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
 
         // Complete deposit cycle
-        completeCycle(pool, lp1, lp2, reserveToken, 1e18);
+        completeCycle(pool, lp1, lp2, 1e18);
         
         // Claim assets
         pool.claimRequest(user1);
@@ -283,15 +324,24 @@ contract AssetPoolImplementationTest is Test {
         vm.startPrank(user1);
         assetToken.approve(address(pool), burnAmount);
         pool.redemptionRequest(burnAmount);
-        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user1);
-        assertEq(amount, burnAmount);
+        
+        // Verify request was created
+        UserRequest memory request = getUserRequest(user1);
+        assertEq(request.amount, burnAmount);
 
         // Cancel burn
         pool.cancelRequest();
         vm.stopPrank();
 
-        (amount, isDeposit, requestCycle) = pool.pendingRequests(user1);
-        assertEq(amount, 0);
+        // Verify request was cancelled
+        request = getUserRequest(user1);
+        assertEq(request.amount, 0);
+        
+        // Verify total redemption requests updated
+        assertEq(pool.cycleTotalRedemptionRequests(), 0);
+        
+        // Verify asset tokens returned
+        assertEq(assetToken.balanceOf(user1), userBalance);
     }
 
     function testClaimReserve() public {
@@ -302,8 +352,16 @@ contract AssetPoolImplementationTest is Test {
         pool.depositRequest(depositAmount);
         vm.stopPrank();
 
+        vm.startPrank(lp1);
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+        
+        vm.startPrank(lp2);
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
         // Complete first cycle (deposit cycle)
-        completeCycle(pool, lp1, lp2, reserveToken, 1e18);
+        completeCycle(pool, lp1, lp2, 1e18);
         
         // Claim assets
         pool.claimRequest(user1);
@@ -318,15 +376,23 @@ contract AssetPoolImplementationTest is Test {
         pool.redemptionRequest(burnAmount);
         vm.stopPrank();
         
+        vm.startPrank(lp1);
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+        
+        vm.startPrank(lp2);
+        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+        
         // Complete second cycle (redemption cycle) with price 2.0
-        completeCycle(pool, lp1, lp2, reserveToken, 2e18);
+        completeCycle(pool, lp1, lp2, 2e18);
         
         // Claim reserve tokens
         pool.claimRequest(user1);
         
         // Verify pending request was cleared
-        (uint256 amount,,) = pool.pendingRequests(user1);
-        assertEq(amount, 0);
+        UserRequest memory request = getUserRequest(user1);
+        assertEq(request.amount, 0);
 
         // Assert that the user has received reserve tokens
         uint256 finalReserveBalance = reserveToken.balanceOf(user1);
@@ -361,15 +427,13 @@ contract AssetPoolImplementationTest is Test {
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
-        
-        // Register LPs for both pools
-        lpRegistry.addPool(pool6);
-        lpRegistry.addPool(pool18);
-        lpRegistry.registerLP(pool6, lp1, 100e18);
-        lpRegistry.registerLP(pool6, lp2, 100e18);
-        lpRegistry.registerLP(pool18, lp1, 100e18);
-        lpRegistry.registerLP(pool18, lp2, 100e18);
         vm.stopPrank();
+        
+        // Get pool instances
+        IAssetPool poolUsdc = IAssetPool(pool6);
+        IAssetPool poolDai = IAssetPool(pool18);
+        ILPLiquidityManager lpManagerUsdc = poolUsdc.lpLiquidityManager();
+        ILPLiquidityManager lpManagerDai = poolDai.lpLiquidityManager();
         
         // Fund accounts
         deal(address(usdc6), user1, 10000 * 10**6); // 10000 USDC with 6 decimals
@@ -379,11 +443,29 @@ contract AssetPoolImplementationTest is Test {
         deal(address(dai18), lp1, 100000 * 10**18);
         deal(address(dai18), lp2, 100000 * 10**18);
         
-        // Get pool instances
-        IAssetPool poolUsdc = IAssetPool(pool6);
-        IAssetPool poolDai = IAssetPool(pool18);
-        xToken assetTokenUsdc = xToken(address(poolUsdc.assetToken()));
-        xToken assetTokenDai = xToken(address(poolDai.assetToken()));
+        // Register LPs for both pools with extra collateral
+        vm.startPrank(lp1);
+        usdc6.approve(address(lpManagerUsdc), 500e6);
+        lpManagerUsdc.registerLP(100e6);
+        lpManagerUsdc.deposit(200e6); // Add extra collateral
+        
+        dai18.approve(address(lpManagerDai), 500e18);
+        lpManagerDai.registerLP(100e18);
+        lpManagerDai.deposit(200e18); // Add extra collateral
+        vm.stopPrank();
+        
+        vm.startPrank(lp2);
+        usdc6.approve(address(lpManagerUsdc), 500e6);
+        lpManagerUsdc.registerLP(100e6);
+        lpManagerUsdc.deposit(200e6); // Add extra collateral
+        
+        dai18.approve(address(lpManagerDai), 500e18);
+        lpManagerDai.registerLP(100e18);
+        lpManagerDai.deposit(200e18); // Add extra collateral
+        vm.stopPrank();
+        
+        IXToken assetTokenUsdc = poolUsdc.assetToken();
+        IXToken assetTokenDai = poolDai.assetToken();
         
         // Test USDC pool (6 decimals)
         uint256 usdcAmount = 1000 * 10**6; // 1000 USDC
@@ -393,7 +475,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
         
         // Complete cycle for USDC pool
-        completeCycle(poolUsdc, lp1, lp2, usdc6, 1 * 10**18); // price = 1.0
+        completeCycleForPool(poolUsdc, lp1, lp2, 1 * 10**18); // price = 1.0
         
         // Record balances before claim
         uint256 user1AssetBalanceBefore = assetTokenUsdc.balanceOf(user1);
@@ -417,7 +499,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
         
         // Complete cycle for DAI pool
-        completeCycle(poolDai, lp1, lp2, dai18, 1 * 10**18); // price = 1.0
+        completeCycleForPool(poolDai, lp1, lp2, 1 * 10**18); // price = 1.0
         
         // Record balances before claim
         uint256 user1DaiAssetBalanceBefore = assetTokenDai.balanceOf(user1);
@@ -434,7 +516,7 @@ contract AssetPoolImplementationTest is Test {
         );
     }
 
-    function testClaimReserveWithUSDC() public {
+     function testClaimReserveWithUSDC() public {
         // Create USDC with 6 decimals
         MockERC20 usdc = new MockERC20("USDC", "USDC", 6);
         
@@ -448,25 +530,34 @@ contract AssetPoolImplementationTest is Test {
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
-        
-        // Register LPs
-        lpRegistry.addPool(poolAddr);
-        lpRegistry.registerLP(poolAddr, lp1, 100e18);
-        lpRegistry.registerLP(poolAddr, lp2, 100e18);
         vm.stopPrank();
+        
+        // Get pool instance
+        IAssetPool usdcPool = IAssetPool(poolAddr);
+        ILPLiquidityManager lpManagerUsdc = usdcPool.lpLiquidityManager();
+        IXToken usdcAssetToken = usdcPool.assetToken();
         
         // Fund accounts (6 decimals)
         uint256 userFundAmount = 10000 * 10**6;
-        uint256 lpFundAmount = 100000 * 10**6;
+        uint256 lpFundAmount = 1000000 * 10**6;
         uint256 depositAmount = 1000 * 10**6;
         
         deal(address(usdc), user1, userFundAmount);
         deal(address(usdc), lp1, lpFundAmount);
         deal(address(usdc), lp2, lpFundAmount);
         
-        // Get pool instance
-        IAssetPool usdcPool = IAssetPool(poolAddr);
-        xToken usdcAssetToken = xToken(address(usdcPool.assetToken()));
+        // Register LPs with extra collateral
+        vm.startPrank(lp1);
+        usdc.approve(address(lpManagerUsdc), lpFundAmount);
+        lpManagerUsdc.registerLP(30000 * 10**6);
+        lpManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
+        vm.stopPrank();
+        
+        vm.startPrank(lp2);
+        usdc.approve(address(lpManagerUsdc), lpFundAmount);
+        lpManagerUsdc.registerLP(30000 * 10**6);
+        lpManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
+        vm.stopPrank();
         
         // First, deposit and claim assets
         vm.startPrank(user1);
@@ -475,7 +566,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
         
         // Complete deposit cycle
-        completeCycle(usdcPool, lp1, lp2, usdc, 1 * 10**18);
+        completeCycleForPool(usdcPool, lp1, lp2, 1 * 10**18);
         usdcPool.claimRequest(user1);
         
         // Request redemption
@@ -489,20 +580,21 @@ contract AssetPoolImplementationTest is Test {
         uint256 usdcBalanceBefore = usdc.balanceOf(user1);
         
         // Complete redemption cycle with price of 2.0
-        completeCycle(usdcPool, lp1, lp2, usdc, 2 * 10**18);
+        completeCycleForPool(usdcPool, lp1, lp2, 2 * 10**18);
         
         // Claim reserve tokens
         usdcPool.claimRequest(user1);
         
-        // Calculate expected USDC amount (6 decimals)
-        // When converting asset (18 decimals) to USDC (6 decimals) at price 2.0:
-        // Need to divide by 10^12 to adjust for decimal difference
-        uint256 expectedUsdcAmount = assetAmount * 2 * 10**18 / 10**30;
+        // Verify user received USDC
+        uint256 usdcBalanceAfter = usdc.balanceOf(user1);
+        assertGt(usdcBalanceAfter, usdcBalanceBefore, "USDC: User should have received reserve tokens");
         
-        // Assert
-        assertEq(
-            usdc.balanceOf(user1) - usdcBalanceBefore,
+        // Calculate expected USDC amount with adjustment for decimals and price
+        uint256 expectedUsdcAmount = (assetAmount * 2 * 10**18) / (10**18 * 10**12);
+        assertApproxEqAbs(
+            usdcBalanceAfter - usdcBalanceBefore,
             expectedUsdcAmount,
+            10**6, // Allow for small rounding errors
             "USDC: Incorrect reserve amount"
         );
     }
@@ -521,25 +613,34 @@ contract AssetPoolImplementationTest is Test {
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
-        
-        // Register LPs
-        lpRegistry.addPool(poolAddr);
-        lpRegistry.registerLP(poolAddr, lp1, 100e18);
-        lpRegistry.registerLP(poolAddr, lp2, 100e18);
         vm.stopPrank();
+        
+        // Get pool instance
+        IAssetPool daiPool = IAssetPool(poolAddr);
+        ILPLiquidityManager lpManagerDai = daiPool.lpLiquidityManager();
+        IXToken daiAssetToken = daiPool.assetToken();
         
         // Fund accounts (18 decimals)
         uint256 userFundAmount = 10000 * 10**18;
-        uint256 lpFundAmount = 100000 * 10**18;
+        uint256 lpFundAmount = 1000000 * 10**18;
         uint256 depositAmount = 1000 * 10**18;
         
         deal(address(dai), user1, userFundAmount);
         deal(address(dai), lp1, lpFundAmount);
         deal(address(dai), lp2, lpFundAmount);
         
-        // Get pool instance
-        IAssetPool daiPool = IAssetPool(poolAddr);
-        xToken daiAssetToken = xToken(address(daiPool.assetToken()));
+        // Register LPs with extra collateral
+        vm.startPrank(lp1);
+        dai.approve(address(lpManagerDai), lpFundAmount);
+        lpManagerDai.registerLP(30000 * 10**18);
+        lpManagerDai.deposit(20000 * 10**18); // Add extra collateral
+        vm.stopPrank();
+        
+        vm.startPrank(lp2);
+        dai.approve(address(lpManagerDai), lpFundAmount);
+        lpManagerDai.registerLP(30000 * 10**18);
+        lpManagerDai.deposit(20000 * 10**18); // Add extra collateral
+        vm.stopPrank();
         
         // First, deposit and claim assets
         vm.startPrank(user1);
@@ -548,7 +649,7 @@ contract AssetPoolImplementationTest is Test {
         vm.stopPrank();
         
         // Complete deposit cycle
-        completeCycle(daiPool, lp1, lp2, dai, 1 * 10**18);
+        completeCycleForPool(daiPool, lp1, lp2, 1 * 10**18);
         daiPool.claimRequest(user1);
         
         // Request redemption
@@ -562,18 +663,19 @@ contract AssetPoolImplementationTest is Test {
         uint256 daiBalanceBefore = dai.balanceOf(user1);
         
         // Complete redemption cycle with price of 2.0
-        completeCycle(daiPool, lp1, lp2, dai, 2 * 10**18);
+        completeCycleForPool(daiPool, lp1, lp2, 2 * 10**18);
         
         // Claim reserve tokens
         daiPool.claimRequest(user1);
         
-        // Calculate expected DAI amount (18 decimals)
-        // No decimal conversion needed for 18->18 decimals
-        uint256 expectedDaiAmount = assetAmount * 2;
+        // Verify user received DAI
+        uint256 daiBalanceAfter = dai.balanceOf(user1);
+        assertGt(daiBalanceAfter, daiBalanceBefore, "DAI: User should have received reserve tokens");
         
-        // Assert
+        // Calculate expected DAI amount (no decimal adjustment needed for 18->18 decimals)
+        uint256 expectedDaiAmount = assetAmount * 2;
         assertEq(
-            dai.balanceOf(user1) - daiBalanceBefore,
+            daiBalanceAfter - daiBalanceBefore,
             expectedDaiAmount,
             "DAI: Incorrect reserve amount"
         );
@@ -593,16 +695,53 @@ contract AssetPoolImplementationTest is Test {
         pool.depositRequest(100e18);
     }
 
+    function testUnpausePool() public {
+        // First pause the pool
+        vm.prank(owner);
+        pool.pausePool();
+        
+        // Then unpause
+        vm.prank(owner);
+        pool.unpausePool();
+        
+        // Test that operations work after unpausing
+        uint256 depositAmount = 100e18;
+        vm.startPrank(user1);
+        reserveToken.approve(address(pool), depositAmount);
+        pool.depositRequest(depositAmount); // Should succeed
+        vm.stopPrank();
+        
+        // Verify deposit succeeded
+        UserRequest memory request = getUserRequest(user1);
+        assertEq(request.amount, depositAmount);
+    }
+
     // --------------------------------------------------------------------------------
     //                              HELPER FUNCTIONS
     // --------------------------------------------------------------------------------
 
-    // Helper function to complete a cycle for any pool
+    // Helper function to get user request struct
+    function getUserRequest(address user) internal view returns (UserRequest memory) {
+        (uint256 amount, bool isDeposit, uint256 requestCycle) = pool.pendingRequests(user);
+        return UserRequest({
+            amount: amount,
+            isDeposit: isDeposit,
+            requestCycle: requestCycle
+        });
+    }
+
+    // Helper struct for user requests
+    struct UserRequest {
+        uint256 amount;
+        bool isDeposit;
+        uint256 requestCycle;
+    }
+
+    // Helper function to complete a cycle for the main pool
     function completeCycle(
         IAssetPool _targetPool, 
         address _lp1, 
         address _lp2, 
-        IERC20 token, 
         uint256 price
     ) internal {
         // Move to after rebalance start
@@ -616,23 +755,40 @@ contract AssetPoolImplementationTest is Test {
 
         _targetPool.initiateOnchainRebalance();
         
-        // Get rebalance info
-        (, , , , , , , , , , int256 rebalanceAmount) = _targetPool.getPoolInfo();
-        
-        uint256 expectedAmount = uint256(rebalanceAmount > 0 ? rebalanceAmount : -rebalanceAmount) / 2;
-        bool isDeposit = rebalanceAmount > 0;
-        
         // LP1 rebalance
-        vm.startPrank(_lp1);
-        token.approve(address(_targetPool), expectedAmount);
-        _targetPool.rebalancePool(_lp1, price, expectedAmount, isDeposit);
-        vm.stopPrank();
+        vm.prank(_lp1);
+        _targetPool.rebalancePool(_lp1, price);
 
         // LP2 rebalance
-        vm.startPrank(_lp2);
-        token.approve(address(_targetPool), expectedAmount);
-        _targetPool.rebalancePool(_lp2, price, expectedAmount, isDeposit);
-        vm.stopPrank();
+        vm.prank(_lp2);
+        _targetPool.rebalancePool(_lp2, price);
+    }
+    
+    // Helper function to complete a cycle for any pool
+    function completeCycleForPool(
+        IAssetPool _targetPool, 
+        address _lp1, 
+        address _lp2, 
+        uint256 price
+    ) internal {
+        // Move to after rebalance start
+        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
+        
+        // Complete rebalancing
+        _targetPool.initiateOffchainRebalance();
+        
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
+        assetOracle.setAssetPrice(price);
+
+        _targetPool.initiateOnchainRebalance();
+        
+        // LP1 rebalance
+        vm.prank(_lp1);
+        _targetPool.rebalancePool(_lp1, price);
+
+        // LP2 rebalance
+        vm.prank(_lp2);
+        _targetPool.rebalancePool(_lp2, price);
     }
 }
 

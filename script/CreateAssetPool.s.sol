@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/protocol/AssetPoolFactory.sol";
-import "../src/protocol/LPRegistry.sol";
 
 contract CreatePoolScript is Script {
     // Pool configuration
@@ -17,12 +16,10 @@ contract CreatePoolScript is Script {
 
     // Deployed contract addresses (replace with actual addresses after deployment)
     address constant ASSET_POOL_FACTORY = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c; 
-    address constant LP_REGISTRY = 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b;
 
     function setUp() public pure {
         // Validate addresses
         require(ASSET_POOL_FACTORY == 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c, "AssetPoolFactory address not set");
-        require(LP_REGISTRY == 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b, "LPRegistry address not set");
         require(DEPOSIT_TOKEN == 0x036CbD53842c5426634e7929541eC2318f3dCF7e, "Deposit token address not set");
         require(PRICE_ORACLE == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Oracle address not set");
     }
@@ -36,7 +33,6 @@ contract CreatePoolScript is Script {
 
         // Get contract instances
         AssetPoolFactory factory = AssetPoolFactory(ASSET_POOL_FACTORY);
-        LPRegistry registry = LPRegistry(LP_REGISTRY);
 
         // Create the pool
         address poolAddress = factory.createPool(
@@ -48,19 +44,6 @@ contract CreatePoolScript is Script {
             REBALANCING_LENGTH
         );
 
-        registry.addPool(poolAddress);
-
-        // Optional: Register initial LPs
-        // Uncomment and modify these lines to register initial LPs
-        /*
-        address LP1 = address(0x123...);
-        address LP2 = address(0x456...);
-        uint256 LP1_LIQUIDITY = 1000000e18;
-        uint256 LP2_LIQUIDITY = 2000000e18;
-        
-        registry.registerLP(poolAddress, LP1, LP1_LIQUIDITY);
-        registry.registerLP(poolAddress, LP2, LP2_LIQUIDITY);
-        */
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
