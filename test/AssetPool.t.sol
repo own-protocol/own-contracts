@@ -6,10 +6,10 @@ import "forge-std/Test.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 import "../src/protocol/AssetPool.sol";
 import "../src/protocol/xToken.sol";
-import "../src/protocol/LPLiquidityManager.sol";
+import "../src/protocol/PoolLiquidityManager.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
-import "../src/interfaces/ILPLiquidityManager.sol";
+import "../src/interfaces/IPoolLiquidityManager.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 contract AssetPoolTest is Test {
@@ -19,7 +19,7 @@ contract AssetPoolTest is Test {
     IAssetPool public pool;
     IERC20Metadata public reserveToken;
     IXToken public assetToken;
-    ILPLiquidityManager public lpManager;
+    IPoolLiquidityManager public liquidityManager;
     MockAssetOracle assetOracle;
 
     // Test addresses
@@ -46,13 +46,13 @@ contract AssetPoolTest is Test {
         assetOracle = new MockAssetOracle();
         
         // Deploy LP Liquidity Manager Implementation
-        LPLiquidityManager lpManagerImpl = new LPLiquidityManager();
+        PoolLiquidityManager liquidityManagerImpl = new PoolLiquidityManager();
         
         // Deploy AssetPool Implementation
         implementation = new AssetPool();
         
         // Deploy AssetPool Factory
-        factory = new AssetPoolFactory(address(lpManagerImpl), address(implementation));
+        factory = new AssetPoolFactory(address(liquidityManagerImpl), address(implementation));
 
         // Set default price in oracle
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
@@ -69,7 +69,7 @@ contract AssetPoolTest is Test {
 
         pool = IAssetPool(poolAddress);
         assetToken = pool.assetToken();
-        lpManager = pool.lpLiquidityManager();
+        liquidityManager = pool.poolLiquidityManager();
 
         vm.stopPrank();
 
@@ -81,17 +81,17 @@ contract AssetPoolTest is Test {
 
         // Register LPs
         vm.startPrank(lp1);
-        reserveToken.approve(address(lpManager), INITIAL_BALANCE);
-        lpManager.registerLP(LP_LIQUIDITY_AMOUNT);
+        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        liquidityManager.registerLP(LP_LIQUIDITY_AMOUNT);
         // Add extra collateral to avoid InsufficientCollateral errors
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
 
         vm.startPrank(lp2);
-        reserveToken.approve(address(lpManager), INITIAL_BALANCE);
-        lpManager.registerLP(LP_LIQUIDITY_AMOUNT);
+        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        liquidityManager.registerLP(LP_LIQUIDITY_AMOUNT);
         // Add extra collateral to avoid InsufficientCollateral errors
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1);
@@ -353,11 +353,11 @@ contract AssetPoolTest is Test {
         vm.stopPrank();
 
         vm.startPrank(lp1);
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
         
         vm.startPrank(lp2);
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
 
         // Complete first cycle (deposit cycle)
@@ -377,11 +377,11 @@ contract AssetPoolTest is Test {
         vm.stopPrank();
         
         vm.startPrank(lp1);
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
         
         vm.startPrank(lp2);
-        lpManager.deposit(LP_LIQUIDITY_AMOUNT);
+        liquidityManager.deposit(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
         
         // Complete second cycle (redemption cycle) with price 2.0
@@ -432,8 +432,8 @@ contract AssetPoolTest is Test {
         // Get pool instances
         IAssetPool poolUsdc = IAssetPool(pool6);
         IAssetPool poolDai = IAssetPool(pool18);
-        ILPLiquidityManager lpManagerUsdc = poolUsdc.lpLiquidityManager();
-        ILPLiquidityManager lpManagerDai = poolDai.lpLiquidityManager();
+        IPoolLiquidityManager liquidityManagerUsdc = poolUsdc.poolLiquidityManager();
+        IPoolLiquidityManager liquidityManagerDai = poolDai.poolLiquidityManager();
         
         // Fund accounts
         deal(address(usdc6), user1, 10000 * 10**6); // 10000 USDC with 6 decimals
@@ -445,23 +445,23 @@ contract AssetPoolTest is Test {
         
         // Register LPs for both pools with extra collateral
         vm.startPrank(lp1);
-        usdc6.approve(address(lpManagerUsdc), 500e6);
-        lpManagerUsdc.registerLP(100e6);
-        lpManagerUsdc.deposit(200e6); // Add extra collateral
+        usdc6.approve(address(liquidityManagerUsdc), 500e6);
+        liquidityManagerUsdc.registerLP(100e6);
+        liquidityManagerUsdc.deposit(200e6); // Add extra collateral
         
-        dai18.approve(address(lpManagerDai), 500e18);
-        lpManagerDai.registerLP(100e18);
-        lpManagerDai.deposit(200e18); // Add extra collateral
+        dai18.approve(address(liquidityManagerDai), 500e18);
+        liquidityManagerDai.registerLP(100e18);
+        liquidityManagerDai.deposit(200e18); // Add extra collateral
         vm.stopPrank();
         
         vm.startPrank(lp2);
-        usdc6.approve(address(lpManagerUsdc), 500e6);
-        lpManagerUsdc.registerLP(100e6);
-        lpManagerUsdc.deposit(200e6); // Add extra collateral
+        usdc6.approve(address(liquidityManagerUsdc), 500e6);
+        liquidityManagerUsdc.registerLP(100e6);
+        liquidityManagerUsdc.deposit(200e6); // Add extra collateral
         
-        dai18.approve(address(lpManagerDai), 500e18);
-        lpManagerDai.registerLP(100e18);
-        lpManagerDai.deposit(200e18); // Add extra collateral
+        dai18.approve(address(liquidityManagerDai), 500e18);
+        liquidityManagerDai.registerLP(100e18);
+        liquidityManagerDai.deposit(200e18); // Add extra collateral
         vm.stopPrank();
         
         IXToken assetTokenUsdc = poolUsdc.assetToken();
@@ -534,7 +534,7 @@ contract AssetPoolTest is Test {
         
         // Get pool instance
         IAssetPool usdcPool = IAssetPool(poolAddr);
-        ILPLiquidityManager lpManagerUsdc = usdcPool.lpLiquidityManager();
+        IPoolLiquidityManager liquidityManagerUsdc = usdcPool.poolLiquidityManager();
         IXToken usdcAssetToken = usdcPool.assetToken();
         
         // Fund accounts (6 decimals)
@@ -548,15 +548,15 @@ contract AssetPoolTest is Test {
         
         // Register LPs with extra collateral
         vm.startPrank(lp1);
-        usdc.approve(address(lpManagerUsdc), lpFundAmount);
-        lpManagerUsdc.registerLP(30000 * 10**6);
-        lpManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
+        usdc.approve(address(liquidityManagerUsdc), lpFundAmount);
+        liquidityManagerUsdc.registerLP(30000 * 10**6);
+        liquidityManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
         vm.stopPrank();
         
         vm.startPrank(lp2);
-        usdc.approve(address(lpManagerUsdc), lpFundAmount);
-        lpManagerUsdc.registerLP(30000 * 10**6);
-        lpManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
+        usdc.approve(address(liquidityManagerUsdc), lpFundAmount);
+        liquidityManagerUsdc.registerLP(30000 * 10**6);
+        liquidityManagerUsdc.deposit(20000 * 10**6); // Add extra collateral
         vm.stopPrank();
         
         // First, deposit and claim assets
@@ -617,7 +617,7 @@ contract AssetPoolTest is Test {
         
         // Get pool instance
         IAssetPool daiPool = IAssetPool(poolAddr);
-        ILPLiquidityManager lpManagerDai = daiPool.lpLiquidityManager();
+        IPoolLiquidityManager liquidityManagerDai = daiPool.poolLiquidityManager();
         IXToken daiAssetToken = daiPool.assetToken();
         
         // Fund accounts (18 decimals)
@@ -631,15 +631,15 @@ contract AssetPoolTest is Test {
         
         // Register LPs with extra collateral
         vm.startPrank(lp1);
-        dai.approve(address(lpManagerDai), lpFundAmount);
-        lpManagerDai.registerLP(30000 * 10**18);
-        lpManagerDai.deposit(20000 * 10**18); // Add extra collateral
+        dai.approve(address(liquidityManagerDai), lpFundAmount);
+        liquidityManagerDai.registerLP(30000 * 10**18);
+        liquidityManagerDai.deposit(20000 * 10**18); // Add extra collateral
         vm.stopPrank();
         
         vm.startPrank(lp2);
-        dai.approve(address(lpManagerDai), lpFundAmount);
-        lpManagerDai.registerLP(30000 * 10**18);
-        lpManagerDai.deposit(20000 * 10**18); // Add extra collateral
+        dai.approve(address(liquidityManagerDai), lpFundAmount);
+        liquidityManagerDai.registerLP(30000 * 10**18);
+        liquidityManagerDai.deposit(20000 * 10**18); // Add extra collateral
         vm.stopPrank();
         
         // First, deposit and claim assets

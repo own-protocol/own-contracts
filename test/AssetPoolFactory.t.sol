@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 
 import "../src/protocol/AssetPoolFactory.sol";
 import "../src/protocol/AssetPool.sol";
-import "../src/protocol/LPLiquidityManager.sol";
+import "../src/protocol/PoolLiquidityManager.sol";
 import "../src/protocol/xToken.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
@@ -15,7 +15,7 @@ contract AssetPoolFactoryTest is Test {
     // Test contracts
     AssetPoolFactory public factory;
     AssetPool public pool;
-    LPLiquidityManager public lpLiquidityManager;
+    PoolLiquidityManager public poolLiquidityManager;
     MockAssetOracle assetOracle;
     IERC20Metadata public reserveToken;
 
@@ -35,9 +35,9 @@ contract AssetPoolFactoryTest is Test {
 
         // Deploy core contracts
         assetOracle = new MockAssetOracle();
-        lpLiquidityManager = new LPLiquidityManager();
+        poolLiquidityManager = new PoolLiquidityManager();
         pool = new AssetPool();
-        factory = new AssetPoolFactory(address(lpLiquidityManager), address(pool));
+        factory = new AssetPoolFactory(address(poolLiquidityManager), address(pool));
 
         assetOracle.setAssetPrice(1e18); // Set default price to 1.0
 
@@ -49,7 +49,7 @@ contract AssetPoolFactoryTest is Test {
     // --------------------------------------------------------------------------------
 
     function testFactoryDeployment() public view {
-        assertEq(address(factory.lpLiquidityManager()), address(lpLiquidityManager));
+        assertEq(address(factory.poolLiquidityManager()), address(poolLiquidityManager));
         assertEq(factory.assetPool(), address(pool));
     }
 
