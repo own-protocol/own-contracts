@@ -8,10 +8,10 @@ import "../interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @title ILPLiquidityManager
- * @notice Interface for the combined LP registry and liquidity manager
+ * @title IPoolLiquidityManager
+ * @notice Interface for the pool liquidity manager contract
  */
-interface ILPLiquidityManager {
+interface IPoolLiquidityManager {
     /**
      * @notice LP's current collateral and liquidity information
      */

@@ -11,13 +11,13 @@ import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
 import "../interfaces/IXToken.sol";
-import "../interfaces/ILPLiquidityManager.sol";
+import "../interfaces/IPoolLiquidityManager.sol";
 
 /**
- * @title LPLiquidityManager
+ * @title PoolLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
  */
-contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, Initializable {
+contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard, Initializable {
     
     // Healthy collateral ratio (50%)
     uint256 public constant HEALTHY_COLLATERAL_RATIO = 50_00;
