@@ -38,9 +38,9 @@ interface IAssetPoolFactory {
     error ZeroAddress();
 
     /**
-     * @return address The address of the LP liquidity manager contract.
+     * @return address The address of the pool liquidity manager contract.
      */
-    function lpLiquidityManager() external view returns (address);
+    function poolLiquidityManager() external view returns (address);
 
     /**
      * @return address The address of the asset pool contract.

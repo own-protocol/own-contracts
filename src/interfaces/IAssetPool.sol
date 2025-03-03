@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IXToken} from "./IXToken.sol";
-import {ILPLiquidityManager} from "./ILPLiquidityManager.sol";
+import {IPoolLiquidityManager} from "./IPoolLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
 
 /**
@@ -284,9 +284,9 @@ interface IAssetPool {
     function assetToken() external view returns (IXToken);
 
     /**
-     * @notice Returns the LP liquidity manager contract
+     * @notice Returns the pool liquidity manager contract
      */
-    function lpLiquidityManager() external view returns (ILPLiquidityManager);
+    function poolLiquidityManager() external view returns (IPoolLiquidityManager);
 
     /**
      * @notice Returns the asset oracle contract

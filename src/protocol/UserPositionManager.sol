@@ -9,7 +9,7 @@ import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IUserPositionManager.sol";
 import "../interfaces/IAssetPool.sol";
-import "../interfaces/ILPLiquidityManager.sol";
+import "../interfaces/IPoolLiquidityManager.sol";
 import "../interfaces/IXToken.sol";
 import "../interfaces/IAssetOracle.sol";
 
@@ -66,9 +66,9 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
     IAssetOracle public assetOracle;
 
     /**
-     * @notice LP Liquidity Manager contract
+     * @notice Pool Liquidity Manager contract
      */
-    ILPLiquidityManager public lpLiquidityManager;
+    IPoolLiquidityManager public poolLiquidityManager;
 
     /**
      * @notice Minimum collateral ratio required (scaled by 10000, default: 120%)
@@ -184,7 +184,7 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
         reserveToken = IERC20Metadata(address(assetPool.reserveToken()));
         assetToken = IXToken(address(assetPool.assetToken()));
         assetOracle = IAssetOracle(address(assetPool.assetOracle()));
-        lpLiquidityManager = ILPLiquidityManager(address(assetPool.lpLiquidityManager()));
+        poolLiquidityManager = IPoolLiquidityManager(address(assetPool.poolLiquidityManager()));
 
         _transferOwnership(_owner);
     }
@@ -404,15 +404,15 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
      * @return totalInterest Total interest collected in the cycle
      */
     function chargeInterestForCycle() external onlyAssetPool returns (uint256 totalInterest) {
-        uint256 currentCycle = assetPool.cycleIndex();
-        uint256 currentRate = getCurrentInterestRate();
-        uint256 cycleLength = assetPool.cycleLength();
+        // uint256 currentCycle = assetPool.cycleIndex();
+        // uint256 currentRate = getCurrentInterestRate();
+        // uint256 cycleLength = assetPool.cycleLength();
         
         // Calculate pro-rated interest for this cycle (annualized rate * cycle length / seconds in year)
-        uint256 cycleInterestRate = (currentRate * cycleLength) / SECONDS_PER_YEAR;
+        // uint256 cycleInterestRate = (currentRate * cycleLength) / SECONDS_PER_YEAR;
         
         // Reset current cycle interest
-        currentCycleInterest = 0;
+        // currentCycleInterest = 0;
         
         // This would benefit from an enumerable set of active users to avoid 
         // iterating over all addresses that ever had a position
@@ -421,7 +421,7 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
         // For now, we leave implementation details to optimize this based on actual protocol usage
         
         // Return accumulated interest
-        return totalInterest;
+        // return totalInterest;
     }
 
     /**
@@ -435,11 +435,11 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
         currentCycleInterest = 0;
         
         // Get total LP liquidity
-        uint256 totalLiquidity = lpLiquidityManager.getTotalLPLiquidity();
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
         if (totalLiquidity == 0) return;
         
         // Get count of LPs
-        uint256 lpCount = lpLiquidityManager.getLPCount();
+        uint256 lpCount = poolLiquidityManager.getLPCount();
         if (lpCount == 0) return;
         
         // Distribute interest to each LP according to their share of total liquidity
@@ -487,7 +487,7 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() public view returns (uint256 utilization) {
-        uint256 totalLiquidity = lpLiquidityManager.getTotalLPLiquidity();
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
         if (totalLiquidity == 0) return 0;
         
         uint256 assetSupply = assetToken.totalSupply();
@@ -695,18 +695,6 @@ contract UserPositionManager is IUserPositionManager, Ownable, Pausable, Reentra
     //                           ASSET POOL FUNCTIONS
     // --------------------------------------------------------------------------------
 
-    /**
-     * @notice Process deposits and redemptions after a cycle completes
-     * @dev Called by the asset pool after rebalancing
-     * @param prevCycleIndex The previous cycle index that was just completed
-     */
-    function processCycleCompletion(uint256 prevCycleIndex) external onlyAssetPool {
-        // Reset cycle totals for the new cycle
-        _cycleTotalDepositRequests = 0;
-        _cycleTotalRedemptionRequests = 0;
-        
-        // Additional cycle processing logic if needed
-    }
 
     /**
      * @notice Handle interest accrual for a specific user

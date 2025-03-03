@@ -10,7 +10,7 @@ import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
-import {ILPLiquidityManager} from "../interfaces/ILPLiquidityManager.sol";
+import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {xToken} from "./xToken.sol";
 
@@ -36,9 +36,9 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
     IXToken public assetToken;
 
     /**
-     * @notice Address of the LP Liquidity Manager contract for managing LPs.
+     * @notice Address of the pool liquidity manager contract for managing LPs.
      */
-    ILPLiquidityManager public lpLiquidityManager;
+    IPoolLiquidityManager public poolLiquidityManager;
 
     /**
      * @notice Address of the Asset Oracle contract for fetching asset prices.
@@ -165,7 +165,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @param _xTokenName Name of the xToken to be created.
      * @param _xTokenSymbol Symbol of the xToken to be created.
      * @param _assetOracle Address of the asset price oracle contract.
-     * @param _lpLiquidityManager Address of the LP liquidity manager contract.
+     * @param _poolLiquidityManager Address of the LP liquidity manager contract.
      * @param _cycleLength Duration of each operational cycle.
      * @param _rebalanceLength Duration of the rebalance period.
      * @param _owner Owner of the contract.
@@ -175,19 +175,19 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
         string memory _xTokenName,
         string memory _xTokenSymbol,
         address _assetOracle,
-        address _lpLiquidityManager,
+        address _poolLiquidityManager,
         uint256 _cycleLength,
         uint256 _rebalanceLength,
         address _owner
     ) external initializer {
-        if (_reserveToken == address(0) || _assetOracle == address(0) || _lpLiquidityManager == address(0)) 
+        if (_reserveToken == address(0) || _assetOracle == address(0) || _poolLiquidityManager == address(0)) 
             revert ZeroAddress();
 
         _transferOwnership(_owner);
 
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = new xToken(_xTokenName, _xTokenSymbol);
-        lpLiquidityManager = ILPLiquidityManager(_lpLiquidityManager);
+        poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
         cycleLength = _cycleLength;
@@ -207,7 +207,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
      * @dev Ensures the caller is a registered LP.
      */
     modifier onlyLP() {
-        if (!lpLiquidityManager.isLP(msg.sender)) revert NotLP();
+        if (!poolLiquidityManager.isLP(msg.sender)) revert NotLP();
         _;
     }
 
@@ -394,10 +394,10 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = lpLiquidityManager.checkCollateralHealth(lp);
+        uint8 lpCollateralHealth = poolLiquidityManager.checkCollateralHealth(lp);
         if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
-        uint256 lpLiquidity = lpLiquidityManager.getLPLiquidity(lp);
-        uint256 totalLiquidity = lpLiquidityManager.getTotalLPLiquidity();
+        uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
 
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;
@@ -410,7 +410,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
             amount = uint256(rebalanceAmount) * lpLiquidity / totalLiquidity;
             
             // Deduct from LP's collateral and transfer to pool
-            lpLiquidityManager.deductRebalanceAmount(lp, amount);
+            poolLiquidityManager.deductRebalanceAmount(lp, amount);
 
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP collateral
@@ -421,7 +421,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
             reserveToken.transfer(lp, amount);
             
             // Add to LP's collateral
-            lpLiquidityManager.addToCollateral(lp, amount);
+            poolLiquidityManager.addToCollateral(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
@@ -432,7 +432,7 @@ contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
         emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
 
         // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == lpLiquidityManager.getLPCount()) {
+        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
             uint256 assetBalance = assetToken.balanceOf(address(this));
             uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);

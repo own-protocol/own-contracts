@@ -7,7 +7,7 @@ import 'openzeppelin-contracts/contracts/access/Ownable.sol';
 import 'openzeppelin-contracts/contracts/proxy/Clones.sol';
 import {IAssetPoolFactory} from '../interfaces/IAssetPoolFactory.sol';
 import {AssetPool} from "../protocol/AssetPool.sol";
-import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
+import {PoolLiquidityManager} from '../protocol/PoolLiquidityManager.sol';
 
 
 /**
@@ -16,20 +16,20 @@ import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
  * Responsible for creating and registering asset pools for liquidity provisioning.
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
-    /// @notice Address to the LP liquidity manager contract.
-    address public lpLiquidityManager;
+    /// @notice Address to the pool liquidity manager contract.
+    address public poolLiquidityManager;
     /// @notice Address of the asset pool contract.
     address public assetPool;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
-     * @param _lpLiquidityManager Address of the LP Registry contract.
+     * @param _poolLiquidityManager Address of the LP Registry contract.
      * Reverts if the address is zero.
      */
-    constructor(address _lpLiquidityManager, address _assetPool) Ownable(msg.sender) {
-        if (_lpLiquidityManager == address(0)) revert ZeroAddress();
+    constructor(address _poolLiquidityManager, address _assetPool) Ownable(msg.sender) {
+        if (_poolLiquidityManager == address(0)) revert ZeroAddress();
         if (_assetPool == address(0)) revert ZeroAddress();
-        lpLiquidityManager = _lpLiquidityManager;
+        poolLiquidityManager = _poolLiquidityManager;
         assetPool = _assetPool;
     }
 
@@ -68,21 +68,21 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
-        // Clones a new LP liquidity manager contract instance.
-        address lpManager = Clones.clone(lpLiquidityManager);
+        // Clones a new pool liquidity manager contract instance.
+        address liquidityManager = Clones.clone(poolLiquidityManager);
 
         AssetPool(pool).initialize(
             depositToken,
             assetName,
             assetSymbol,
             oracle,
-            lpManager,
+            liquidityManager,
             cycleLength,
             rebalanceLength,
             owner
         );
 
-        LPLiquidityManager(lpManager).initialize(pool, oracle, depositToken, owner);
+        PoolLiquidityManager(liquidityManager).initialize(pool, oracle, depositToken, owner);
 
         // Emit the AssetPoolCreated event to notify listeners.
         emit AssetPoolCreated(
