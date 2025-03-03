@@ -98,16 +98,6 @@ interface IPoolLiquidityManager {
      * @notice Error when LP is not eligible for liquidation
      */
     error NotEligibleForLiquidation();
-
-    /**
-     * @notice Error when caller is not authorized
-     */
-    error Unauthorized();
-
-    /**
-     * @notice Error when zero address is provided
-     */
-    error ZeroAddress();
     
     /**
      * @notice Error when LP is already registered
@@ -128,12 +118,8 @@ interface IPoolLiquidityManager {
      * @notice Error when trying to decrease liquidity more than available
      */
     error InsufficientLiquidity();
-    
-    /**
-     * @notice Error when an invalid amount is provided
-     */
-    error InvalidAmount();
 
+    
     /**
      * @notice Minimum required collateral ratio (50%)
      */
@@ -153,21 +139,6 @@ interface IPoolLiquidityManager {
      * @notice Liquidation reward percentage (5%)
      */
     function LIQUIDATION_REWARD_PERCENTAGE() external view returns (uint256);
-    
-    /**
-     * @notice Asset pool contract
-     */
-    function assetPool() external view returns (IAssetPool);
-    
-    /**
-     * @notice Asset oracle
-     */
-    function assetOracle() external view returns (IAssetOracle);
-    
-    /**
-     * @notice Reserve token (USDC, USDT etc)
-     */
-    function reserveToken() external view returns (IERC20);
     
     /**
      * @notice Total liquidity in the pool

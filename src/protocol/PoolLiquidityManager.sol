@@ -2,22 +2,22 @@
 // author: bhargavaparoksham
 
 pragma solidity ^0.8.20;
-
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
-import "../interfaces/IAssetPool.sol";
-import "../interfaces/IAssetOracle.sol";
-import "../interfaces/IXToken.sol";
-import "../interfaces/IPoolLiquidityManager.sol";
+import {IAssetPool} from "../interfaces/IAssetPool.sol";
+import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
+import {IXToken} from "../interfaces/IXToken.sol";
+import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
+import {PoolStorage} from "./PoolStorage.sol";
 
 /**
  * @title PoolLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
  */
-contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard, Initializable {
+contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, ReentrancyGuard {
     
     // Healthy collateral ratio (50%)
     uint256 public constant HEALTHY_COLLATERAL_RATIO = 50_00;
@@ -28,18 +28,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
     // Liquidation reward percentage (5%)
     uint256 public constant LIQUIDATION_REWARD_PERCENTAGE = 5_00;
     
-    // Precision for calculations
-    uint256 private constant PRECISION = 1e18;
-
-    // Asset pool contract
-    IAssetPool public assetPool;
-    
-    // Asset oracle
-    IAssetOracle public assetOracle;
-    
-    // Reserve token (USDC, USDT etc)
-    IERC20 public reserveToken;
-
     // Total liquidity in the pool
     uint256 public totalLPLiquidity;
     
@@ -71,25 +59,33 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
 
     /**
      * @notice Initialize the contract - replaces the constructor for clones
-     * @param _assetPool Address of the asset pool
-     * @param _assetOracle Address of the asset oracle
      * @param _reserveToken Address of the reserve token
+     * @param _assetToken Address of the asset token
+     * @param _assetPool Address of the asset pool
+     * @param _poolCycleManager Address of the pool cycle manager
+     * @param _assetOracle Address of the asset oracle
      * @param _owner Address of the owner
      */
     function initialize(
-        address _assetPool,
-        address _assetOracle,
         address _reserveToken,
+        address _assetToken,
+        address _assetPool,
+        address _poolCycleManager,
+        address _assetOracle,
         address _owner
     ) external initializer {
-        if (_assetPool == address(0) || _assetOracle == address(0) || 
-            _reserveToken == address(0) || _owner == address(0)) {
+        if (_reserveToken == address(0) || _assetToken == address(0) || _assetPool == address(0) || 
+            _poolCycleManager == address(0) || _assetOracle == address(0) || _owner == address(0)) {
             revert ZeroAddress();
         }
             
+        reserveToken = IERC20Metadata(_reserveToken);
+        assetToken = IXToken(_assetToken);
         assetPool = IAssetPool(_assetPool);
+        poolCycleManager = IPoolCycleManager(_poolCycleManager);
         assetOracle = IAssetOracle(_assetOracle);
-        reserveToken = IERC20(_reserveToken);
+
+        _initializeDecimalFactor(address(reserveToken), address(assetToken));
         
         // Initialize Ownable
         _transferOwnership(_owner);
@@ -253,7 +249,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
         
         // Check liquidation eligibility
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        if (lpCollateral * 100_00 * assetPool.reserveToAssetDecimalFactor() >= lpAssetHolding * COLLATERAL_THRESHOLD) {
+        if (lpCollateral * 100_00 * reserveToAssetDecimalFactor >= lpAssetHolding * COLLATERAL_THRESHOLD) {
             revert NotEligibleForLiquidation();
         }
         
@@ -270,7 +266,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
         // Add target LP's asset holding to caller's
         uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00 * assetPool.reserveToAssetDecimalFactor();
+        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00 * reserveToAssetDecimalFactor;
         
         // Check if additional collateral is needed
         uint256 additionalCollateralNeeded = 0;
@@ -339,7 +335,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
         
         CollateralInfo storage info = lpInfo[lp];
         
-        uint256 totalSupply = IXToken(assetPool.assetToken()).totalSupply();
+        uint256 totalSupply = assetToken.totalSupply();
         uint256 assetPrice = assetOracle.assetPrice();
         
         // Calculate LP's share of total supply based on their proportion of total liquidity
@@ -371,7 +367,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
         if (lpAssetHolding == 0) return 0;
         
         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        return Math.mulDiv(lpAssetHolding, COLLATERAL_THRESHOLD, 100_00 * assetPool.reserveToAssetDecimalFactor());
+        return Math.mulDiv(lpAssetHolding, COLLATERAL_THRESHOLD, 100_00 * reserveToAssetDecimalFactor);
     }
 
     /**
@@ -388,7 +384,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, Ownable, ReentrancyGuard
         if (lpAssetHolding == 0) return 0;
         
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        return Math.mulDiv(info.collateralAmount, 100_00 * assetPool.reserveToAssetDecimalFactor(), lpAssetHolding);
+        return Math.mulDiv(info.collateralAmount, 100_00 * reserveToAssetDecimalFactor, lpAssetHolding);
     }
 
     /**
