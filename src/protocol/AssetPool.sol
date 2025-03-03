@@ -1,575 +1,760 @@
 // SPDX-License-Identifier: BUSL-1.1
-// author: bhargavaparoksham
-
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
-import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
 import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
-import {xToken} from "./xToken.sol";
+import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
+import {PoolStorage} from"./PoolStorage.sol";
 
 /**
  * @title AssetPool
- * @notice Manages the lifecycle of assets and reserves in a decentralized pool.
- *         Facilitates deposits, minting, redemptions, and rebalancing of assets.
- *         Includes governance controls for updating operational parameters.
+ * @notice Manages user positions, collateral, and interest payments in the protocol
+ * @dev Handles the lifecycle of user positions and calculates interest based on pool utilization
  */
-contract AssetPool is IAssetPool, Ownable, Pausable, Initializable {
+contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuard {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Address of the reserve token (e.g., USDC).
+     * @notice Interest rate strategy contract
      */
-    IERC20Metadata public reserveToken;
+    IInterestRateStrategy public interestRateStrategy;
 
     /**
-     * @notice Address of the xToken contract used for asset representation.
+     * @notice Minimum collateral ratio required (scaled by 10000, default: 120%)
      */
-    IXToken public assetToken;
+    uint256 public minCollateralRatio = 120_00;
 
     /**
-     * @notice Address of the pool liquidity manager contract for managing LPs.
+     * @notice Liquidation threshold ratio (scaled by 10000, default: 110%)
      */
-    IPoolLiquidityManager public poolLiquidityManager;
+    uint256 public liquidationThreshold = 110_00;
 
     /**
-     * @notice Address of the Asset Oracle contract for fetching asset prices.
+     * @notice Liquidation reward percentage (scaled by 10000, default: 5%)
      */
-    IAssetOracle public assetOracle;
+    uint256 public liquidationReward = 5_00;
 
     /**
-     * @notice Index of the current operational cycle.
+     * @notice Base interest rate when utilization < 50% (scaled by 10000, default: 6%)
      */
-    uint256 public cycleIndex;
+    uint256 public baseInterestRate = 6_00;
 
     /**
-     * @notice Current state of the pool (ACTIVE or REBALANCING).
+     * @notice Maximum interest rate at 90% utilization (scaled by 10000, default: 36%)
      */
-    CycleState public cycleState;
+    uint256 public maxInterestRate = 36_00;
 
     /**
-     * @notice Duration of each operational cycle in seconds.
+     * @notice Optimal utilization point (scaled by 10000, default: 80%)
      */
-    uint256 public cycleLength;
+    uint256 public optimalUtilization = 80_00;
 
     /**
-     * @notice Duration of the rebalance period in seconds.
+     * @notice Total interest collected in the current cycle
      */
-    uint256 public rebalanceLength;
+    uint256 public currentCycleInterest;
 
     /**
-     * @notice Timestamp of the last cycle action.
+     * @notice Total user deposit requests for the current cycle
      */
-    uint256 public lastCycleActionDateTime;
+    uint256 public _cycleTotalDepositRequests;
 
     /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
+     * @notice Total user redemption requests for the current cycle
      */
-    uint256 public poolReserveBalance;
+    uint256 public _cycleTotalRedemptionRequests;
 
     /**
-     * @notice Net expected change in reserves post-rebalance.
+     * @notice Mapping of user addresses to their positions
      */
-    int256 public netReserveDelta;
+    mapping(address => Position) public positions;
 
     /**
-     * @notice Asset token balance of the pool.
+     * @notice Mapping of user addresses to their pending requests
      */
-    uint256 public poolAssetBalance;
+    mapping(address => UserRequest) public userRequests;
 
     /**
-     * @notice Net expected change in assets post-rebalance.
+     * @dev Constructor for the implementation contract
      */
-    int256 public netAssetDelta;
-
-    /**
-     * @notice Total amount to rebalance (PnL from reserves).
-     */
-    int256 public rebalanceAmount;
-
-    /**
-     * @notice Count of LPs who have completed rebalancing in the current cycle.
-     */
-    uint256 public rebalancedLPs;
-
-    /**
-     * @notice Total deposit requests in the current cycle.
-     */
-    uint256 public cycleTotalDepositRequests;
-
-    /**
-     * @notice Total redemption requests in the current cycle.
-     */
-    uint256 public cycleTotalRedemptionRequests;
-
-    /**
-     * @notice Mapping of users to their request
-     */
-    mapping(address => UserRequest) public pendingRequests;
-
-    /**
-     * @notice Tracks the last cycle an lp rebalanced.
-     */
-    mapping(address => uint256) public lastRebalancedCycle;
-
-    /**
-     * @notice Individual user reserve balances.
-     */
-    mapping(address => uint256) public reserveBalance;
-
-    /**
-     * @notice Rebalance price for each cycle.
-     */
-    mapping(uint256 => uint256) public cycleRebalancePrice;
-
-    /**
-     * @notice Weighted sum of rebalance prices for the current cycle.
-     */
-    uint256 private cycleWeightedSum;
-
-    /**
-     * @notice Decimal factor used for calculations.
-     */
-    uint256 public reserveToAssetDecimalFactor;
-
-    /**
-     * @notice Maximum deviation allowed in the rebalance price.
-     */
-    uint256 private constant MAX_PRICE_DEVIATION = 3_00;
-
-    /**
-     * @notice Precision used for calculations.
-     */
-    uint256 private constant PRECISION = 1e18;
-
     constructor() Ownable(msg.sender) {
-        // Disable the implementation contract
+        // Disable implementation initializers
         _disableInitializers();
     }
 
     // --------------------------------------------------------------------------------
-    //                                    INITIALIZER
+    //                                  MODIFIERS
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Initializes the AssetPool contract with required dependencies and parameters.
-     * @param _reserveToken Address of the reserve token contract (e.g., USDC).
-     * @param _xTokenName Name of the xToken to be created.
-     * @param _xTokenSymbol Symbol of the xToken to be created.
-     * @param _assetOracle Address of the asset price oracle contract.
-     * @param _poolLiquidityManager Address of the LP liquidity manager contract.
-     * @param _cycleLength Duration of each operational cycle.
-     * @param _rebalanceLength Duration of the rebalance period.
-     * @param _owner Owner of the contract.
+     * @dev Ensures the caller is the pool cycle manager
      */
-    function initialize (
+    modifier onlyPoolCycleManager() {
+        if (msg.sender != address(poolCycleManager)) revert NotPoolCycleManager();
+        _;
+    }
+
+    /**
+     * @dev Ensures the cycle state is active
+     */
+    modifier onlyActiveCycle() {
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.ACTIVE) revert("Cycle not active");
+        _;
+    }
+
+    // --------------------------------------------------------------------------------
+    //                                 INITIALIZER
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Initializes the AssetPool contract
+     * @param _reserveToken Address of the reserve token
+     * @param _assetToken Address of the asset token
+     * @param _assetOracle Address of the asset oracle
+     * @param _poolCycleManager Address of the pool cycle manager contract
+     * @param _poolLiquidityManager Address of the pool liquidity manager contract
+     * @param _owner Address of the contract owner
+     */
+    function initialize(
         address _reserveToken,
-        string memory _xTokenName,
-        string memory _xTokenSymbol,
+        address _assetToken,
         address _assetOracle,
+        address _poolCycleManager,
         address _poolLiquidityManager,
-        uint256 _cycleLength,
-        uint256 _rebalanceLength,
+        address _interestRateStrategy,
         address _owner
     ) external initializer {
-        if (_reserveToken == address(0) || _assetOracle == address(0) || _poolLiquidityManager == address(0)) 
+        if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
+            _poolLiquidityManager == address(0) || _poolCycleManager == address(0)) 
             revert ZeroAddress();
 
-        _transferOwnership(_owner);
-
+        poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
-        assetToken = new xToken(_xTokenName, _xTokenSymbol);
+        assetToken = IXToken(_assetToken);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
-        cycleState = CycleState.ACTIVE;
-        cycleLength = _cycleLength;
-        rebalanceLength = _rebalanceLength;
-        lastCycleActionDateTime = block.timestamp;
+        interestRateStrategy = IInterestRateStrategy(_interestRateStrategy);
 
-        uint8 reserveDecimals = reserveToken.decimals();
-        uint8 assetDecimals = assetToken.decimals();
-        reserveToAssetDecimalFactor = 10 ** uint256(assetDecimals - reserveDecimals);
+        _initializeDecimalFactor(address(reserveToken), address(assetToken));
+
+        _transferOwnership(_owner);
     }
 
     // --------------------------------------------------------------------------------
-    //                                    MODIFIERS
+    //                           USER COLLATERAL FUNCTIONS
     // --------------------------------------------------------------------------------
 
     /**
-     * @dev Ensures the caller is a registered LP.
+     * @notice Allows users to deposit collateral
+     * @param amount Amount of collateral to deposit
      */
-    modifier onlyLP() {
-        if (!poolLiquidityManager.isLP(msg.sender)) revert NotLP();
-        _;
-    }
-
-    /**
-     * @dev Ensures the pool is not in a rebalancing state.
-     */
-    modifier notRebalancing() {
-        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        _;
-    }
-
-    // --------------------------------------------------------------------------------
-    //                                  USER ACTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Allows a user to deposit reserve tokens into the pool.
-     *         The deposited amount will be processed in the next cycle.
-     * @param amount Amount of reserve tokens to deposit.
-     */
-    function depositRequest(uint256 amount) external whenNotPaused notRebalancing {
+    function depositCollateral(uint256 amount) external nonReentrant whenNotPaused {
         if (amount == 0) revert InvalidAmount();
 
-        UserRequest storage request = pendingRequests[msg.sender];
-
-        if (request.amount > 0) revert MintOrBurnPending();
+        Position storage position = positions[msg.sender];
+        
+        // Transfer collateral from user to this contract
         reserveToken.transferFrom(msg.sender, address(this), amount);
+        
+        // Update user's position
+        position.collateralAmount += amount;
+        
+        emit CollateralDeposited(msg.sender, amount);
+    }
 
+    /**
+     * @notice Allows users to withdraw excess collateral
+     * @param amount Amount of collateral to withdraw
+     */
+    function withdrawCollateral(uint256 amount) external nonReentrant whenNotPaused {
+        if (amount == 0) revert InvalidAmount();
+        
+        Position storage position = positions[msg.sender];
+        if (position.collateralAmount < amount) revert InsufficientBalance();
+        
+        // Calculate required collateral
+        uint256 requiredCollateral = calculateRequiredCollateral(msg.sender);
+        uint256 excessCollateral = 0;
+        
+        if (position.collateralAmount > requiredCollateral) {
+            excessCollateral = position.collateralAmount - requiredCollateral;
+        }
+        
+        if (amount > excessCollateral) revert ExcessiveWithdrawal();
+        
+        // Update user's position
+        position.collateralAmount -= amount;
+        
+        // Transfer collateral to user
+        reserveToken.transfer(msg.sender, amount);
+        
+        emit CollateralWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @notice Liquidate an undercollateralized position
+     * @param user Address of the user whose position to liquidate
+     */
+    function liquidatePosition(address user) external nonReentrant whenNotPaused {
+        if (user == address(0) || user == msg.sender) revert InvalidAmount();
+        
+        Position storage position = positions[user];
+        
+        // Check if position is liquidatable
+        (,, bool isLiquidatable) = userPosition(user);
+        if (!isLiquidatable) revert PositionNotLiquidatable();
+        
+        // Calculate liquidation reward
+        uint256 liquidationRewardAmount = (position.collateralAmount * liquidationReward) / BPS;
+        uint256 remainingCollateral = position.collateralAmount - liquidationRewardAmount;
+        
+        // Clear the user's position
+        position.collateralAmount = 0;
+        
+        // Transfer reward to liquidator
+        reserveToken.transfer(msg.sender, liquidationRewardAmount);
+        
+        // Transfer remaining collateral back to user
+        if (remainingCollateral > 0) {
+            reserveToken.transfer(user, remainingCollateral);
+        }
+        
+        emit PositionLiquidated(user, msg.sender, liquidationRewardAmount);
+    }
+
+    // --------------------------------------------------------------------------------
+    //                           USER REQUEST FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Process a deposit request
+     * @param amount Amount of reserve tokens to deposit
+     */
+    function depositRequest(uint256 amount) external nonReentrant whenNotPaused onlyActiveCycle {
+        if (amount == 0) revert InvalidAmount();
+        
+        UserRequest storage request = userRequests[msg.sender];
+        if (request.amount > 0) revert RequestPending();
+        
+        // Transfer tokens from user to poolCycleManager
+        reserveToken.transferFrom(msg.sender, address(poolCycleManager), amount);
+        
+        // Update request state
         request.amount = amount;
         request.isDeposit = true;
-        request.requestCycle = cycleIndex;
-        cycleTotalDepositRequests += amount;
+        request.requestCycle = poolCycleManager.cycleIndex();
+        _cycleTotalDepositRequests += amount;
         
-        emit DepositRequested(msg.sender, amount, cycleIndex);
+        emit DepositRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
 
     /**
-     * @notice Creates a redemption request for the user. The user must have enough asset tokens that want to redeem for reserve tokens.
-     *         The redemption request will be processed in the next cycle.
-     * @param assetAmount Amount of asset tokens to burn.
+     * @notice Process a redemption request
+     * @param amount Amount of asset tokens to redeem
      */
-    function redemptionRequest(uint256 assetAmount) external whenNotPaused notRebalancing {
-        if (assetAmount == 0) revert InvalidAmount();
-
+    function redemptionRequest(uint256 amount) external nonReentrant whenNotPaused onlyActiveCycle {
+        if (amount == 0) revert InvalidAmount();
+        
         uint256 userBalance = assetToken.balanceOf(msg.sender);
-        if (userBalance < assetAmount) revert InsufficientBalance();
-
-        UserRequest storage request = pendingRequests[msg.sender];
-        if (request.amount > 0) revert MintOrBurnPending();
-
-        assetToken.transferFrom(msg.sender, address(this), assetAmount);
+        if (userBalance < amount) revert InsufficientBalance();
         
-        request.amount = assetAmount;
+        UserRequest storage request = userRequests[msg.sender];
+        if (request.amount > 0) revert RequestPending();
+        
+        // Transfer asset tokens from user to poolCycleManager
+        assetToken.transferFrom(msg.sender, address(poolCycleManager), amount);
+        
+        // Update request state
+        request.amount = amount;
         request.isDeposit = false;
-        request.requestCycle = cycleIndex;
-        cycleTotalRedemptionRequests += assetAmount;
+        request.requestCycle = poolCycleManager.cycleIndex();
+        _cycleTotalRedemptionRequests += amount;
         
-        emit RedemptionRequested(msg.sender, assetAmount, cycleIndex);
+        emit RedemptionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
 
     /**
-     * @notice Allows a user to cancel a pending request.
+     * @notice Cancel a pending request
      */
-    function cancelRequest() external notRebalancing {
-        UserRequest storage request = pendingRequests[msg.sender];
+    function cancelRequest() external nonReentrant onlyActiveCycle {
+        UserRequest storage request = userRequests[msg.sender];
         uint256 amount = request.amount;
         bool isDeposit = request.isDeposit;
         uint256 requestCycle = request.requestCycle;
-
-        if (requestCycle != cycleIndex) revert NothingToCancel();
+        
+        if (requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
         if (amount == 0) revert NothingToCancel();
-
-        delete pendingRequests[msg.sender];
-
+        
+        // Clear request
+        delete userRequests[msg.sender];
+        
         if (isDeposit) {
-            cycleTotalDepositRequests -= amount;
+            _cycleTotalDepositRequests -= amount;
             // Return reserve tokens
-            reserveToken.transfer(msg.sender, amount);
-            emit DepositCancelled(msg.sender, amount, cycleIndex);
+            reserveToken.transferFrom(address(poolCycleManager), msg.sender, amount);
+            emit DepositCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
         } else {
-            cycleTotalRedemptionRequests -= amount;
+            _cycleTotalRedemptionRequests -= amount;
             // Return asset tokens
-            assetToken.transfer(msg.sender, amount);
-            emit RedemptionCancelled(msg.sender, amount, cycleIndex);
+            assetToken.transferFrom(address(poolCycleManager), msg.sender, amount);
+            emit RedemptionCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
         }
     }
 
     /**
-     * @notice Claim asset or reserve based on user's previous pending requests once they are processed
-     * @param user Address of the user for whom the asset or reserve is to be claimed
+     * @notice Claim processed request
      */
-    function claimRequest(address user) external whenNotPaused notRebalancing {
-        UserRequest storage request = pendingRequests[user];
+    function claimRequest() external nonReentrant whenNotPaused onlyActiveCycle {
+        UserRequest storage request = userRequests[msg.sender];
         uint256 amount = request.amount;
         bool isDeposit = request.isDeposit;
         uint256 requestCycle = request.requestCycle;
-
-        if (requestCycle >= cycleIndex) revert NothingToClaim();
+        
+        if (requestCycle >= poolCycleManager.cycleIndex()) revert NothingToClaim();
         if (amount == 0) revert NothingToClaim();
-
-        delete pendingRequests[user];
-
-        uint256 rebalancePrice = cycleRebalancePrice[requestCycle];
-
+        
+        // Get the rebalance price from the pool cycle manager
+        uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
+        
+        // Clear request
+        delete userRequests[msg.sender];
+        
         if (isDeposit) {
-            // Mint case - convert reserve to asset using exact price
-            uint256 assetAmount = Math.mulDiv(amount, PRECISION * reserveToAssetDecimalFactor, rebalancePrice);
-            assetToken.mint(user, assetAmount, amount);
-            emit AssetClaimed(user, assetAmount, requestCycle);
+            // Mint case - convert reserve to asset using rebalance price
+            uint256 assetAmount = Math.mulDiv(
+                amount, 
+                PRECISION * reserveToAssetDecimalFactor, 
+                rebalancePrice
+            );
+            
+            // Mint tokens
+            assetToken.mint(msg.sender, assetAmount, amount);
+            
+            emit AssetClaimed(msg.sender, assetAmount, requestCycle);
         } else {
-            // Withdraw case - convert asset to reserve using exact price
-            uint256 reserveAmount = Math.mulDiv(amount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
-            reserveToken.transfer(user, reserveAmount);
-            emit ReserveWithdrawn(user, reserveAmount, requestCycle);
+            // Withdraw case - convert asset to reserve using rebalance price
+            uint256 reserveAmount = Math.mulDiv(
+                amount, 
+                rebalancePrice, 
+                PRECISION * reserveToAssetDecimalFactor
+            );
+            
+            // Transfer reserve tokens from poolCycleManager to user
+            reserveToken.transferFrom(address(poolCycleManager), msg.sender, reserveAmount);
+            
+            emit ReserveWithdrawn(msg.sender, reserveAmount, requestCycle);
         }
     }
 
     // --------------------------------------------------------------------------------
-    //                               REBALANCING LOGIC
+    //                          INTEREST MANAGEMENT
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Initiates the off-chain rebalance process.
+     * @notice Calculate and charge interest to all users with positions
+     * @return totalInterest Total interest collected in the cycle
      */
-    function initiateOffchainRebalance() external {
-        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
-        cycleState = CycleState.REBALANCING_OFFCHAIN;
-        lastCycleActionDateTime = block.timestamp;
+    function chargeInterestForCycle() external onlyPoolCycleManager returns (uint256 totalInterest) {
+        //uint256 currentCycle = poolCycleManager.cycleIndex();
+        // uint256 currentRate = getCurrentInterestRate();
+        // uint256 cycleLength = poolCycleManager.cycleLength();
+        
+        // Calculate pro-rated interest for this cycle (annualized rate * cycle length / seconds in year)
+        // uint256 cycleInterestRate = (currentRate * cycleLength) / SECONDS_PER_YEAR;
+        
+        // Reset current cycle interest
+        // currentCycleInterest = 0;
+        
+        // This would benefit from an enumerable set of active users to avoid 
+        // iterating over all addresses that ever had a position
+        // For production, implement a separate tracking mechanism for active positions
+        
+        // For now, we leave implementation details to optimize this based on actual protocol usage
+        
+        // Return accumulated interest
+        // return totalInterest;
     }
 
     /**
-     * @notice Initiates the onchain rebalance, calculates how much asset & stablecoin
-     *         needs to move, and broadcasts instructions for LPs to act on.
+     * @notice Distribute collected interest to LPs
      */
-    function initiateOnchainRebalance() external {
-        if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
-        uint256 expectedDateTime = lastCycleActionDateTime + rebalanceLength;
-        if (block.timestamp < expectedDateTime) revert OffChainRebalanceInProgress();
-        uint256 oracleLastUpdated = assetOracle.lastUpdated();
-        if (oracleLastUpdated < expectedDateTime) revert OracleNotUpdated();
-
-        uint256 assetPrice = assetOracle.assetPrice();
-        uint256 depositRequests = cycleTotalDepositRequests;
-        uint256 redemptionRequests = cycleTotalRedemptionRequests;
-
-        // Value of redemption requests in reserve tokens
-        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequests, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        // Initial purchase value of redemption requests i.e asset tokens in the pool
-        uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
-        // Expected new asset mints
-        uint256 expectedNewAssetMints = Math.mulDiv(depositRequests, PRECISION * reserveToAssetDecimalFactor, assetPrice);
-
-        // Calculate the net change in reserves post-rebalance
-        netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
-        // Calculate the net change in assets post-rebalance
-        netAssetDelta = int256(expectedNewAssetMints) - int256(redemptionRequests);
-        // Calculate the total amount to rebalance
-        rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
-
-        lastCycleActionDateTime = block.timestamp;
-        cycleState = CycleState.REBALANCING_ONCHAIN;
-
-        emit RebalanceInitiated(
-            cycleIndex,
-            assetPrice,
-            netReserveDelta,
-            rebalanceAmount
-        );
-    }
-
-    /**
-     * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
-     * @param lp Address of the LP performing the final on-chain step
-     * @param rebalancePrice Price at which the rebalance was executed
-     *
-     * ToDo: lpLiquidty should be based on how much being asset being rebalanced during the cycle
-     * ToDo: Need to handle the case when LP doesn't rebalance within the rebalance window
-     */
-    function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
-        if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
-
-        _validateRebalancingPrice(rebalancePrice);
-
-        uint8 lpCollateralHealth = poolLiquidityManager.checkCollateralHealth(lp);
-        if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
-        uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
+    function distributeInterestToLPs() external onlyPoolCycleManager {
+        uint256 interestToDistribute = currentCycleInterest;
+        if (interestToDistribute == 0) return;
+        
+        // Reset current cycle interest
+        currentCycleInterest = 0;
+        
+        // Get total LP liquidity
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
-
-        // Calculate the LP's share of the rebalance amount
-        uint256 amount = 0;
-        bool isDeposit = false;
-
-
-        if (rebalanceAmount > 0) {
-            // Positive rebalance amount means Pool needs to withdraw from LP collateral
-            // The LP needs to cover the difference with their collateral
-            amount = uint256(rebalanceAmount) * lpLiquidity / totalLiquidity;
-            
-            // Deduct from LP's collateral and transfer to pool
-            poolLiquidityManager.deductRebalanceAmount(lp, amount);
-
-        } else if (rebalanceAmount < 0) {
-            // Negative rebalance amount means Pool needs to add to LP collateral
-            // The LP gets back funds which are added to their collateral
-            amount = uint256(-rebalanceAmount) * lpLiquidity / totalLiquidity;
-            
-            // Transfer from pool to LP's collateral
-            reserveToken.transfer(lp, amount);
-            
-            // Add to LP's collateral
-            poolLiquidityManager.addToCollateral(lp, amount);
-        }
-        // If rebalanceAmount is 0, no action needed
-
-        cycleWeightedSum += rebalancePrice * lpLiquidity;
-        lastRebalancedCycle[lp] = cycleIndex;
-        rebalancedLPs++;
-
-        emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
-
-        // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            uint256 assetBalance = assetToken.balanceOf(address(this));
-            uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-            cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
-            
-            _startNewCycle();
-        }
-    }
-
-    /**
-     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
-     * ToDo: Slash the LPs who didn't rebalance within the rebalance window, rebalance the pool and start the next cycle
-     */
-    function settlePool() external onlyLP {
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
-        if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
+        if (totalLiquidity == 0) return;
         
-        _startNewCycle();
-    }
-
-    /**
-     * @notice If there is nothing to rebalance, start the next cycle.
-     */
-    function startNewCycle() external {
-        if (cycleState == CycleState.ACTIVE) revert InvalidCycleState();
-        if (cycleTotalDepositRequests > 0) revert InvalidCycleRequest();
-        if (cycleTotalRedemptionRequests > 0) revert InvalidCycleRequest();
+        // Get count of LPs
+        uint256 lpCount = poolLiquidityManager.getLPCount();
+        if (lpCount == 0) return;
         
-        _startNewCycle();
+        // Distribute interest to each LP according to their share of total liquidity
+        // This would be called after rebalancing when we know which LPs participated
+        
+        emit InterestDistributed(interestToDistribute, poolCycleManager.cycleIndex());
     }
 
     // --------------------------------------------------------------------------------
-    //                            GOVERNANCE FUNCTIONS
+    //                            INTEREST CALCULATION
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Pauses the pool, disabling all user actions.
+     * @notice Calculate current interest rate based on pool utilization
+     * @return rate Current interest rate (scaled by 10000)
      */
-    function pausePool() external onlyOwner {
+    function getCurrentInterestRate() public view returns (uint256 rate) {
+        uint256 utilization = getPoolUtilization();
+        
+        if (utilization <= 50_00) {
+            // Base rate when utilization <= 50%
+            return baseInterestRate;
+        } else if (utilization <= optimalUtilization) {
+            // Linear increase from base rate to optimal rate
+            uint256 utilizationDelta = utilization - 50_00;
+            uint256 optimalDelta = optimalUtilization - 50_00;
+            uint256 optimalRate = (maxInterestRate * 2) / 3; // 2/3 of max rate at optimal utilization
+            
+            uint256 additionalRate = ((optimalRate - baseInterestRate) * utilizationDelta) / optimalDelta;
+            return baseInterestRate + additionalRate;
+        } else {
+            // Exponential increase from optimal to max utilization
+            uint256 utilizationDelta = utilization - optimalUtilization;
+            uint256 maxDelta = 90_00 - optimalUtilization;
+            uint256 optimalRate = (maxInterestRate * 2) / 3;
+            
+            uint256 additionalRate = ((maxInterestRate - optimalRate) * utilizationDelta * utilizationDelta) 
+                                    / (maxDelta * maxDelta);
+            return optimalRate + additionalRate;
+        }
+    }
+
+    /**
+     * @notice Calculate pool utilization ratio
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilization() public view returns (uint256 utilization) {
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        if (totalLiquidity == 0) return 0;
+        
+        uint256 assetSupply = assetToken.totalSupply();
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 newMints = _cycleTotalDepositRequests;
+        
+        // Calculate total value: current asset supply * price + new expected mints
+        uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
+        
+        return Math.min((totalValue * BPS) / totalLiquidity, BPS); // Cap at 100%
+    }
+
+    /**
+     * @notice Calculate required collateral for a user
+     * @param user Address of the user
+     * @return requiredCollateral Required collateral amount
+     */
+    function calculateRequiredCollateral(address user) public view returns (uint256 requiredCollateral) {
+        uint256 assetBalance = assetToken.balanceOf(user);
+        if (assetBalance == 0) return 0;
+        
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 assetValue = Math.mulDiv(assetBalance, assetPrice, PRECISION);
+        
+        // Required collateral = asset value * minimum collateral ratio / BPS
+        return (assetValue * minCollateralRatio) / BPS;
+    }
+
+    // --------------------------------------------------------------------------------
+    //                               VIEW FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Get a user's collateral amount
+     * @param user Address of the user
+     * @return amount User's collateral amount
+     */
+    function userCollateral(address user) external view returns (uint256 amount) {
+        return positions[user].collateralAmount;
+    }
+
+    /**
+     * @notice Get a user's position details
+     * @param user Address of the user
+     * @return assetAmount Amount of asset tokens in position
+     * @return requiredCollateral Minimum required collateral
+     * @return isLiquidatable Whether position can be liquidated
+     */
+    function userPosition(address user) public view returns (
+        uint256 assetAmount,
+        uint256 requiredCollateral,
+        bool isLiquidatable
+    ) {
+        Position storage position = positions[user];
+        
+        assetAmount = assetToken.balanceOf(user);
+        requiredCollateral = calculateRequiredCollateral(user);
+        
+        if (assetAmount == 0) {
+            return (0, 0, false);
+        }
+        
+        // Position is liquidatable if collateral falls below liquidation threshold
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 assetValue = Math.mulDiv(assetAmount, assetPrice, PRECISION);
+        uint256 liquidationThresholdAmount = (assetValue * liquidationThreshold) / BPS;
+        
+        isLiquidatable = position.collateralAmount < liquidationThresholdAmount;
+        
+        return (assetAmount, requiredCollateral, isLiquidatable);
+    }
+
+    /**
+     * @notice Get a user's pending request
+     * @param user Address of the user
+     * @return amount Amount involved in the request
+     * @return isDeposit Whether it's a deposit or redemption
+     * @return requestCycle Cycle when request was made
+     */
+    function userRequest(address user) external view returns (
+        uint256 amount,
+        bool isDeposit,
+        uint256 requestCycle
+    ) {
+        UserRequest storage request = userRequests[user];
+        return (request.amount, request.isDeposit, request.requestCycle);
+    }
+
+    /**
+     * @notice Get the minimum collateral ratio
+     * @return The minimum collateral ratio (scaled by 10000)
+     */
+    function getMinCollateralRatio() external view returns (uint256) {
+        return minCollateralRatio;
+    }
+
+    /**
+     * @notice Get the liquidation threshold
+     * @return The liquidation threshold (scaled by 10000)
+     */
+    function getLiquidationThreshold() external view returns (uint256) {
+        return liquidationThreshold;
+    }
+
+    /**
+     * @notice Get total pending deposit requests for the current cycle
+     * @return Total amount of pending deposits
+     */
+    function cycleTotalDepositRequests() external view returns (uint256) {
+        return _cycleTotalDepositRequests;
+    }
+
+    /**
+     * @notice Get total pending redemption requests for the current cycle
+     * @return Total amount of pending redemptions
+     */
+    function cycleTotalRedemptionRequests() external view returns (uint256) {
+        return _cycleTotalRedemptionRequests;
+    }
+
+    /**
+     * @notice Returns the reserve token contract
+     */
+    function getReserveToken() external view returns (IERC20Metadata) {
+        return reserveToken;
+    }
+
+    /**
+     * @notice Returns the asset token contract
+     */
+    function getAssetToken() external view returns (IXToken) {
+        return assetToken;
+    }
+
+    /**
+     * @notice Returns the pool cycle manager contract
+     */
+    function getPoolCycleManager() external view returns (IPoolCycleManager) {
+        return poolCycleManager;
+    }
+
+    /**
+     * @notice Returns the pool liquidity manager contract
+     */
+    function getPoolLiquidityManager() external view returns (IPoolLiquidityManager) {
+        return poolLiquidityManager;
+    }
+
+    /**
+    * @notice Returns the asset oracle contract
+    */
+    function getAssetOracle() external view returns (IAssetOracle) {
+        return assetOracle;
+    }
+
+    /**
+     * @notice Returns the reserve to asset decimal factor
+     */
+    function getReserveToAssetDecimalFactor() external view returns (uint256) {
+        return reserveToAssetDecimalFactor;
+    }
+
+    // --------------------------------------------------------------------------------
+    //                           GOVERNANCE FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Update the minimum collateral ratio
+     * @param newRatio New minimum collateral ratio
+     */
+    function setMinCollateralRatio(uint256 newRatio) external onlyOwner {
+        if (newRatio <= liquidationThreshold) revert("Ratio must exceed liquidation threshold");
+        if (newRatio > 200_00) revert("Ratio cannot exceed 200%");
+        
+        minCollateralRatio = newRatio;
+    }
+
+    /**
+     * @notice Update the liquidation threshold
+     * @param newThreshold New liquidation threshold
+     */
+    function setLiquidationThreshold(uint256 newThreshold) external onlyOwner {
+        if (newThreshold >= minCollateralRatio) revert("Threshold must be below min collateral ratio");
+        if (newThreshold < 105_00) revert("Threshold cannot be below 105%");
+        
+        liquidationThreshold = newThreshold;
+    }
+
+    /**
+     * @notice Update the liquidation reward percentage
+     * @param newReward New liquidation reward percentage
+     */
+    function setLiquidationReward(uint256 newReward) external onlyOwner {
+        if (newReward > 10_00) revert("Reward cannot exceed 10%");
+        
+        liquidationReward = newReward;
+    }
+
+    /**
+     * @notice Update the base interest rate
+     * @param newRate New base interest rate
+     */
+    function setBaseInterestRate(uint256 newRate) external onlyOwner {
+        if (newRate > maxInterestRate) revert("Base rate cannot exceed max rate");
+        
+        baseInterestRate = newRate;
+    }
+
+    /**
+     * @notice Update the maximum interest rate
+     * @param newRate New maximum interest rate
+     */
+    function setMaxInterestRate(uint256 newRate) external onlyOwner {
+        if (newRate < baseInterestRate) revert("Max rate cannot be below base rate");
+        if (newRate > 100_00) revert("Max rate cannot exceed 100%");
+        
+        maxInterestRate = newRate;
+    }
+
+    /**
+     * @notice Update the optimal utilization point
+     * @param newUtilization New optimal utilization point
+     */
+    function setOptimalUtilization(uint256 newUtilization) external onlyOwner {
+        if (newUtilization <= 50_00 || newUtilization >= 90_00) {
+            revert("Utilization must be between 50% and 90%");
+        }
+        
+        optimalUtilization = newUtilization;
+    }
+
+    /**
+     * @notice Pause the contract
+     */
+    function pause() external onlyOwner {
         _pause();
     }
 
     /**
-     * @notice Unpauses the pool, re-enabling all user actions.
+     * @notice Unpause the contract
      */
-    function unpausePool() external onlyOwner {
+    function unpause() external onlyOwner {
         _unpause();
     }
 
-    /**
-     * Todo: Add a function to clean old rebalance prices to free up storage.
-     */
-
     // --------------------------------------------------------------------------------
-    //                            INTERNAL FUNCTIONS
+    //                           INTERNAL FUNCTIONS
     // --------------------------------------------------------------------------------
 
 
     /**
-     * @notice Validates the rebalancing price against the asset oracle.
-     * @param rebalancePrice Price at which the LP is rebalancing.
+     * @notice Handle interest accrual for a specific user
+     * @param user Address of the user
+     * @param cycleIndex Current cycle index
+     * @return interestAmount Interest amount charged
      */
-    function _validateRebalancingPrice(uint256 rebalancePrice) internal view {
-        uint256 oraclePrice = assetOracle.assetPrice();
+    function accrueUserInterest(address user, uint256 cycleIndex) internal returns (uint256 interestAmount) {
+        Position storage position = positions[user];
         
-        // Calculate the allowed deviation range
-        uint256 maxDeviation = (oraclePrice * MAX_PRICE_DEVIATION) / 100_00;
-        uint256 minAllowedPrice = oraclePrice > maxDeviation ? oraclePrice - maxDeviation : 0;
-        uint256 maxAllowedPrice = oraclePrice + maxDeviation;
-        
-        // Check if the rebalance price is within the allowed range
-        if (rebalancePrice < minAllowedPrice || rebalancePrice > maxAllowedPrice) {
-            revert PriceDeviationTooHigh();
+        // Skip if no assets or already updated this cycle
+        if (assetToken.balanceOf(user) == 0 || position.lastInterestCycle == cycleIndex) {
+            return 0;
         }
-    }
-
-    /**
-     * @notice Starts a new cycle after all LPs have rebalanced.
-     */
-    function _startNewCycle() internal {
-        cycleIndex++;
-        cycleState = CycleState.ACTIVE;
-        rebalancedLPs = 0;
-        cycleTotalDepositRequests = 0;
-        cycleTotalRedemptionRequests = 0;
-        cycleWeightedSum = 0;
-        lastCycleActionDateTime = block.timestamp;
-        poolReserveBalance = reserveToken.balanceOf(address(this));
-        poolAssetBalance = assetToken.totalSupply();
-        netReserveDelta = 0;
-        netAssetDelta = 0;
-        rebalanceAmount = 0;
-
-        emit CycleStarted(cycleIndex, block.timestamp);
-    }
-
-    // --------------------------------------------------------------------------------
-    //                            VIEW FUNCTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Returns the information about the pool.
-     * @return _cycleState Current state of the pool.
-     * @return _cycleIndex Current cycle index.
-     * @return _assetPrice Current price of the asset.
-     * @return _lastCycleActionDateTime Timestamp of the last cycle action.
-     * @return _reserveBalance Reserve token balance of the pool.
-     * @return _assetBalance Asset token balance of the pool.
-     * @return _totalDepositRequests Total deposit requests in the current cycle.
-     * @return _totalRedemptionRequests Total redemption requests in the current cycle.
-     * @return _netReserveDelta Net expected change in reserves post-rebalance.
-     * @return _netAssetDelta Net expected change in assets post-rebalance.
-     * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
-     */
-    function getPoolInfo() external view returns (
-        CycleState _cycleState,
-        uint256 _cycleIndex,
-        uint256 _assetPrice,
-        uint256 _lastCycleActionDateTime,
-        uint256 _reserveBalance,
-        uint256 _assetBalance,
-        uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
-        int256 _netReserveDelta,
-        int256 _netAssetDelta,
-        int256 _rebalanceAmount
-    ) {
-            _cycleState = cycleState;
-            _cycleIndex = cycleIndex;
-            _assetPrice = assetOracle.assetPrice();
-            _lastCycleActionDateTime = lastCycleActionDateTime;
-            _reserveBalance = poolReserveBalance;
-            _assetBalance = assetToken.totalSupply();
-            _totalDepositRequests = cycleTotalDepositRequests;
-            _totalRedemptionRequests = cycleTotalRedemptionRequests;
-            _netReserveDelta = netReserveDelta;
-            _netAssetDelta = netAssetDelta;
-            _rebalanceAmount = rebalanceAmount;
+        
+        uint256 assetBalance = assetToken.balanceOf(user);
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 assetValue = Math.mulDiv(assetBalance, assetPrice, PRECISION);
+        
+        // Calculate cycles since last interest accrual
+        uint256 cyclesSinceLastAccrual = 0;
+        if (position.lastInterestCycle < cycleIndex) {
+            cyclesSinceLastAccrual = cycleIndex - position.lastInterestCycle;
+        }
+        
+        // If this is the user's first cycle with a position
+        if (position.lastInterestCycle == 0 && assetBalance > 0) {
+            position.lastInterestCycle = cycleIndex;
+            return 0;
+        }
+        
+        // Calculate interest for elapsed cycles
+        uint256 interestRate = getCurrentInterestRate();
+        uint256 cycleLength = poolCycleManager.cycleLength();
+        uint256 cyclicalInterestRate = (interestRate * cycleLength * cyclesSinceLastAccrual) / SECONDS_PER_YEAR;
+        
+        // Calculate interest amount
+        interestAmount = (assetValue * cyclicalInterestRate) / BPS;
+        
+        // Apply interest (deduct from collateral)
+        if (interestAmount > 0 && position.collateralAmount >= interestAmount) {
+            position.collateralAmount -= interestAmount;
+            currentCycleInterest += interestAmount;
+            position.lastInterestCycle = cycleIndex;
+            
+            emit InterestCharged(user, interestAmount, cycleIndex);
+        } else if (interestAmount > 0) {
+            // User doesn't have enough collateral to pay full interest
+            currentCycleInterest += position.collateralAmount;
+            
+            emit InterestCharged(user, position.collateralAmount, cycleIndex);
+            
+            // Position becomes liquidatable
+            position.collateralAmount = 0;
+            position.lastInterestCycle = cycleIndex;
+        }
+        
+        return interestAmount;
     }
 }
