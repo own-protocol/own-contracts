@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.20;
-
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
 
 /**
  * @title DefaultInterestRateStrategy
- * @notice Default implementation of interest rate strategy with a kinked model
+ * @notice Default implementation of interest rate strategy with a linear model
  * @dev Provides interest rates based on pool utilization with three tiers:
  *      1. Base rate when utilization <= 50%
- *      2. Linear increase from base to optimal rate when 50% < utilization <= optimal
- *      3. Exponential increase from optimal to max when optimal < utilization <= 90%
+ *      2. Linear increase from base to max rate when 50% < utilization <= 75%
+ *      3. Constant max rate when 75% < utilization <= 95%
  */
-contract DefaultInterestRateStrategy is IInterestRateStrategy, Ownable {
+contract DefaultInterestRateStrategy is IInterestRateStrategy, Initializable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -20,44 +19,69 @@ contract DefaultInterestRateStrategy is IInterestRateStrategy, Ownable {
     /**
      * @notice Base interest rate when utilization < 50% (scaled by 10000, default: 6%)
      */
-    uint256 public baseInterestRate = 6_00;
+    uint256 public baseInterestRate;
 
     /**
-     * @notice Maximum interest rate at 90% utilization (scaled by 10000, default: 36%)
+     * @notice Maximum interest rate at 75%+ utilization (scaled by 10000, default: 36%)
      */
-    uint256 public maxInterestRate = 36_00;
+    uint256 public maxInterestRate;
 
     /**
-     * @notice Optimal utilization point (scaled by 10000, default: 80%)
+     * @notice First utilization tier breakpoint (default: 50%)
      */
-    uint256 public optimalUtilization = 80_00;
+    uint256 public utilizationTier1;
+
+    /**
+     * @notice Second utilization tier breakpoint (default: 75%)
+     */
+    uint256 public utilizationTier2;
+
+    /**
+     * @notice Maximum considered utilization (95%)
+     */
+    uint256 public maxUtilization;
     
     /**
      * @notice Basis points scaling factor
      */
     uint256 private constant BPS = 100_00;
-    
-    /**
-     * @notice First utilization tier breakpoint (50%)
-     */
-    uint256 private constant UTILIZATION_TIER_1 = 50_00;
-    
-    /**
-     * @notice Maximum considered utilization (90%)
-     */
-    uint256 private constant MAX_UTILIZATION = 90_00;
-
-    // --------------------------------------------------------------------------------
-    //                                  ERRORS
-    // --------------------------------------------------------------------------------
-
-    error InvalidParameter();
 
     /**
      * @dev Constructor that sets the owner
+     * @notice This constructor is called only once when deploying the implementation contract
+     */
+    constructor() {
+        _disableInitializers();
+    }
+    
+    /**
+     * @notice Initializes the strategy with parameters
+     * @param _baseRate Base interest rate (scaled by 10000)
+     * @param _maxRate Maximum interest rate (scaled by 10000)
+     * @param _utilTier1 First utilization tier breakpoint (scaled by 10000)
+     * @param _utilTier2 Second utilization tier breakpoint (scaled by 10000)
+     * @param _maxUtil Maximum utilization point (scaled by 10000)
      * @param _owner Address of the owner
      */
-    constructor(address _owner) Ownable(_owner) {}
+    function initialize(
+        uint256 _baseRate,
+        uint256 _maxRate,
+        uint256 _utilTier1,
+        uint256 _utilTier2,
+        uint256 _maxUtil,
+        address _owner
+    ) external {
+        if (_baseRate > _maxRate) revert InvalidParameter();
+        if (_maxRate > BPS || maxUtilization > BPS) revert InvalidParameter();
+        if (_utilTier2 <= _utilTier1 || _utilTier2 >= _maxUtil) revert InvalidParameter();
+        if (_owner == address(0)) revert InvalidParameter();
+        
+        baseInterestRate = _baseRate;
+        maxInterestRate = _maxRate;
+        utilizationTier1 = _utilTier1;
+        utilizationTier2 = _utilTier2;
+        maxUtilization = _maxUtil;
+    }
     
     // --------------------------------------------------------------------------------
     //                            INTEREST CALCULATION
@@ -69,26 +93,20 @@ contract DefaultInterestRateStrategy is IInterestRateStrategy, Ownable {
      * @return rate Current interest rate (scaled by 10000)
      */
     function calculateInterestRate(uint256 utilization) external view returns (uint256 rate) {
-        if (utilization <= UTILIZATION_TIER_1) {
+        
+        if (utilization <= utilizationTier1) {
             // Base rate when utilization <= 50%
             return baseInterestRate;
-        } else if (utilization <= optimalUtilization) {
-            // Linear increase from base rate to optimal rate
-            uint256 utilizationDelta = utilization - UTILIZATION_TIER_1;
-            uint256 optimalDelta = optimalUtilization - UTILIZATION_TIER_1;
-            uint256 optimalRate = (maxInterestRate * 2) / 3; // 2/3 of max rate at optimal utilization
+        } else if (utilization <= utilizationTier2) {
+            // Linear increase from base rate to max rate
+            uint256 utilizationDelta = utilization - utilizationTier1;
+            uint256 optimalDelta = utilizationTier2 - utilizationTier1;
             
-            uint256 additionalRate = ((optimalRate - baseInterestRate) * utilizationDelta) / optimalDelta;
+            uint256 additionalRate = ((maxInterestRate - baseInterestRate) * utilizationDelta) / optimalDelta;
             return baseInterestRate + additionalRate;
         } else {
-            // Exponential increase from optimal to max utilization
-            uint256 utilizationDelta = utilization - optimalUtilization;
-            uint256 maxDelta = MAX_UTILIZATION - optimalUtilization;
-            uint256 optimalRate = (maxInterestRate * 2) / 3;
-            
-            uint256 additionalRate = ((maxInterestRate - optimalRate) * utilizationDelta * utilizationDelta) 
-                                    / (maxDelta * maxDelta);
-            return optimalRate + additionalRate;
+            // Constant max rate when utilization > optimal
+            return maxInterestRate;
         }
     }
     
@@ -113,47 +131,26 @@ contract DefaultInterestRateStrategy is IInterestRateStrategy, Ownable {
     }
     
     /**
-     * @notice Returns the optimal utilization point
-     * @return Optimal utilization point (scaled by 10000)
+     * @notice Returns the first utilization tier
+     * @return First utilization tier (scaled by 10000)
      */
-    function getOptimalUtilization() external view returns (uint256) {
-        return optimalUtilization;
+    function getUtilizationTier1() external view returns (uint256) {
+        return utilizationTier1;
     }
-    
-    // --------------------------------------------------------------------------------
-    //                              SETTER FUNCTIONS
-    // --------------------------------------------------------------------------------
 
     /**
-     * @notice Updates the base interest rate
-     * @param newBaseRate New base interest rate (scaled by 10000)
+     * @notice Returns the second utilization tier
+     * @return Second utilization tier (scaled by 10000)
      */
-    function setBaseInterestRate(uint256 newBaseRate) external onlyOwner {
-        if (newBaseRate > maxInterestRate) revert InvalidParameter();
-        
-        baseInterestRate = newBaseRate;
+    function getUtilizationTier2() external view returns (uint256) {
+        return utilizationTier2;
     }
-    
+
     /**
-     * @notice Updates the maximum interest rate
-     * @param newMaxRate New maximum interest rate (scaled by 10000)
+     * @notice Returns the maximum utilization point
+     * @return Maximum utilization point (scaled by 10000)
      */
-    function setMaxInterestRate(uint256 newMaxRate) external onlyOwner {
-        if (newMaxRate < baseInterestRate) revert InvalidParameter();
-        if (newMaxRate > BPS) revert InvalidParameter();
-        
-        maxInterestRate = newMaxRate;
-    }
-    
-    /**
-     * @notice Updates the optimal utilization point
-     * @param newOptimalUtilization New optimal utilization point (scaled by 10000)
-     */
-    function setOptimalUtilization(uint256 newOptimalUtilization) external onlyOwner {
-        if (newOptimalUtilization <= UTILIZATION_TIER_1 || newOptimalUtilization >= MAX_UTILIZATION) {
-            revert InvalidParameter();
-        }
-        
-        optimalUtilization = newOptimalUtilization;
+    function getMaxUtilization() external view returns (uint256) {
+        return maxUtilization;
     }
 }

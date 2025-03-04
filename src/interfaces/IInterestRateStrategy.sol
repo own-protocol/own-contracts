@@ -7,6 +7,15 @@ pragma solidity ^0.8.20;
  * @dev This interface allows for different interest rate calculation strategies to be swapped
  */
 interface IInterestRateStrategy {
+
+    // --------------------------------------------------------------------------------
+    //                                  ERRORS
+    // --------------------------------------------------------------------------------
+
+    error InvalidParameter();
+    error AlreadyInitialized();
+    error NotInitialized();
+
     /**
      * @notice Returns the current interest rate based on utilization
      * @param utilization Current utilization rate of the pool (scaled by 10000)
@@ -27,26 +36,36 @@ interface IInterestRateStrategy {
     function getMaxInterestRate() external view returns (uint256);
     
     /**
-     * @notice Returns the optimal utilization point
-     * @return Optimal utilization point (scaled by 10000)
+     * @notice Returns the first utilization tier
+     * @return First utilization tier (scaled by 10000)
      */
-    function getOptimalUtilization() external view returns (uint256);
+    function getUtilizationTier1() external view returns (uint256);
+
+    /**
+     * @notice Returns the second utilization tier
+     * @return Second utilization tier (scaled by 10000)
+     */
+    function getUtilizationTier2() external view returns (uint256);
+
+    /**
+     * @notice Returns the maximum utilization point
+     * @return Maximum utilization point (scaled by 10000)
+     */
+    function getMaxUtilization() external view returns (uint256);
     
     /**
-     * @notice Updates the base interest rate
-     * @param newBaseRate New base interest rate (scaled by 10000)
+     * @notice Initializes the strategy with parameters
+     * @param _baseRate Base interest rate (scaled by 10000)
+     * @param _maxRate Maximum interest rate (scaled by 10000) 
+     * @param _optimalUtil Optimal utilization point (scaled by 10000)
+     * @param _maxUtil Maximum utilization point (scaled by 10000)
+     * @param _owner Address of the owner
      */
-    function setBaseInterestRate(uint256 newBaseRate) external;
-    
-    /**
-     * @notice Updates the maximum interest rate
-     * @param newMaxRate New maximum interest rate (scaled by 10000)
-     */
-    function setMaxInterestRate(uint256 newMaxRate) external;
-    
-    /**
-     * @notice Updates the optimal utilization point
-     * @param newOptimalUtilization New optimal utilization point (scaled by 10000)
-     */
-    function setOptimalUtilization(uint256 newOptimalUtilization) external;
+    function initialize(
+        uint256 _baseRate,
+        uint256 _maxRate,
+        uint256 _optimalUtil,
+        uint256 _maxUtil,
+        address _owner
+    ) external;
 }
