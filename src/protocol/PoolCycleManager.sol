@@ -3,7 +3,6 @@
 
 pragma solidity ^0.8.20;
 
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
@@ -19,7 +18,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Pausable {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -99,7 +98,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Pausable {
      */
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
-    constructor() Ownable(msg.sender) {
+    constructor() {
         // Disable the implementation contract
         _disableInitializers();
     }
@@ -132,8 +131,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Pausable {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _assetPool == address(0)) 
             revert ZeroAddress();
-
-        _transferOwnership(_owner);
 
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = IXToken(_assetToken);
@@ -291,24 +288,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Pausable {
         if (assetPool.cycleTotalRedemptionRequests() > 0) revert InvalidCycleRequest();
         
         _startNewCycle();
-    }
-
-    // --------------------------------------------------------------------------------
-    //                            GOVERNANCE FUNCTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Pauses the pool, disabling all user actions.
-     */
-    function pausePool() external onlyOwner {
-        _pause();
-    }
-
-    /**
-     * @notice Unpauses the pool, re-enabling all user actions.
-     */
-    function unpausePool() external onlyOwner {
-        _unpause();
     }
 
     // --------------------------------------------------------------------------------

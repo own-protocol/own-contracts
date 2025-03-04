@@ -125,20 +125,6 @@ interface IPoolCycleManager {
     function startNewCycle() external;
 
     // --------------------------------------------------------------------------------
-    //                              GOVERNANCE ACTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Pauses all pool operations
-     */
-    function pausePool() external;
-
-    /**
-     * @notice Resumes all pool operations
-     */
-    function unpausePool() external;
-
-    // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
     // --------------------------------------------------------------------------------
 
