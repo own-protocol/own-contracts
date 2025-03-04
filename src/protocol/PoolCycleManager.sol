@@ -111,22 +111,20 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      * @notice Initializes the PoolCycleManager contract with required dependencies and parameters.
      * @param _reserveToken Address of the reserve token contract (e.g., USDC).
      * @param _assetToken Address of the asset token contract.
-     * @param _assetPool Address of the asset pool contract.
      * @param _assetOracle Address of the asset price oracle contract.
+     * @param _assetPool Address of the asset pool contract.
      * @param _poolLiquidityManager Address of the LP liquidity manager contract.
      * @param _cycleLength Duration of each operational cycle.
      * @param _rebalanceLength Duration of the rebalance period.
-     * @param _owner Owner of the contract.
      */
     function initialize (
         address _reserveToken,
         address _assetToken,
-        address _assetPool,
         address _assetOracle,
+        address _assetPool,
         address _poolLiquidityManager,
         uint256 _cycleLength,
-        uint256 _rebalanceLength,
-        address _owner
+        uint256 _rebalanceLength
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _assetPool == address(0)) 

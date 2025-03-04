@@ -61,17 +61,17 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
      * @notice Initialize the contract - replaces the constructor for clones
      * @param _reserveToken Address of the reserve token
      * @param _assetToken Address of the asset token
+     * @param _assetOracle Address of the asset oracle
      * @param _assetPool Address of the asset pool
      * @param _poolCycleManager Address of the pool cycle manager
-     * @param _assetOracle Address of the asset oracle
      * @param _owner Address of the owner
      */
     function initialize(
         address _reserveToken,
         address _assetToken,
+        address _assetOracle,
         address _assetPool,
         address _poolCycleManager,
-        address _assetOracle,
         address _owner
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetPool == address(0) || 

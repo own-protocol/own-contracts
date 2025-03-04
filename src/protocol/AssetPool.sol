@@ -13,6 +13,7 @@ import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
 import {PoolStorage} from"./PoolStorage.sol";
+import {xToken} from "./xToken.sol";
 
 /**
  * @title AssetPool
@@ -104,7 +105,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     /**
      * @notice Initializes the AssetPool contract
      * @param _reserveToken Address of the reserve token
-     * @param _assetToken Address of the asset token
+     * @param _assetTokenSymbol Symbol of the asset token
      * @param _assetOracle Address of the asset oracle
      * @param _poolCycleManager Address of the pool cycle manager contract
      * @param _poolLiquidityManager Address of the pool liquidity manager contract
@@ -112,20 +113,20 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      */
     function initialize(
         address _reserveToken,
-        address _assetToken,
+        string memory _assetTokenSymbol,
         address _assetOracle,
         address _poolCycleManager,
         address _poolLiquidityManager,
         address _interestRateStrategy,
         address _owner
     ) external initializer {
-        if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
+        if (_reserveToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _poolCycleManager == address(0)) 
             revert ZeroAddress();
 
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
-        assetToken = IXToken(_assetToken);
+        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         interestRateStrategy = IInterestRateStrategy(_interestRateStrategy);
