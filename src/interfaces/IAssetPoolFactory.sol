@@ -38,30 +38,35 @@ interface IAssetPoolFactory {
     error ZeroAddress();
 
     /**
-     * @return address The address of the pool liquidity manager contract.
-     */
-    function poolLiquidityManager() external view returns (address);
-
-    /**
      * @return address The address of the asset pool contract.
      */
     function assetPool() external view returns (address);
 
     /**
+     * @return address The address of the pool cycle manager contract.
+     */
+    function poolCycleManager() external view returns (address);
+
+    /**
+     * @return address The address of the pool liquidity manager contract.
+     */
+    function poolLiquidityManager() external view returns (address);
+
+    /**
      * @dev Creates a new asset pool with the specified parameters.
      * @param depositToken Address of the token used for deposits.
-     * @param assetName Name of the token representing the asset.
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
+     * @param interestRateStrategy Address of the interest rate strategy contract.
      * @param cycleLength Length of each investment cycle in seconds.
      * @param rebalanceLength Rebalancing period length within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
         address depositToken,
-        string memory assetName,
         string memory assetSymbol,
         address oracle,
+        address interestRateStrategy,
         uint256 cycleLength,
         uint256 rebalanceLength
     ) external returns (address);
