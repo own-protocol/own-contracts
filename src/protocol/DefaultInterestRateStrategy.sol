@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.20;
-import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
 
 /**
@@ -11,7 +10,7 @@ import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
  *      2. Linear increase from base to max rate when 50% < utilization <= 75%
  *      3. Constant max rate when 75% < utilization <= 95%
  */
-contract DefaultInterestRateStrategy is IInterestRateStrategy, Initializable {
+contract DefaultInterestRateStrategy is IInterestRateStrategy {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -46,35 +45,33 @@ contract DefaultInterestRateStrategy is IInterestRateStrategy, Initializable {
      */
     uint256 private constant BPS = 100_00;
 
+    // --------------------------------------------------------------------------------
+    //                                  ERRORS
+    // --------------------------------------------------------------------------------
+
+    error InvalidParameter();
+    error AlreadyInitialized();
+    error NotInitialized();
+
     /**
-     * @dev Constructor that sets the owner
+     * @dev Constructor that initializes the default interest rate strategy
      * @notice This constructor is called only once when deploying the implementation contract
-     */
-    constructor() {
-        _disableInitializers();
-    }
-    
-    /**
-     * @notice Initializes the strategy with parameters
-     * @param _baseRate Base interest rate (scaled by 10000)
-     * @param _maxRate Maximum interest rate (scaled by 10000)
+     * @param _baseRate Base interest rate when utilization < 50% (scaled by 10000)
+     * @param _maxRate Maximum interest rate at 75%+ utilization (scaled by 10000)
      * @param _utilTier1 First utilization tier breakpoint (scaled by 10000)
      * @param _utilTier2 Second utilization tier breakpoint (scaled by 10000)
-     * @param _maxUtil Maximum utilization point (scaled by 10000)
-     * @param _owner Address of the owner
+     * @param _maxUtil Maximum considered utilization (scaled by 10000)
      */
-    function initialize(
+    constructor(
         uint256 _baseRate,
         uint256 _maxRate,
         uint256 _utilTier1,
         uint256 _utilTier2,
-        uint256 _maxUtil,
-        address _owner
-    ) external {
+        uint256 _maxUtil
+    ) {
         if (_baseRate > _maxRate) revert InvalidParameter();
         if (_maxRate > BPS || maxUtilization > BPS) revert InvalidParameter();
         if (_utilTier2 <= _utilTier1 || _utilTier2 >= _maxUtil) revert InvalidParameter();
-        if (_owner == address(0)) revert InvalidParameter();
         
         baseInterestRate = _baseRate;
         maxInterestRate = _maxRate;
