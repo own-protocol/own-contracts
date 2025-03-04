@@ -45,21 +45,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     uint256 public liquidationReward = 5_00;
 
     /**
-     * @notice Base interest rate when utilization < 50% (scaled by 10000, default: 6%)
-     */
-    uint256 public baseInterestRate = 6_00;
-
-    /**
-     * @notice Maximum interest rate at 90% utilization (scaled by 10000, default: 36%)
-     */
-    uint256 public maxInterestRate = 36_00;
-
-    /**
-     * @notice Optimal utilization point (scaled by 10000, default: 80%)
-     */
-    uint256 public optimalUtilization = 80_00;
-
-    /**
      * @notice Total interest collected in the current cycle
      */
     uint256 public currentCycleInterest;
@@ -419,28 +404,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      */
     function getCurrentInterestRate() public view returns (uint256 rate) {
         uint256 utilization = getPoolUtilization();
-        
-        if (utilization <= 50_00) {
-            // Base rate when utilization <= 50%
-            return baseInterestRate;
-        } else if (utilization <= optimalUtilization) {
-            // Linear increase from base rate to optimal rate
-            uint256 utilizationDelta = utilization - 50_00;
-            uint256 optimalDelta = optimalUtilization - 50_00;
-            uint256 optimalRate = (maxInterestRate * 2) / 3; // 2/3 of max rate at optimal utilization
-            
-            uint256 additionalRate = ((optimalRate - baseInterestRate) * utilizationDelta) / optimalDelta;
-            return baseInterestRate + additionalRate;
-        } else {
-            // Exponential increase from optimal to max utilization
-            uint256 utilizationDelta = utilization - optimalUtilization;
-            uint256 maxDelta = 90_00 - optimalUtilization;
-            uint256 optimalRate = (maxInterestRate * 2) / 3;
-            
-            uint256 additionalRate = ((maxInterestRate - optimalRate) * utilizationDelta * utilizationDelta) 
-                                    / (maxDelta * maxDelta);
-            return optimalRate + additionalRate;
-        }
+        return interestRateStrategy.calculateInterestRate(utilization);
     }
 
     /**
@@ -458,7 +422,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         // Calculate total value: current asset supply * price + new expected mints
         uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
         
-        return Math.min((totalValue * BPS) / totalLiquidity, BPS); // Cap at 100%
+        return Math.min((totalValue * BPS) / totalLiquidity, BPS);
     }
 
     /**
@@ -645,53 +609,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         if (newReward > 10_00) revert("Reward cannot exceed 10%");
         
         liquidationReward = newReward;
-    }
-
-    /**
-     * @notice Update the base interest rate
-     * @param newRate New base interest rate
-     */
-    function setBaseInterestRate(uint256 newRate) external onlyOwner {
-        if (newRate > maxInterestRate) revert("Base rate cannot exceed max rate");
-        
-        baseInterestRate = newRate;
-    }
-
-    /**
-     * @notice Update the maximum interest rate
-     * @param newRate New maximum interest rate
-     */
-    function setMaxInterestRate(uint256 newRate) external onlyOwner {
-        if (newRate < baseInterestRate) revert("Max rate cannot be below base rate");
-        if (newRate > 100_00) revert("Max rate cannot exceed 100%");
-        
-        maxInterestRate = newRate;
-    }
-
-    /**
-     * @notice Update the optimal utilization point
-     * @param newUtilization New optimal utilization point
-     */
-    function setOptimalUtilization(uint256 newUtilization) external onlyOwner {
-        if (newUtilization <= 50_00 || newUtilization >= 90_00) {
-            revert("Utilization must be between 50% and 90%");
-        }
-        
-        optimalUtilization = newUtilization;
-    }
-
-    /**
-     * @notice Pause the contract
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unpause() external onlyOwner {
-        _unpause();
     }
 
     // --------------------------------------------------------------------------------

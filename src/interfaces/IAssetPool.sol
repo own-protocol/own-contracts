@@ -8,6 +8,7 @@ import {IXToken} from "./IXToken.sol";
 import {IPoolLiquidityManager} from "./IPoolLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
 import {IPoolCycleManager} from "./IPoolCycleManager.sol";
+import {IInterestRateStrategy} from "./IInterestRateStrategy.sol";
 
 /**
  * @title IAssetPool
@@ -268,7 +269,7 @@ interface IAssetPool {
     /**
      * @notice Returns the interest rate strategy
      */
-    function interestRateStrategy() external view returns (uint256);
+    function interestRateStrategy() external view returns (IInterestRateStrategy);
 
     /**
      * @notice Calculate current interest rate based on pool utilization
