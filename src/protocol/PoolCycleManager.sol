@@ -98,6 +98,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      */
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
+    /**
+     * @notice Cumulative pool interest accrued over time (in ray precision)
+     */
+    uint256 public cumulativePoolInterest;
+
+    /**
+     * @notice Timestamp of the last interest accrual
+     */
+    uint256 public lastInterestAccrualTimestamp;
+
     constructor() {
         // Disable the implementation contract
         _disableInitializers();
@@ -165,6 +175,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     function initiateOffchainRebalance() external whenNotPaused {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
+
+        // Accrue interest before changing cycle state
+        _accrueInterest();
+
         cycleState = CycleState.REBALANCING_OFFCHAIN;
         lastCycleActionDateTime = block.timestamp;
     }
@@ -197,6 +211,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
         netAssetDelta = int256(expectedNewAssetMints) - int256(redemptionRequests);
         // Calculate the total amount to rebalance
         rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
+
+        // Accrue interest before changing cycle state
+        _accrueInterest();
 
         lastCycleActionDateTime = block.timestamp;
         cycleState = CycleState.REBALANCING_ONCHAIN;
@@ -289,6 +306,40 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     }
 
     // --------------------------------------------------------------------------------
+    //                          INTEREST CALCULATION LOGIC
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Accrues interest based on the current rate, time elapsed, and cycle/rebalance periods
+     * @dev Updates cumulativePoolInterest
+     */
+    function _accrueInterest() internal {
+        uint256 currentTimestamp = block.timestamp;
+        if (currentTimestamp <= lastInterestAccrualTimestamp) {
+            return;
+        }
+        
+        // Convert BPS interest rate (10000 = 100%) to ray (1e27)
+        uint256 currentRate = assetPool.getCurrentInterestRate();
+        uint256 rateWithPrecision = Math.mulDiv(currentRate, PRECISION, BPS);
+        
+        // Calculate time elapsed since last accrual in seconds
+        uint256 timeElapsed = currentTimestamp - lastInterestAccrualTimestamp;
+        
+        // Calculate interest for the elapsed time
+        // Formula: interest = rate * timeElapsed / secondsPerYear
+        uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
+        
+        // Add interest to cumulative total
+        cumulativePoolInterest += interest;
+        
+        // Update last accrual timestamp
+        lastInterestAccrualTimestamp = currentTimestamp;
+        
+        emit InterestAccrued(interest, cumulativePoolInterest, currentTimestamp);
+    }
+
+    // --------------------------------------------------------------------------------
     //                            INTERNAL FUNCTIONS
     // --------------------------------------------------------------------------------
 
@@ -314,6 +365,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      * @notice Starts a new cycle after all LPs have rebalanced.
      */
     function _startNewCycle() internal {
+
+        // Accrue interest before changing cycle state
+        _accrueInterest();
+
         cycleIndex++;
         cycleState = CycleState.ACTIVE;
         rebalancedLPs = 0;

@@ -62,6 +62,18 @@ interface IPoolCycleManager {
         int256 rebalanceAmount
     );
 
+    /**
+     * @notice Emitted when interest is accrued
+     * @param interestAccrued Amount of interest accrued in this calculation
+     * @param cumulativeInterest Total cumulative interest after this accrual
+     * @param timestamp Timestamp when interest was accrued
+     */
+    event InterestAccrued(
+        uint256 interestAccrued,
+        uint256 cumulativeInterest,
+        uint256 timestamp
+    );
+
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
@@ -226,4 +238,14 @@ interface IPoolCycleManager {
      * @param cycle Cycle index to query
      */
     function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
+
+    /**
+     * @notice Returns the cumulative interest accrued in the pool
+     */
+    function cumulativePoolInterest() external view returns (uint256);
+
+    /**
+     * @notice Returns the timestamp of the last interest accrual
+     */
+    function lastInterestAccrualTimestamp() external view returns (uint256);
 }
