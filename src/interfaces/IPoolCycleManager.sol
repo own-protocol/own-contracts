@@ -73,6 +73,18 @@ interface IPoolCycleManager {
         uint256 cumulativeInterest,
         uint256 timestamp
     );
+    
+    /**
+     * @notice Emitted when interest is distributed to an LP
+     * @param lp Address of the LP
+     * @param amount Amount of interest distributed
+     * @param cycleIndex Index of the cycle
+     */
+    event InterestDistributedToLP(
+        address indexed lp,
+        uint256 amount,
+        uint256 indexed cycleIndex
+    );
 
     // --------------------------------------------------------------------------------
     //                                     ERRORS
@@ -243,6 +255,11 @@ interface IPoolCycleManager {
      * @notice Returns the cumulative interest accrued in the pool
      */
     function cumulativePoolInterest() external view returns (uint256);
+
+    /**
+     * @notice Returns the cumulative interest amount accrued in reserve tokens
+     */
+    function cumulativeInterestInReserve() external view returns (uint256);
 
     /**
      * @notice Returns the timestamp of the last interest accrual

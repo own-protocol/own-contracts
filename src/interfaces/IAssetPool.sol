@@ -17,25 +17,27 @@ import {IInterestRateStrategy} from "./IInterestRateStrategy.sol";
  */
 interface IAssetPool {
     /**
-     * @notice Structure to hold user's deposit or redemption request
-     * @param amount Amount of tokens (reserve for deposit, asset for redemption)
-     * @param isDeposit True for deposit, false for redemption
+     * @notice User request for deposit or redemption
+     * @param amount Amount of tokens in the request
+     * @param collateralAmount Amount of collateral locked with the request
+     * @param isDeposit Whether it's a deposit (true) or redemption (false)
      * @param requestCycle Cycle when request was made
      */
     struct UserRequest {
         uint256 amount;
+        uint256 collateralAmount;
         bool isDeposit;
         uint256 requestCycle;
     }
 
     /**
-     * @notice Structure to hold user's position data
-     * @param collateralAmount Amount of collateral deposited
-     * @param lastInterestCycle Last cycle when interest was charged
+     * @notice User position in the protocol
+     * @param collateralAmount Amount of collateral provided
+     * @param scaledInterest User's scaled interest value for debt calculation
      */
     struct Position {
         uint256 collateralAmount;
-        uint256 lastInterestCycle;
+        uint256 scaledInterest;
     }
 
     // --------------------------------------------------------------------------------
@@ -145,16 +147,19 @@ interface IAssetPool {
     error ExcessiveWithdrawal();
     /// @notice Thrown when trying to liquidate a position that isn't eligible
     error PositionNotLiquidatable();
+    /// @notice Thrown when a user has insufficient collateral to make a deposit
+    error InsufficientCollateral();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Allows users to deposit reserve tokens into the pool
+     * @notice Make a deposit request
      * @param amount Amount of reserve tokens to deposit
+     * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount) external;
+    function depositRequest(uint256 amount, uint256 collateralAmount) external;
 
     /**
      * @notice Creates a redemption request for the user
@@ -173,10 +178,10 @@ interface IAssetPool {
     function claimRequest() external;
 
     /**
-     * @notice Allows users to deposit collateral
+     * @notice Allows users to deposit additional collateral
      * @param amount Amount of collateral to deposit
      */
-    function depositCollateral(uint256 amount) external;
+    function addCollateral(uint256 amount) external;
 
     /**
      * @notice Allows users to withdraw excess collateral
@@ -190,24 +195,24 @@ interface IAssetPool {
      */
     function liquidatePosition(address user) external;
 
-    // --------------------------------------------------------------------------------
-    //                          INTEREST MANAGEMENT
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Calculate and charge interest to all users with positions
-     * @return totalInterest Total interest collected in the cycle
-     */
-    function chargeInterestForCycle() external returns (uint256 totalInterest);
-
-    /**
-     * @notice Distribute collected interest to LPs
-     */
-    function distributeInterestToLPs() external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Calculate interest debt for a user
+     * @param user User address
+     * @return interestDebt Amount of interest debt in reserve tokens
+     */
+    function getInterestDebt(address user) external view returns (uint256 interestDebt);
+
+        /**
+     * @notice Check collateral health status of a user
+     * @param user User address
+     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
+     */
+    function getCollateralHealth(address user) external view returns (uint8 health);
 
     /**
      * @notice Get a user's collateral amount
@@ -233,11 +238,13 @@ interface IAssetPool {
      * @notice Get a user's pending request
      * @param user Address of the user
      * @return amount Amount involved in the request
+     * @return collateralAmount Collateral locked in the request
      * @return isDeposit Whether it's a deposit or redemption
      * @return requestCycle Cycle when request was made
      */
     function userRequest(address user) external view returns (
         uint256 amount,
+        uint256 collateralAmount,
         bool isDeposit,
         uint256 requestCycle
     );
@@ -246,7 +253,7 @@ interface IAssetPool {
      * @notice Get the minimum collateral ratio
      * @return The minimum collateral ratio (scaled by 10000)
      */
-    function getMinCollateralRatio() external view returns (uint256);
+    function getHealthyCollateralRatio() external view returns (uint256);
 
     /**
      * @notice Get the liquidation threshold
@@ -265,6 +272,11 @@ interface IAssetPool {
      * @return Total amount of pending redemptions
      */
     function cycleTotalRedemptionRequests() external view returns (uint256);
+
+    /**
+     * @notice Total user collateral in the pool
+     */
+    function totalUserCollateral() external view returns (uint256);
 
     /**
      * @notice Returns the interest rate strategy

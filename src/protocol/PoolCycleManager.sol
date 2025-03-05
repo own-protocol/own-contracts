@@ -99,9 +99,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     /**
-     * @notice Cumulative pool interest accrued over time (in ray precision)
+     * @notice Cumulative pool interest accrued over time
      */
     uint256 public cumulativePoolInterest;
+
+    /**
+     * @notice Total cumulative interest accrued in reserve tokens
+     */
+    uint256 public cumulativeInterestInReserve;
 
     /**
      * @notice Timestamp of the last interest accrual
@@ -329,6 +334,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
         // Calculate interest for the elapsed time
         // Formula: interest = rate * timeElapsed / secondsPerYear
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
+
+        // Update cumulativeInterestInReserve
+        uint256 assetSupply = assetToken.totalSupply();
+        uint256 assetPrice = assetOracle.assetPrice();
+        if (cycleState == CycleState.ACTIVE) {
+            assetPrice = cycleRebalancePrice[cycleIndex - 1];
+        }
+        uint256 assetValueInReserve = Math.mulDiv(assetSupply, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        uint256 newInterestInReserve = Math.mulDiv(assetValueInReserve, interest, PRECISION);
+        cumulativeInterestInReserve += newInterestInReserve;
         
         // Add interest to cumulative total
         cumulativePoolInterest += interest;
@@ -366,9 +381,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      */
     function _startNewCycle() internal {
 
-        // Accrue interest before changing cycle state
-        _accrueInterest();
-
         cycleIndex++;
         cycleState = CycleState.ACTIVE;
         rebalancedLPs = 0;
@@ -379,6 +391,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
         netReserveDelta = 0;
         netAssetDelta = 0;
         rebalanceAmount = 0;
+
+        // Accrue interest before changing cycle state
+        _accrueInterest();
 
         // Reset cycle totals in the AssetPool
         assetPool.chargeInterestForCycle();
