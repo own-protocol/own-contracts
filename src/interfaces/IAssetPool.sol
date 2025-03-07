@@ -5,37 +5,39 @@ pragma solidity ^0.8.20;
 
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IXToken} from "./IXToken.sol";
-import {ILPLiquidityManager} from "./ILPLiquidityManager.sol";
+import {IPoolLiquidityManager} from "./IPoolLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
+import {IPoolCycleManager} from "./IPoolCycleManager.sol";
+import {IInterestRateStrategy} from "./IInterestRateStrategy.sol";
 
 /**
  * @title IAssetPool
- * @notice Interface for the AssetPool contract which manages a decentralized pool of assets
- * @dev Handles deposits, minting, redemptions, and LP rebalancing operations
+ * @notice Interface for the AssetPool contract which manages user positions and requests
+ * @dev Handles user deposits, withdrawals, and position management
  */
 interface IAssetPool {
     /**
-     * @notice Enum representing the current state of the pool's operational cycle
-     * @param ACTIVE Normal operation state where users can deposit and redeem
-     * @param REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
-     * @param REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
-     */
-    enum CycleState {
-        ACTIVE,
-        REBALANCING_OFFCHAIN,
-        REBALANCING_ONCHAIN
-    }
-
-    /**
-     * @notice Structure to hold user's deposit or redemption request
-     * @param amount Amount of tokens (reserve for deposit, asset for redemption)
-     * @param isDeposit True for deposit, false for redemption
+     * @notice User request for deposit or redemption
+     * @param amount Amount of tokens in the request
+     * @param collateralAmount Amount of collateral locked with the request
+     * @param isDeposit Whether it's a deposit (true) or redemption (false)
      * @param requestCycle Cycle when request was made
      */
     struct UserRequest {
         uint256 amount;
+        uint256 collateralAmount;
         bool isDeposit;
         uint256 requestCycle;
+    }
+
+    /**
+     * @notice User position in the protocol
+     * @param collateralAmount Amount of collateral provided
+     * @param scaledInterest User's scaled interest value for debt calculation
+     */
+    struct Position {
+        uint256 collateralAmount;
+        uint256 scaledInterest;
     }
 
     // --------------------------------------------------------------------------------
@@ -91,94 +93,70 @@ interface IAssetPool {
     event ReserveWithdrawn(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
-     * @notice Emitted when an LP completes their rebalancing action
-     * @param lp Address of the LP performing the rebalance
-     * @param rebalancePrice Price at which the rebalance occurred
-     * @param amount Amount of tokens involved in the rebalance
-     * @param isDeposit True if LP is depositing, false if withdrawing
-     * @param cycleIndex Current operational cycle index
+     * @notice Emitted when collateral is deposited
+     * @param user Address of the user depositing collateral
+     * @param amount Amount of collateral deposited
      */
-    event Rebalanced(address indexed lp, uint256 rebalancePrice, uint256 amount, bool isDeposit, uint256 indexed cycleIndex);
+    event CollateralDeposited(address indexed user, uint256 amount);
 
     /**
-     * @notice Emitted when a new operational cycle begins
-     * @param cycleIndex Index of the new cycle
-     * @param timestamp Block timestamp when the cycle started
+     * @notice Emitted when collateral is withdrawn
+     * @param user Address of the user withdrawing collateral
+     * @param amount Amount of collateral withdrawn
      */
-    event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
+    event CollateralWithdrawn(address indexed user, uint256 amount);
 
     /**
-     * @notice Emitted when a rebalance period is initiated
-     * @param cycleIndex Current operational cycle index
-     * @param assetPrice Current price of the asset
-     * @param netReserveDelta Net change in reserves required
-     * @param rebalanceAmount Total amount to be rebalanced
+     * @notice Emitted when a position is liquidated
+     * @param user Address of the user whose position was liquidated
+     * @param liquidator Address of the liquidator
+     * @param reward Amount of collateral given as reward
      */
-    event RebalanceInitiated(
-        uint256 indexed cycleIndex,
-        uint256 assetPrice,
-        int256 netReserveDelta,
-        int256 rebalanceAmount
-    );
+    event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
 
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
 
-    /// @notice Thrown when an invalid amount is provided for an operation
-    error InvalidAmount();
     /// @notice Thrown when a user has insufficient balance for an operation
     error InsufficientBalance();
-    /// @notice Thrown when a non-LP address attempts to perform LP actions
-    error NotLP();
-    /// @notice Thrown when an action is attempted in an invalid cycle state
-    error InvalidCycleState();
-    /// @notice Thrown when an LP attempts to rebalance multiple times in a cycle
-    error AlreadyRebalanced();
-    /// @notice Thrown when a rebalance action is attempted after the window has closed
-    error RebalancingExpired();
-    /// @notice Thrown when a zero address is provided for a critical parameter
-    error ZeroAddress();
+    /// @notice Thrown when a function is called by an address that is not the PoolCycleManager
+    error NotPoolCycleManager();
     /// @notice Thrown when attempting to claim with no pending claims
     error NothingToClaim();
     /// @notice Thrown when attempting to cancel with no pending requests
     error NothingToCancel();
     /// @notice Thrown when user has a pending mint or burn request
-    error MintOrBurnPending();
-    /// @notice Thrown when attempting operations during an active cycle
-    error CycleInProgress();
-    /// @notice Thrown when an LP has insufficient liquidity for an operation
-    error InsufficientLPLiquidity();
-    /// @notice Thrown when an LP has insufficient collateral for an operation
-    error InsufficientLPCollateral();
-    /// @notice Thrown when rebalance parameters don't match requirements
-    error RebalanceMismatch();
-    /// @notice Thrown when a user attempts to interact with an LP's rebalance
-    error InvalidCycleRequest();
-    /// @notice Thrown when an someone tries to start a onchain rebalance before offchain rebalance ends
-    error OffChainRebalanceInProgress();
-     /// @notice Thrown when an someone tries to settle before onchain rebalance ends
-    error OnChainRebalancingInProgress();
-    /// @notice Thrown when oracle price is not updated
-    error OracleNotUpdated();
-    /// @notice Thrown when price deviation is too high
-    error PriceDeviationTooHigh();
+    error RequestPending();
+    /// @notice Thrown when a user attempts to withdraw more collateral than allowed
+    error ExcessiveWithdrawal();
+    /// @notice Thrown when trying to liquidate a position that isn't eligible
+    error PositionNotLiquidatable();
+    /// @notice Thrown when a user has insufficient collateral to make a deposit
+    error InsufficientCollateral();
+    /// @notice Thrown when an is zero address
+    error ZeroAddress();
+    /// @notice Thrown when the amount is invalid
+    error InvalidAmount();
+    /// @notice Thrown when the caller is unauthorized
+    error Unauthorized();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Allows users to deposit reserve tokens into the pool
+     * @notice Make a deposit request
      * @param amount Amount of reserve tokens to deposit
+     * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount) external;
+    function depositRequest(uint256 amount, uint256 collateralAmount) external;
 
     /**
-     * @notice Creates a redemption request for the user.
-     * @param assetAmount Amount of asset tokens to burn
+     * @notice Creates a redemption request for the user
+     * @param amount Amount of asset tokens to burn
      */
-    function redemptionRequest(uint256 assetAmount) external;
+    function redemptionRequest(uint256 amount) external;
 
     /**
      * @notice Allows users to cancel their pending request
@@ -186,205 +164,182 @@ interface IAssetPool {
     function cancelRequest() external;
 
     /**
-     * @notice Claim asset or reserve based on user's previous pending requests once they are processed
-     * @param user Address of the user for whom the asset or reserve is to be claimed
+     * @notice Claim processed request for the user
      */
     function claimRequest(address user) external;
 
+    /**
+     * @notice Allows users to deposit additional collateral
+     * @param amount Amount of collateral to deposit
+     */
+    function addCollateral(uint256 amount) external;
+
+    /**
+     * @notice Allows users to withdraw excess collateral
+     * @param amount Amount of collateral to withdraw
+     */
+    function withdrawCollateral(uint256 amount) external;
+
+    /**
+     * @notice Liquidate an undercollateralized position
+     * @param user Address of the user whose position to liquidate
+     */
+    function liquidatePosition(address user) external;
 
     // --------------------------------------------------------------------------------
-    //                                  LP ACTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Initiates the off-chain rebalancing period for LPs
-     */
-    function initiateOffchainRebalance() external;
-
-    /**
-     * @notice Initiates the onchain rebalancing period for LPs
-     */
-    function initiateOnchainRebalance() external;
-
-    /**
-     * @notice Allows LPs to perform their rebalancing actions
-     * @param lp Address of the LP performing the rebalance
-     * @param rebalancePrice Price at which the rebalance is executed
-     */
-    function rebalancePool(address lp, uint256 rebalancePrice) external;
-
-    /**
-     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
-     */
-    function settlePool() external;
-        
-    /**
-     * @notice When there is nothing to rebalance, start the new cycle
-     */
-    function startNewCycle() external;
-
-    // --------------------------------------------------------------------------------
-    //                              GOVERNANCE ACTIONS
+    //                               EXTERNAL FUNCTIONS
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Pauses all pool operations
-     */
-    function pausePool() external;
+    * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param amount Amount of interest to deduct
+    */
+    function deductInterest(uint256 amount) external;
 
-    /**
-     * @notice Resumes all pool operations
-     */
-    function unpausePool() external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Returns information about the pool
-     * @return _cycleState Current state of the pool
-     * @return _cycleIndex Current operational cycle index
-     * @return _assetPrice Current price of the asset
-     * @return _lastCycleActionDateTime Timestamp of the last cycle action
-    * @return _reserveBalance Reserve token balance of the pool
-    * @return _assetBalance Asset token balance of the pool
-    * @return _totalDepositRequests Total deposit requests for the cycle
-    * @return _totalRedemptionRequests Total redemption requests for the cycle
-    * @return _netReserveDelta Net change in reserves after rebalance
-    * @return _netAssetDelta Net change in assets after rebalance
-    * @return _rebalanceAmount Total amount to be rebalanced
+     * @notice Calculate interest debt for a user
+     * @param user User address
+     * @return interestDebt Amount of interest debt in reserve tokens
      */
-    function getPoolInfo() external view returns (
-        CycleState _cycleState,
-        uint256 _cycleIndex,
-        uint256 _assetPrice,
-        uint256 _lastCycleActionDateTime,
-        uint256 _reserveBalance,
-        uint256 _assetBalance,
-        uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
-        int256 _netReserveDelta,
-        int256 _netAssetDelta,
-        int256 _rebalanceAmount
+    function getInterestDebt(address user) external view returns (uint256 interestDebt);
+
+        /**
+     * @notice Check collateral health status of a user
+     * @param user User address
+     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
+     */
+    function getCollateralHealth(address user) external view returns (uint8 health);
+
+    /**
+     * @notice Get a user's collateral amount
+     * @param user Address of the user
+     * @return amount User's collateral amount
+     */
+    function userCollateral(address user) external view returns (uint256 amount);
+
+    /**
+     * @notice Get a user's position details
+     * @param user Address of the user
+     * @return assetAmount Amount of asset tokens in position
+     * @return requiredCollateral Minimum required collateral
+     * @return isLiquidatable Whether position can be liquidated
+     */
+    function userPosition(address user) external view returns (
+        uint256 assetAmount,
+        uint256 requiredCollateral,
+        bool isLiquidatable
     );
 
-    // --------------------------------------------------------------------------------
-    //                               STATE GETTERS
-    // --------------------------------------------------------------------------------
-
     /**
-     * @notice Returns the reserve token contract
-     */
-    function reserveToken() external view returns (IERC20Metadata);
-
-    /**
-     * @notice Returns the asset token contract
-     */
-    function assetToken() external view returns (IXToken);
-
-    /**
-     * @notice Returns the LP liquidity manager contract
-     */
-    function lpLiquidityManager() external view returns (ILPLiquidityManager);
-
-    /**
-     * @notice Returns the asset oracle contract
-     */
-    function assetOracle() external view returns (IAssetOracle);
-
-    /**
-     * @notice Returns the current cycle index
-     */
-    function cycleIndex() external view returns (uint256);
-
-    /**
-     * @notice Returns the current cycle state
-     */
-    function cycleState() external view returns (CycleState);
-
-    /**
-     * @notice Returns the timestamp of the last cycle action
-     */
-    function lastCycleActionDateTime() external view returns (uint256);
-
-    /**
-     * @notice Returns the duration of operational cycles
-     */
-    function cycleLength() external view returns (uint256);
-
-    /**
-     * @notice Returns the duration of rebalance periods
-     */
-    function rebalanceLength() external view returns (uint256);
-
-    /**
-     * @notice Returns reserve token balance of the pool (excluding new deposits).
-     */
-    function poolReserveBalance() external view returns (uint256);
-
-    /**
-     * @notice Returns the net change in reserves after rebalance
-     */
-    function netReserveDelta() external view returns (int256);
-
-    /**
-     * @notice Returns the asset token balance of the pool
-     */
-    function poolAssetBalance() external view returns (uint256);
-
-    /**
-     * @notice Returns the net change in assets after rebalance
-     */
-    function netAssetDelta() external view returns (int256);
-
-    /**
-     * @notice Returns the total amount to be rebalanced
-     */
-    function rebalanceAmount() external view returns (int256);
-
-    /**
-     * @notice Returns the number of LPs that have completed rebalancing
-     */
-    function rebalancedLPs() external view returns (uint256);
-
-    /**
-     * @notice Returns the last cycle an LP rebalanced
-     * @param lp Address of the LP to check
-     */
-    function lastRebalancedCycle(address lp) external view returns (uint256);
-
-    /**
-     * @notice Returns the pending request for a user
+     * @notice Get a user's pending request
      * @param user Address of the user
-     * @return amount Amount of tokens in the request
-     * @return isDeposit True if deposit request, false if redemption
+     * @return amount Amount involved in the request
+     * @return collateralAmount Collateral locked in the request
+     * @return isDeposit Whether it's a deposit or redemption
      * @return requestCycle Cycle when request was made
      */
-    function pendingRequests(address user) external view returns (
+    function userRequest(address user) external view returns (
         uint256 amount,
+        uint256 collateralAmount,
         bool isDeposit,
         uint256 requestCycle
     );
 
     /**
-     * @notice Returns total deposit requests of the current cycle
+     * @notice Get healthy collateral ratio
+     * @return The healthy collateral ratio (scaled by 10000)
+     */
+    function healthyCollateralRatio() external view returns (uint256);
+
+    /**
+     * @notice Get the liquidation threshold
+     * @return The liquidation threshold (scaled by 10000)
+     */
+    function liquidationThreshold() external view returns (uint256);
+
+    /**
+     * @notice Get the liquidation reward
+     * @return The liquidation reward (scaled by 10000)
+     */
+    function liquidationReward() external view returns (uint256);
+
+    /**
+     * @notice Get total pending deposit requests for the current cycle
+     * @return Total amount of pending deposits
      */
     function cycleTotalDepositRequests() external view returns (uint256);
 
     /**
-     * @notice Returns total redemption requests for the cycle
+     * @notice Get total pending redemption requests for the current cycle
+     * @return Total amount of pending redemptions
      */
     function cycleTotalRedemptionRequests() external view returns (uint256);
 
     /**
-     * @notice Returns the rebalance price for a specific cycle
-     * @param cycle Cycle index to query
+     * @notice Total user collateral in the pool
      */
-    function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
+    function totalUserCollateral() external view returns (uint256);
 
     /**
-     * @notice Returns the reserve token decimal factor
+     * @notice Returns the interest rate strategy
      */
-    function reserveToAssetDecimalFactor() external view returns (uint256);
+    function interestRateStrategy() external view returns (IInterestRateStrategy);
+
+    /**
+     * @notice Calculate current interest rate based on pool utilization
+     * @return rate Current interest rate (scaled by 10000)
+     */
+    function getCurrentInterestRate() external view returns (uint256 rate);
+
+    /**
+     * @notice Calculate pool utilization ratio
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilization() external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate required collateral for a user
+     * @param user Address of the user
+     * @return requiredCollateral Required collateral amount
+     */
+    function calculateRequiredCollateral(address user) external view returns (uint256 requiredCollateral);
+
+    // --------------------------------------------------------------------------------
+    //                               DEPENDENCIES
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the reserve token contract
+     */
+    function getReserveToken() external view returns (IERC20Metadata);
+
+    /**
+     * @notice Returns the asset token contract
+     */
+    function getAssetToken() external view returns (IXToken);
+
+    /**
+     * @notice Returns the pool cycle manager contract
+     */
+    function getPoolCycleManager() external view returns (IPoolCycleManager);
+
+    /**
+     * @notice Returns the pool liquidity manager contract
+     */
+    function getPoolLiquidityManager() external view returns (IPoolLiquidityManager);
+
+    /**
+     * @notice Returns the asset oracle contract
+     */
+    function getAssetOracle() external view returns (IAssetOracle);
+
+    /**
+     * @notice Returns the reserve to asset decimal factor
+     */
+    function getReserveToAssetDecimalFactor() external view returns (uint256);
 }

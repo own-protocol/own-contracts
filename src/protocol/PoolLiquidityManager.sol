@@ -1,45 +1,33 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: BUSL-1.1
 // author: bhargavaparoksham
 
 pragma solidity ^0.8.20;
-
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
-import "../interfaces/IAssetPool.sol";
-import "../interfaces/IAssetOracle.sol";
-import "../interfaces/IXToken.sol";
-import "../interfaces/ILPLiquidityManager.sol";
+import {IAssetPool} from "../interfaces/IAssetPool.sol";
+import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
+import {IXToken} from "../interfaces/IXToken.sol";
+import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
+import {PoolStorage} from "./PoolStorage.sol";
 
 /**
- * @title LPLiquidityManager
+ * @title PoolLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
  */
-contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, Initializable {
+contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, ReentrancyGuard {
     
     // Healthy collateral ratio (50%)
-    uint256 public constant HEALTHY_COLLATERAL_RATIO = 50_00;
+    uint256 public constant healthyCollateralRatio = 50_00;
     // Collateral threshold for liquidation (30%)   
-    uint256 public constant COLLATERAL_THRESHOLD = 30_00; 
+    uint256 public constant collateralThreshold = 30_00; 
     // Registration percentage (20%) 
-    uint256 public constant REGISTRATION_COLLATERAL_RATIO = 20_00;
+    uint256 public constant registrationCollateralRatio = 20_00;
     // Liquidation reward percentage (5%)
-    uint256 public constant LIQUIDATION_REWARD_PERCENTAGE = 5_00;
+    uint256 public constant liquidationReward = 5_00;
     
-    // Precision for calculations
-    uint256 private constant PRECISION = 1e18;
-
-    // Asset pool contract
-    IAssetPool public assetPool;
-    
-    // Asset oracle
-    IAssetOracle public assetOracle;
-    
-    // Reserve token (USDC, USDT etc)
-    IERC20 public reserveToken;
-
     // Total liquidity in the pool
     uint256 public totalLPLiquidity;
     
@@ -51,6 +39,18 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
     
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
+
+    // --------------------------------------------------------------------------------
+    //                                  MODIFIERS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @dev Ensures the caller is the pool cycle manager
+     */
+    modifier onlyPoolCycleManager() {
+        if (msg.sender != address(poolCycleManager)) revert NotPoolCycleManager();
+        _;
+    }
 
     /**
      * @notice Modifier to ensure the caller is a registered LP
@@ -71,25 +71,33 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
 
     /**
      * @notice Initialize the contract - replaces the constructor for clones
-     * @param _assetPool Address of the asset pool
-     * @param _assetOracle Address of the asset oracle
      * @param _reserveToken Address of the reserve token
+     * @param _assetToken Address of the asset token
+     * @param _assetOracle Address of the asset oracle
+     * @param _assetPool Address of the asset pool
+     * @param _poolCycleManager Address of the pool cycle manager
      * @param _owner Address of the owner
      */
     function initialize(
-        address _assetPool,
-        address _assetOracle,
         address _reserveToken,
+        address _assetToken,
+        address _assetOracle,
+        address _assetPool,
+        address _poolCycleManager,
         address _owner
     ) external initializer {
-        if (_assetPool == address(0) || _assetOracle == address(0) || 
-            _reserveToken == address(0) || _owner == address(0)) {
+        if (_reserveToken == address(0) || _assetToken == address(0) || _assetPool == address(0) || 
+            _poolCycleManager == address(0) || _assetOracle == address(0) || _owner == address(0)) {
             revert ZeroAddress();
         }
             
+        reserveToken = IERC20Metadata(_reserveToken);
+        assetToken = IXToken(_assetToken);
         assetPool = IAssetPool(_assetPool);
+        poolCycleManager = IPoolCycleManager(_poolCycleManager);
         assetOracle = IAssetOracle(_assetOracle);
-        reserveToken = IERC20(_reserveToken);
+
+        _initializeDecimalFactor(address(reserveToken), address(assetToken));
         
         // Initialize Ownable
         _transferOwnership(_owner);
@@ -104,7 +112,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         if (liquidityAmount == 0) revert InvalidAmount();
         
         // Calculate required collateral (20% of liquidity)
-        uint256 requiredCollateral = Math.mulDiv(liquidityAmount, REGISTRATION_COLLATERAL_RATIO, 100_00);
+        uint256 requiredCollateral = Math.mulDiv(liquidityAmount, registrationCollateralRatio, 100_00);
         
         // Transfer collateral from LP to contract
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
@@ -158,7 +166,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         CollateralInfo storage info = lpInfo[msg.sender];
         
         // Calculate additional required collateral (20% of new liquidity)
-        uint256 additionalCollateral = Math.mulDiv(amount, REGISTRATION_COLLATERAL_RATIO, 100_00);
+        uint256 additionalCollateral = Math.mulDiv(amount, registrationCollateralRatio, 100_00);
         
         // Transfer additional collateral
         reserveToken.transferFrom(msg.sender, address(this), additionalCollateral);
@@ -184,7 +192,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         if (amount > info.liquidityAmount) revert InsufficientLiquidity();
         
         // Calculate releasable collateral (20% of removed liquidity)
-        uint256 releasableCollateral = Math.mulDiv(amount, REGISTRATION_COLLATERAL_RATIO, 100_00);
+        uint256 releasableCollateral = Math.mulDiv(amount, registrationCollateralRatio, 100_00);
         
         // Update LP info
         info.liquidityAmount -= amount;
@@ -253,15 +261,15 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         // Check liquidation eligibility
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        if (lpCollateral * 100_00 * assetPool.reserveToAssetDecimalFactor() >= lpAssetHolding * COLLATERAL_THRESHOLD) {
+        if (lpCollateral * 100_00 * reserveToAssetDecimalFactor >= lpAssetHolding * collateralThreshold) {
             revert NotEligibleForLiquidation();
         }
         
         // Calculate liquidation reward
-        uint256 liquidationReward = lpCollateral * LIQUIDATION_REWARD_PERCENTAGE / 100_00;
+        uint256 reward = lpCollateral * liquidationReward / 100_00;
         
         // Calculate remaining collateral
-        uint256 remainingCollateral = lpCollateral - liquidationReward;
+        uint256 remainingCollateral = lpCollateral - reward;
         
         // Calculate liquidator's new position requirements
         CollateralInfo memory callerInfo = lpInfo[msg.sender];
@@ -270,7 +278,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         // Add target LP's asset holding to caller's
         uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        uint256 newRequiredCollateral = newCallerAssetHolding * COLLATERAL_THRESHOLD / 100_00 * assetPool.reserveToAssetDecimalFactor();
+        uint256 newRequiredCollateral = newCallerAssetHolding * collateralThreshold / 100_00 * reserveToAssetDecimalFactor;
         
         // Check if additional collateral is needed
         uint256 additionalCollateralNeeded = 0;
@@ -282,7 +290,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         }
         
         lpInfo[msg.sender].liquidityAmount = callerInfo.liquidityAmount + lpLiquidity;
-        lpInfo[msg.sender].collateralAmount = callerInfo.collateralAmount + additionalCollateralNeeded + liquidationReward;
+        lpInfo[msg.sender].collateralAmount = callerInfo.collateralAmount + additionalCollateralNeeded + reward;
         
         // Reset liquidated LP's position
         delete lpInfo[lp];
@@ -291,7 +299,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
             reserveToken.transfer(lp, remainingCollateral);
         }
         
-        emit LPLiquidated(lp, msg.sender, liquidationReward);
+        emit LPLiquidated(lp, msg.sender, reward);
     }
 
     /**
@@ -299,8 +307,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
      * @param lp Address of the LP
      * @param amount Amount to deduct
      */
-    function deductRebalanceAmount(address lp, uint256 amount) external {
-        if (msg.sender != address(assetPool)) revert Unauthorized();
+    function deductRebalanceAmount(address lp, uint256 amount) external onlyPoolCycleManager {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
             
         CollateralInfo storage info = lpInfo[lp];
@@ -311,18 +318,17 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         // Check remaining ratio
         uint256 currentRatio = getCurrentRatio(lp);
-        if (currentRatio < COLLATERAL_THRESHOLD) revert InsufficientCollateral();
+        if (currentRatio < collateralThreshold) revert InsufficientCollateral();
         
         emit RebalanceDeducted(lp, amount);
     }
 
     /**
-     * @notice Add rebalance amount to LP's collateral
+     * @notice Add rebalance amount or interest to LP's collateral
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToCollateral(address lp, uint256 amount) external {
-        if (msg.sender != address(assetPool)) revert Unauthorized();
+    function addToCollateral(address lp, uint256 amount) external onlyPoolCycleManager {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpInfo[lp].collateralAmount += amount;
@@ -339,7 +345,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         
         CollateralInfo storage info = lpInfo[lp];
         
-        uint256 totalSupply = IXToken(assetPool.assetToken()).totalSupply();
+        uint256 totalSupply = assetToken.totalSupply();
         uint256 assetPrice = assetOracle.assetPrice();
         
         // Calculate LP's share of total supply based on their proportion of total liquidity
@@ -371,7 +377,7 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         if (lpAssetHolding == 0) return 0;
         
         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        return Math.mulDiv(lpAssetHolding, COLLATERAL_THRESHOLD, 100_00 * assetPool.reserveToAssetDecimalFactor());
+        return Math.mulDiv(lpAssetHolding, collateralThreshold, 100_00 * reserveToAssetDecimalFactor);
     }
 
     /**
@@ -384,28 +390,28 @@ contract LPLiquidityManager is ILPLiquidityManager, Ownable, ReentrancyGuard, In
         CollateralInfo storage info = lpInfo[lp];
         uint256 lpAssetHolding = getLPAssetHolding(lp);
 
-        if (lpAssetHolding == 0 && info.collateralAmount > 0) return HEALTHY_COLLATERAL_RATIO;
+        if (lpAssetHolding == 0 && info.collateralAmount > 0) return healthyCollateralRatio;
         if (lpAssetHolding == 0) return 0;
         
          // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        return Math.mulDiv(info.collateralAmount, 100_00 * assetPool.reserveToAssetDecimalFactor(), lpAssetHolding);
+        return Math.mulDiv(info.collateralAmount, 100_00 * reserveToAssetDecimalFactor, lpAssetHolding);
     }
 
     /**
     * @notice Check LP's collateral health
     * @param lp Address of the LP
-    * @return uint8 3 = Great (>= HEALTHY_COLLATERAL_RATIO), 
-    *               2 = Good (>= COLLATERAL_THRESHOLD but < HEALTHY_COLLATERAL_RATIO), 
-    *               1 = Bad (< COLLATERAL_THRESHOLD)
+    * @return uint8 3 = Great (>= healthyCollateralRatio), 
+    *               2 = Good (>= collateralThreshold but < healthyCollateralRatio), 
+    *               1 = Bad (< collateralThreshold)
     */
     function checkCollateralHealth(address lp) public view returns (uint8) {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         uint256 currentRatio = getCurrentRatio(lp);
         
-        if (currentRatio >= HEALTHY_COLLATERAL_RATIO) {
+        if (currentRatio >= healthyCollateralRatio) {
             return 3; // Great: At or above healthy ratio
-        } else if (currentRatio >= COLLATERAL_THRESHOLD) {
+        } else if (currentRatio >= collateralThreshold) {
             return 2; // Good: At or above minimum threshold but below healthy ratio
         } else {
             return 1; // Bad: Below minimum threshold

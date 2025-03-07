@@ -7,7 +7,9 @@ import 'openzeppelin-contracts/contracts/access/Ownable.sol';
 import 'openzeppelin-contracts/contracts/proxy/Clones.sol';
 import {IAssetPoolFactory} from '../interfaces/IAssetPoolFactory.sol';
 import {AssetPool} from "../protocol/AssetPool.sol";
-import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
+import {PoolLiquidityManager} from '../protocol/PoolLiquidityManager.sol';
+import {PoolCycleManager} from '../protocol/PoolCycleManager.sol';
+import {IXToken} from '../interfaces/IXToken.sol';
 
 
 /**
@@ -16,21 +18,27 @@ import {LPLiquidityManager} from '../protocol/LPLiquidityManager.sol';
  * Responsible for creating and registering asset pools for liquidity provisioning.
  */
 contract AssetPoolFactory is IAssetPoolFactory, Ownable {
-    /// @notice Address to the LP liquidity manager contract.
-    address public lpLiquidityManager;
     /// @notice Address of the asset pool contract.
     address public assetPool;
+    /// @notice Address of the pool cycle manager contract.
+    address public poolCycleManager;
+    /// @notice Address to the pool liquidity manager contract.
+    address public poolLiquidityManager;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
-     * @param _lpLiquidityManager Address of the LP Registry contract.
-     * Reverts if the address is zero.
+     * @param _assetPool Address of the AssetPool contract.
+     * @param _poolCycleManager Address of the Pool Cycle Manager contract.
+     * @param _poolLiquidityManager Address of the LP Registry contract.
      */
-    constructor(address _lpLiquidityManager, address _assetPool) Ownable(msg.sender) {
-        if (_lpLiquidityManager == address(0)) revert ZeroAddress();
+    constructor(address _assetPool, address _poolCycleManager, address _poolLiquidityManager) Ownable(msg.sender) {
         if (_assetPool == address(0)) revert ZeroAddress();
-        lpLiquidityManager = _lpLiquidityManager;
+        if (_poolCycleManager == address(0)) revert ZeroAddress();
+        if (_poolLiquidityManager == address(0)) revert ZeroAddress();
+
         assetPool = _assetPool;
+        poolCycleManager = _poolCycleManager;
+        poolLiquidityManager = _poolLiquidityManager;
     }
 
     /**
@@ -42,18 +50,18 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * - `rebalancingLength` is greater than or equal to `cycleLength`.
      * 
      * @param depositToken Address of the token used for deposits.
-     * @param assetName Name of the token representing the asset.
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
+     * @param interestRateStrategy Address of the interest rate strategy contract.
      * @param cycleLength Length of each investment cycle in seconds.
      * @param rebalanceLength Length of the rebalancing period within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
         address depositToken,
-        string memory assetName,
         string memory assetSymbol,
         address oracle,
+        address interestRateStrategy,
         uint256 cycleLength,
         uint256 rebalanceLength
     ) external returns (address) {
@@ -68,21 +76,41 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
-        // Clones a new LP liquidity manager contract instance.
-        address lpManager = Clones.clone(lpLiquidityManager);
+        // Clones a new pool cycle manager contract instance.
+        address cycleManager = Clones.clone(poolCycleManager);
+        // Clones a new pool liquidity manager contract instance.
+        address liquidityManager = Clones.clone(poolLiquidityManager);
 
         AssetPool(pool).initialize(
             depositToken,
-            assetName,
             assetSymbol,
             oracle,
-            lpManager,
-            cycleLength,
-            rebalanceLength,
+            cycleManager,
+            liquidityManager,
+            interestRateStrategy,
             owner
         );
 
-        LPLiquidityManager(lpManager).initialize(pool, oracle, depositToken, owner);
+        IXToken assetToken = AssetPool(pool).assetToken();
+
+        PoolCycleManager(cycleManager).initialize(
+            depositToken,
+            address(assetToken),
+            oracle,
+            pool,
+            liquidityManager,
+            cycleLength,
+            rebalanceLength
+        );
+
+        PoolLiquidityManager(liquidityManager).initialize(
+            depositToken, 
+            address(assetToken), 
+            oracle, 
+            pool, 
+            cycleManager, 
+            owner
+        );
 
         // Emit the AssetPoolCreated event to notify listeners.
         emit AssetPoolCreated(

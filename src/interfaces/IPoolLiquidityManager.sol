@@ -8,10 +8,10 @@ import "../interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @title ILPLiquidityManager
- * @notice Interface for the combined LP registry and liquidity manager
+ * @title IPoolLiquidityManager
+ * @notice Interface for the pool liquidity manager contract
  */
-interface ILPLiquidityManager {
+interface IPoolLiquidityManager {
     /**
      * @notice LP's current collateral and liquidity information
      */
@@ -98,16 +98,6 @@ interface ILPLiquidityManager {
      * @notice Error when LP is not eligible for liquidation
      */
     error NotEligibleForLiquidation();
-
-    /**
-     * @notice Error when caller is not authorized
-     */
-    error Unauthorized();
-
-    /**
-     * @notice Error when zero address is provided
-     */
-    error ZeroAddress();
     
     /**
      * @notice Error when LP is already registered
@@ -128,46 +118,47 @@ interface ILPLiquidityManager {
      * @notice Error when trying to decrease liquidity more than available
      */
     error InsufficientLiquidity();
-    
-    /**
-     * @notice Error when an invalid amount is provided
-     */
-    error InvalidAmount();
 
     /**
-     * @notice Minimum required collateral ratio (50%)
+     * @notice Error when caller is not the pool cycle manager
      */
-    function HEALTHY_COLLATERAL_RATIO() external view returns (uint256);
+    error NotPoolCycleManager();
+
+    /**
+     * @notice Thrown when an is zero address
+     */
+    error ZeroAddress();
+    
+    /**
+     * @notice Thrown when an amount is invalid
+     */
+    error InvalidAmount();
+    
+    /**
+     * @notice Thrown when caller is not authorized
+     */
+    error Unauthorized();
+
+    
+    /**
+     * @notice Healthy collateral ratio (50%)
+     */
+    function healthyCollateralRatio() external view returns (uint256);
 
     /**
      * @notice Warning threshold for collateral ratio (30%)
      */
-    function COLLATERAL_THRESHOLD() external view returns (uint256);
+    function collateralThreshold() external view returns (uint256);
     
     /**
      * @notice Registration collateral ratio (20%)
      */
-    function REGISTRATION_COLLATERAL_RATIO() external view returns (uint256);
+    function registrationCollateralRatio() external view returns (uint256);
     
     /**
-     * @notice Liquidation reward percentage (5%)
+     * @notice Liquidation reward (5%)
      */
-    function LIQUIDATION_REWARD_PERCENTAGE() external view returns (uint256);
-    
-    /**
-     * @notice Asset pool contract
-     */
-    function assetPool() external view returns (IAssetPool);
-    
-    /**
-     * @notice Asset oracle
-     */
-    function assetOracle() external view returns (IAssetOracle);
-    
-    /**
-     * @notice Reserve token (USDC, USDT etc)
-     */
-    function reserveToken() external view returns (IERC20);
+    function liquidationReward() external view returns (uint256);
     
     /**
      * @notice Total liquidity in the pool
