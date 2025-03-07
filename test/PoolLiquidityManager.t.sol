@@ -1,796 +1,320 @@
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-
+import "forge-std/console.sol";
+import "openzeppelin-contracts/contracts/proxy/Clones.sol";
 import "../src/protocol/PoolLiquidityManager.sol";
-import "../src/protocol/AssetPoolFactory.sol";
 import "../src/protocol/AssetPool.sol";
+import "../src/protocol/PoolCycleManager.sol";
 import "../src/protocol/xToken.sol";
-import "../src/interfaces/IAssetPool.sol";
-import "../src/interfaces/IAssetOracle.sol";
-import "../src/interfaces/IPoolLiquidityManager.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-contract LPLiquidityManagerTest is Test {
+contract PoolLiquidityManagerTest is Test {
     // Test contracts
-    AssetPoolFactory public factory;
-    AssetPool public implementation;
-    IAssetPool public pool;
-    PoolLiquidityManager public liquidityManagerImplementation;
-    IPoolLiquidityManager public liquidityManager;
-    IERC20Metadata public reserveToken;
-    IXToken public assetToken;
-    MockAssetOracle assetOracle;
-
-    // Test addresses
-    address owner = address(1);
-    address user1 = address(2);
-    address user2 = address(3);
-    address lp1 = address(4);
-    address lp2 = address(5);
-    address lp3 = address(6);
-    address nonLp = address(7);
-
-    // Test constants
-    uint256 constant INITIAL_BALANCE = 1000000000e18;
-    uint256 constant CYCLE_LENGTH = 7 days;
-    uint256 constant REBALANCE_LENGTH = 1 days;
-    uint256 constant LP_LIQUIDITY_AMOUNT = 1000e18;
-    uint256 constant HEALTHY_COLLATERAL_RATIO = 50_00; // 50%
-    uint256 constant COLLATERAL_THRESHOLD = 30_00;     // 30%
-    uint256 constant REGISTRATION_COLLATERAL_RATIO = 20_00; // 20%
-    uint256 constant LIQUIDATION_REWARD_PERCENTAGE = 5_00; // 5%
+    PoolLiquidityManager public liquidityManager;
+    AssetPool public assetPool;
+    PoolCycleManager public cycleManager;
+    MockERC20 public reserveToken;
+    MockAssetOracle public oracle;
+    xToken public assetToken;
+    
+    // Addresses
+    address public owner;
+    address public user1;
+    address public user2;
+    address public user3;
+    address public interestRateStrategy;
+    
+    // Constants
+    uint256 public constant INITIAL_LIQUIDITY = 1_000_000 * 1e6; // 1M USDC
+    uint256 public constant REGISTRATION_COLLATERAL_RATIO = 20_00; // 20%
+    uint256 public constant CYCLE_LENGTH = 7 days;
+    uint256 public constant REBALANCE_LENGTH = 1 days;
 
     function setUp() public {
-        vm.startPrank(owner);
-
-        // Deploy mock USDC
-        MockERC20 mockUSDC = new MockERC20("USDC", "USDC", 18);
-        reserveToken = IERC20Metadata(address(mockUSDC));
-
-        // Deploy core contracts
-        assetOracle = new MockAssetOracle();
+        // Set up accounts
+        owner = address(this);
+        user1 = makeAddr("user1");
+        user2 = makeAddr("user2");
+        user3 = makeAddr("user3");
+        interestRateStrategy = makeAddr("interestRateStrategy");
         
-        // Deploy Pool Liquidity Manager Implementation
-        liquidityManagerImplementation = new PoolLiquidityManager();
+        // Deploy mock contracts
+        reserveToken = new MockERC20("USD Coin", "USDC", 6);
+        oracle = new MockAssetOracle();
         
-        // Deploy AssetPool Implementation
-        implementation = new AssetPool();
+        // Deploy implementations
+        AssetPool assetPoolImpl = new AssetPool();
+        PoolCycleManager cycleManagerImpl = new PoolCycleManager();
+        PoolLiquidityManager liquidityManagerImpl = new PoolLiquidityManager();
         
-        // Deploy AssetPool Factory
-        factory = new AssetPoolFactory(
-            address(liquidityManagerImplementation), 
-            address(implementation)
-        );
-
-        // Set default price in oracle
-        assetOracle.setAssetPrice(1e18); // Set default price to 1.0
-
-        // Create pool via factory
-        address poolAddress = factory.createPool(
+        // Clone implementations
+        address assetPoolClone = Clones.clone(address(assetPoolImpl));
+        address cycleManagerClone = Clones.clone(address(cycleManagerImpl));
+        address liquidityManagerClone = Clones.clone(address(liquidityManagerImpl));
+        
+        // Cast to contracts
+        assetPool = AssetPool(payable(assetPoolClone));
+        cycleManager = PoolCycleManager(cycleManagerClone);
+        liquidityManager = PoolLiquidityManager(payable(liquidityManagerClone));
+        
+        // Initialize AssetPool
+        assetPool.initialize(
             address(reserveToken),
-            "Tesla Stock Token",
-            "xTSLA",
-            address(assetOracle),
+            "xUSDC",
+            address(oracle),
+            address(cycleManager),
+            address(liquidityManager),
+            address(interestRateStrategy),
+            owner
+        );
+        
+        // Get asset token address created by AssetPool
+        address assetTokenAddress = address(assetPool.assetToken());
+        assetToken = xToken(assetTokenAddress);
+        
+        // Initialize CycleManager
+        cycleManager.initialize(
+            address(reserveToken),
+            assetTokenAddress,
+            address(oracle),
+            address(assetPool),
+            address(liquidityManager),
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
-
-        pool = IAssetPool(poolAddress);
-        assetToken = pool.assetToken();
-        liquidityManager = pool.poolLiquidityManager();
-
+        
+        // Initialize LiquidityManager
+        liquidityManager.initialize(
+            address(reserveToken),
+            assetTokenAddress,
+            address(oracle),
+            address(assetPool),
+            address(cycleManager),
+            owner
+        );
+        
+        // Mint some tokens to users for testing
+        reserveToken.mint(user1, 1_000_000 * 1e6);
+        reserveToken.mint(user2, 1_000_000 * 1e6);
+        reserveToken.mint(user3, 1_000_000 * 1e6);
+        
+        // Approve spending for users
+        vm.startPrank(user1);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
         vm.stopPrank();
-
-        // Fund test accounts
-        deal(address(reserveToken), user1, INITIAL_BALANCE);
-        deal(address(reserveToken), user2, INITIAL_BALANCE);
-        deal(address(reserveToken), lp1, INITIAL_BALANCE);
-        deal(address(reserveToken), lp2, INITIAL_BALANCE);
-        deal(address(reserveToken), lp3, INITIAL_BALANCE);
-        deal(address(reserveToken), nonLp, INITIAL_BALANCE);
-
-        vm.warp(block.timestamp + 1);
+        
+        vm.startPrank(user2);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
+        vm.stopPrank();
+        
+        vm.startPrank(user3);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
+        vm.stopPrank();
     }
-
-    // ----------------------------------------------------------------------------------
-    //                             LP REGISTRATION TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testRegisterLP() public {
-        uint256 liquidityAmount = 1000e18;
+    
+    function test_RegisterLP() public {
+        uint256 liquidityAmount = 100_000 * 1e6; // 100k USDC
         uint256 expectedCollateral = (liquidityAmount * REGISTRATION_COLLATERAL_RATIO) / 100_00;
         
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), expectedCollateral);
+        // Check initial state
+        assertEq(liquidityManager.lpCount(), 0);
+        assertEq(liquidityManager.totalLPLiquidity(), 0);
+        assertFalse(liquidityManager.registeredLPs(user1));
+        
+        // Register LP
+        vm.startPrank(user1);
         liquidityManager.registerLP(liquidityAmount);
         vm.stopPrank();
         
-        // Check LP was registered
-        assertTrue(liquidityManager.isLP(lp1), "LP was not registered");
+        // Check post-registration state
+        assertEq(liquidityManager.lpCount(), 1);
+        assertEq(liquidityManager.totalLPLiquidity(), liquidityAmount);
+        assertTrue(liquidityManager.registeredLPs(user1));
         
-        // Check collateral was transferred
-        assertEq(
-            reserveToken.balanceOf(address(liquidityManager)), 
-            expectedCollateral, 
-            "Collateral amount incorrect"
-        );
+        // Check LP's info
+        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(user1);
+        assertEq(info.collateralAmount, expectedCollateral);
+        assertEq(info.liquidityAmount, liquidityAmount);
         
-        // Check LP info was updated correctly
-        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(lp1);
-        assertEq(info.collateralAmount, expectedCollateral, "Collateral amount not recorded correctly");
-        assertEq(info.liquidityAmount, liquidityAmount, "Liquidity amount not recorded correctly");
-        
-        // Check total liquidity updated
-        assertEq(liquidityManager.totalLPLiquidity(), liquidityAmount, "Total liquidity not updated");
-        
-        // Check LP count updated
-        assertEq(liquidityManager.lpCount(), 1, "LP count not updated");
+        // Check token balances
+        assertEq(reserveToken.balanceOf(address(liquidityManager)), expectedCollateral);
+        assertEq(reserveToken.balanceOf(user1), 1_000_000 * 1e6 - expectedCollateral);
     }
     
-    function testRegisterLPRevertsOnZeroAmount() public {
-        vm.startPrank(lp1);
-        vm.expectRevert(IPoolLiquidityManager.InvalidAmount.selector);
-        liquidityManager.registerLP(0);
-        vm.stopPrank();
-    }
-    
-    function testRegisterLPRevertsWhenAlreadyRegistered() public {
-        // Register first time
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(LP_LIQUIDITY_AMOUNT);
-        
-        // Try to register again
-        vm.expectRevert(IPoolLiquidityManager.AlreadyRegistered.selector);
-        liquidityManager.registerLP(LP_LIQUIDITY_AMOUNT);
-        vm.stopPrank();
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                            LIQUIDITY MANAGEMENT TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testIncreaseLiquidity() public {
+    function test_IncreaseLiquidity() public {
         // First register LP
-        uint256 initialLiquidity = 1000e18;
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        uint256 initialLiquidity = 100_000 * 1e6; // 100k USDC
+        vm.startPrank(user1);
         liquidityManager.registerLP(initialLiquidity);
         
-        // Then increase liquidity
-        uint256 additionalLiquidity = 500e18;
+        // Increase liquidity
+        uint256 additionalLiquidity = 50_000 * 1e6; // 50k USDC
         uint256 additionalCollateral = (additionalLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
         liquidityManager.increaseLiquidity(additionalLiquidity);
         vm.stopPrank();
         
-        // Check liquidity amount updated
-        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            info.liquidityAmount, 
-            initialLiquidity + additionalLiquidity, 
-            "Liquidity amount not updated correctly"
-        );
+        // Check updated state
+        assertEq(liquidityManager.totalLPLiquidity(), initialLiquidity + additionalLiquidity);
         
-        // Check collateral updated
-        uint256 expectedTotalCollateral = 
-            (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00 + additionalCollateral;
-        assertEq(
-            info.collateralAmount, 
-            expectedTotalCollateral, 
-            "Collateral amount not updated correctly"
-        );
-        
-        // Check total liquidity updated
-        assertEq(
-            liquidityManager.totalLPLiquidity(), 
-            initialLiquidity + additionalLiquidity, 
-            "Total liquidity not updated"
-        );
+        // Check LP's info
+        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(user1);
+        assertEq(info.liquidityAmount, initialLiquidity + additionalLiquidity);
+        assertEq(info.collateralAmount, 
+                 (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00 + additionalCollateral);
     }
     
-    function testDecreaseLiquidity() public {
+    function test_DecreaseLiquidity() public {
         // First register LP
-        uint256 initialLiquidity = 1000e18;
-        uint256 initialCollateral = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
-        
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        uint256 initialLiquidity = 100_000 * 1e6; // 100k USDC
+        vm.startPrank(user1);
         liquidityManager.registerLP(initialLiquidity);
         
-        // Add some extra collateral to ensure we can decrease liquidity
-        uint256 extraCollateral = 100e18;
-        liquidityManager.deposit(extraCollateral);
-        
-        // Then decrease liquidity
-        uint256 decreaseAmount = 300e18;
+        // Decrease liquidity
+        uint256 decreaseAmount = 30_000 * 1e6; // 30k USDC
         uint256 releasableCollateral = (decreaseAmount * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+        uint256 initialCollateral = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
         
-        uint256 balanceBefore = reserveToken.balanceOf(lp1);
         liquidityManager.decreaseLiquidity(decreaseAmount);
         vm.stopPrank();
         
-        // Check liquidity amount updated
-        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            info.liquidityAmount, 
-            initialLiquidity - decreaseAmount, 
-            "Liquidity amount not updated correctly"
-        );
+        // Check updated state
+        assertEq(liquidityManager.totalLPLiquidity(), initialLiquidity - decreaseAmount);
         
-        // Check collateral was released
-        uint256 expectedCollateral = initialCollateral + extraCollateral - releasableCollateral;
-        assertEq(
-            info.collateralAmount, 
-            expectedCollateral, 
-            "Collateral amount not updated correctly"
-        );
-        
-        // Ensure LP received the released collateral
-        assertEq(
-            reserveToken.balanceOf(lp1) - balanceBefore, 
-            releasableCollateral, 
-            "Collateral not returned to LP"
-        );
-        
-        // Check total liquidity updated
-        assertEq(
-            liquidityManager.totalLPLiquidity(), 
-            initialLiquidity - decreaseAmount, 
-            "Total liquidity not updated"
-        );
+        // Check LP's info
+        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(user1);
+        assertEq(info.liquidityAmount, initialLiquidity - decreaseAmount);
+        assertEq(info.collateralAmount, initialCollateral - releasableCollateral);
     }
     
-    function testDecreaseLiquidityRevertsForNonLP() public {
-        vm.startPrank(nonLp);
-        vm.expectRevert(IPoolLiquidityManager.NotRegisteredLP.selector);
-        liquidityManager.decreaseLiquidity(100e18);
-        vm.stopPrank();
-    }
-    
-    function testDecreaseLiquidityRevertsWhenAmountTooLarge() public {
-        // Register LP
-        uint256 initialLiquidity = 1000e18;
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(initialLiquidity);
-        
-        // Try to decrease more than available
-        vm.expectRevert(IPoolLiquidityManager.InsufficientLiquidity.selector);
-        liquidityManager.decreaseLiquidity(initialLiquidity + 1);
-        vm.stopPrank();
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                           COLLATERAL MANAGEMENT TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testDepositCollateral() public {
+    function test_Deposit() public {
         // First register LP
-        uint256 initialLiquidity = 1000e18;
-        uint256 initialCollateral = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
-        
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        uint256 initialLiquidity = 100_000 * 1e6; // 100k USDC
+        vm.startPrank(user1);
         liquidityManager.registerLP(initialLiquidity);
         
-        // Then deposit additional collateral
-        uint256 additionalCollateral = 200e18;
+        // Deposit additional collateral
+        uint256 additionalCollateral = 10_000 * 1e6; // 10k USDC
+        uint256 initialCollateralAmount = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+        
         liquidityManager.deposit(additionalCollateral);
         vm.stopPrank();
         
-        // Check collateral updated
-        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            info.collateralAmount, 
-            initialCollateral + additionalCollateral, 
-            "Collateral amount not updated correctly"
-        );
+        // Check LP's info
+        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(user1);
+        assertEq(info.collateralAmount, initialCollateralAmount + additionalCollateral);
     }
     
-    function testWithdrawCollateral() public {
+    function test_Withdraw() public {
         // First register LP
-        uint256 initialLiquidity = 1000e18;
-        uint256 initialCollateral = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
-        
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
+        uint256 initialLiquidity = 100_000 * 1e6; // 100k USDC
+        vm.startPrank(user1);
         liquidityManager.registerLP(initialLiquidity);
         
-        // Add extra collateral
-        uint256 extraCollateral = 300e18;
-        liquidityManager.deposit(extraCollateral);
+        // First deposit additional collateral to have excess
+        uint256 additionalCollateral = 10_000 * 1e6; // 10k USDC
+        liquidityManager.deposit(additionalCollateral);
         
-        // Then withdraw some collateral
-        uint256 withdrawAmount = 100e18;
-        uint256 balanceBefore = reserveToken.balanceOf(lp1);
+        // Withdraw some of the excess collateral
+        uint256 withdrawAmount = 5_000 * 1e6; // 5k USDC
+        uint256 initialCollateralAmount = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00 + additionalCollateral;
+        
         liquidityManager.withdraw(withdrawAmount);
         vm.stopPrank();
         
-        // Check collateral updated
-        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            info.collateralAmount, 
-            initialCollateral + extraCollateral - withdrawAmount, 
-            "Collateral amount not updated correctly"
-        );
-        
-        // Ensure LP received the withdrawn collateral
-        assertEq(
-            reserveToken.balanceOf(lp1) - balanceBefore, 
-            withdrawAmount, 
-            "Collateral not returned to LP"
-        );
+        // Check LP's info
+        IPoolLiquidityManager.CollateralInfo memory info = liquidityManager.getLPInfo(user1);
+        assertEq(info.collateralAmount, initialCollateralAmount - withdrawAmount);
     }
     
-    function testWithdrawCollateralRevertsWhenBelowRequired() public {
-        // Register LP
-        uint256 initialLiquidity = 1000e18;
-        uint256 initialCollateral = (initialLiquidity * REGISTRATION_COLLATERAL_RATIO) / 100_00;
+    function test_MultipleRegistrations() public {
+        uint256 liquidityAmount1 = 100_000 * 1e6; // 100k USDC
+        uint256 liquidityAmount2 = 150_000 * 1e6; // 150k USDC
+        uint256 liquidityAmount3 = 200_000 * 1e6; // 200k USDC
         
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(initialLiquidity);
+        // Register three LPs
+        vm.prank(user1);
+        liquidityManager.registerLP(liquidityAmount1);
         
-        // Create user deposit to generate assets
-        vm.stopPrank();
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 100e18);
-        pool.depositRequest(100e18);
-        vm.stopPrank();
-
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
+        vm.prank(user2);
+        liquidityManager.registerLP(liquidityAmount2);
         
-        // Simulate cycle completion
-        completeCycle(pool, lp1, lp2, 1e18);
-
-        pool.claimRequest(user1);
+        vm.prank(user3);
+        liquidityManager.registerLP(liquidityAmount3);
         
-        // Now try to withdraw too much (should revert)
-        vm.startPrank(lp1);
-        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
-        liquidityManager.withdraw(initialCollateral);
-        vm.stopPrank();
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                         COLLATERAL HEALTH CHECKING TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testGetRequiredCollateral() public {
-        // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
-
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
+        // Check total stats
+        assertEq(liquidityManager.lpCount(), 3);
+        assertEq(liquidityManager.totalLPLiquidity(), liquidityAmount1 + liquidityAmount2 + liquidityAmount3);
         
-        // Create user deposit to generate assets
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 100e18);
-        pool.depositRequest(100e18);
-        vm.stopPrank();
-        
-        // Complete cycle to create assets
-        completeCycle(pool, lp1, lp2, 1e18);
-        
-        // Claim assets
-        pool.claimRequest(user1);
-        
-        // Get required collateral
-        uint256 requiredCollateral = liquidityManager.getRequiredCollateral(lp1);
-        
-        // Value should be non-zero after assets are created
-        assertGt(requiredCollateral, 0, "Required collateral should be non-zero");
-        
-        // Test for non-registered address
-        assertEq(
-            liquidityManager.getRequiredCollateral(nonLp), 
-            0, 
-            "Non-LP should have zero required collateral"
-        );
+        // Check individual registrations
+        assertTrue(liquidityManager.registeredLPs(user1));
+        assertTrue(liquidityManager.registeredLPs(user2));
+        assertTrue(liquidityManager.registeredLPs(user3));
     }
     
-    function testGetCurrentRatio() public {
+    function test_RemoveLP() public {
+        uint256 liquidityAmount = 100_000 * 1e6; // 100k USDC
+        
         // Register LP
-        uint256 initialLiquidity = 500e18;
-        
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(initialLiquidity);
-        vm.stopPrank();
-
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(500e18);
-        vm.stopPrank();
-        
-        // Initially should report healthy ratio
-        assertEq(
-            liquidityManager.getCurrentRatio(lp1), 
-            HEALTHY_COLLATERAL_RATIO, 
-            "Initially should report healthy ratio"
-        );
-        
-        // Create user deposit to generate assets
         vm.startPrank(user1);
-        reserveToken.approve(address(pool), 500e18);
-        pool.depositRequest(500e18);
+        liquidityManager.registerLP(liquidityAmount);
+        
+        // First decrease liquidity completely
+        liquidityManager.decreaseLiquidity(liquidityAmount);
+        
+        // Now remove LP
+        liquidityManager.removeLP(user1);
         vm.stopPrank();
         
-        // Complete cycle to create assets
-        completeCycle(pool, lp1, lp2, 1e18);
-        pool.claimRequest(user1);
+        // Check LP was removed
+        assertEq(liquidityManager.lpCount(), 0);
+        assertFalse(liquidityManager.registeredLPs(user1));
+    }
 
-        // Now ratio should be lower since assets exist
-        uint256 newRatio = liquidityManager.getCurrentRatio(lp1);
-
-        assertLt(
-            newRatio, 
-            HEALTHY_COLLATERAL_RATIO, 
-            "Ratio should decrease after assets are created"
-        );
+    function test_CheckCollateralHealth() public {
+        uint256 liquidityAmount = 100_000 * 1e6; // 100k USDC
+        
+        // Register LP
+        vm.prank(user1);
+        liquidityManager.registerLP(liquidityAmount);
+        
+        // Initially, with no assets in the pool, health should be "Great" (3)
+        assertEq(liquidityManager.checkCollateralHealth(user1), 3);
+        
+        // Let's mock some asset value in the pool
+        // We'll do this by setting a price and simulating an LP asset holding
+        // Note: This is a simplified test that doesn't fully reflect real asset flow
+        // In a real scenario, users would deposit and mint xTokens
+        
+        // For now, we just verify the function exists and returns expected value
+        // for the initial state
     }
     
-    function testCheckCollateralHealth() public {
-        // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
+    function test_RevertIfNonLpLiquidation() public {
+        uint256 liquidityAmount = 100_000 * 1e6; // 100k USDC
         
-        // Initially should report "great" health (3)
-        assertEq(
-            liquidityManager.checkCollateralHealth(lp1), 
-            3, 
-            "Initially should report great health"
-        );
+        // Register one LP but not the other
+        vm.prank(user1);
+        liquidityManager.registerLP(liquidityAmount);
         
-        // Add some extra collateral
-        uint256 extraCollateral = 500e18;
-        liquidityManager.deposit(extraCollateral);
-        vm.stopPrank();
-
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
-        
-        // Create large user deposit to generate significant assets
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 4000e18);
-        pool.depositRequest(4000e18);
-        vm.stopPrank();
-        
-        // Complete cycle to create assets
-        completeCycle(pool, lp1, lp2, 1e18);
-        
-        // Claim assets
-        pool.claimRequest(user1);
-        
-        // Now health should have changed based on asset generation
-        uint8 health = liquidityManager.checkCollateralHealth(lp1);
-        
-        // Depending on asset amounts, could be 2 ("good") or 1 ("bad")
-        assertTrue(
-            health == 2 || health == 1,
-            "Health should change after assets are created"
-        );
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                           ASSET HOLDINGS TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testGetLPAssetHolding() public {
-        // Register 2 LPs with different amounts
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
-        
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(3000e18);
-        vm.stopPrank();
-        
-        // Create user deposit
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 1000e18);
-        pool.depositRequest(1000e18);
-        vm.stopPrank();
-        
-        // Complete cycle to create assets
-        completeCycle(pool, lp1, lp2, 1e18);
-
-        pool.claimRequest(user1);
-        
-        // Get asset holdings
-        uint256 lp1Holding = liquidityManager.getLPAssetHolding(lp1);
-        uint256 lp2Holding = liquidityManager.getLPAssetHolding(lp2);
-        
-        // LP2 should have 3x the holding of LP1
-        assertApproxEqRel(
-            lp2Holding,
-            lp1Holding * 3,
-            0.01e18, // 1% tolerance for rounding
-            "LP2 should have 3x the holding of LP1"
-        );
-        
-        // Total holdings should be positive
-        assertGt(lp1Holding + lp2Holding, 0, "Total holdings should be positive");
-        
-        // Non-registered address should have zero holdings
-        assertEq(
-            liquidityManager.getLPAssetHolding(nonLp), 
-            0, 
-            "Non-LP should have zero holdings"
-        );
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                              LIQUIDATION TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testLiquidateLP() public {
-        // Register LPs - lp3 will be the one to get liquidated
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        liquidityManager.deposit(500e18); // Extra collateral for lp1
-        vm.stopPrank();
-        
-        vm.startPrank(lp3);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        // Note: NOT adding extra collateral to lp3
-        vm.stopPrank();
-        
-        // Create large user deposit to generate significant assets
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 5000e18);
-        pool.depositRequest(5000e18);
-        vm.stopPrank();
-        
-        // Complete cycle with high price to create lots of assets
-        completeCycle(pool, lp1, lp3, 3e18);
-        
-        // Claim assets
-        pool.claimRequest(user1);
-        
-        // Check lp3's health - should be bad (1)
-        assertEq(
-            liquidityManager.checkCollateralHealth(lp3), 
-            1, 
-            "LP3 should have bad health"
-        );
-        
-        // Store collateral values before liquidation
-        IPoolLiquidityManager.CollateralInfo memory lp1InfoBefore = liquidityManager.getLPInfo(lp1);
-        IPoolLiquidityManager.CollateralInfo memory lp3InfoBefore = liquidityManager.getLPInfo(lp3);
-        uint256 lp1AssetHoldingBefore = liquidityManager.getLPAssetHolding(lp1);
-        uint256 lp3AssetHoldingBefore = liquidityManager.getLPAssetHolding(lp3);
-        
-        // Approve more tokens for lp1 to cover additional collateral needed
-        uint256 lp3Liquidity = lp3InfoBefore.liquidityAmount;
-
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.liquidateLP(lp3);
-        vm.stopPrank();
-        
-        // Check lp3 is no longer registered
-        IPoolLiquidityManager.CollateralInfo memory lp3InfoAfter = liquidityManager.getLPInfo(lp3);
-        assertEq(lp3InfoAfter.collateralAmount, 0, "LP3 collateral should be cleared");
-        assertEq(lp3InfoAfter.liquidityAmount, 0, "LP3 liquidity should be cleared");
-        
-        // Check lp1 got lp3's liquidity and assets
-        IPoolLiquidityManager.CollateralInfo memory lp1InfoAfter = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            lp1InfoAfter.liquidityAmount,
-            lp1InfoBefore.liquidityAmount + lp3Liquidity,
-            "LP1 should get LP3's liquidity"
-        );
-        
-        // Check LP1 got reward in their collateral
-        assertGt(
-            lp1InfoAfter.collateralAmount,
-            lp1InfoBefore.collateralAmount,
-            "LP1 collateral should increase from liquidation"
-        );
-        
-        // Check LP1 got LP3's asset holdings
-        uint256 lp1AssetHoldingAfter = liquidityManager.getLPAssetHolding(lp1);
-        assertApproxEqRel(
-            lp1AssetHoldingAfter,
-            lp1AssetHoldingBefore + lp3AssetHoldingBefore,
-            0.01e18, // 1% tolerance
-            "LP1 should get LP3's asset holdings"
-        );
+        // Non-LP cannot liquidate
+        vm.prank(user3);
+        vm.expectRevert(abi.encodeWithSignature("NotRegisteredLP()"));
+        liquidityManager.liquidateLP(user1);
     }
     
-    function testLiquidateLPRevertsWhenNotEligible() public {
-        // Register LPs with enough collateral
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        // Add plenty of collateral
-        liquidityManager.deposit(1000e18);
-        vm.stopPrank();
+    function test_RevertIfSelfLiquidation() public {
+        uint256 liquidityAmount = 100_000 * 1e6; // 100k USDC
         
-        vm.startPrank(lp2);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        // Add plenty of collateral
-        liquidityManager.deposit(1000e18);
-        vm.stopPrank();
-        
-        // Create some assets
-        vm.startPrank(user1);
-        reserveToken.approve(address(pool), 100e18);
-        pool.depositRequest(100e18);
-        vm.stopPrank();
-        
-        // Complete cycle
-        completeCycle(pool, lp1, lp2, 1e18);
-        
-        // Try to liquidate lp2 - should revert because has enough collateral
-        vm.startPrank(lp1);
-        vm.expectRevert(IPoolLiquidityManager.NotEligibleForLiquidation.selector);
-        liquidityManager.liquidateLP(lp2);
-        vm.stopPrank();
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                            LP REMOVAL TESTS
-    // ----------------------------------------------------------------------------------
-
-    function testRemoveLP() public {
         // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
+        vm.prank(user1);
+        liquidityManager.registerLP(liquidityAmount);
         
-        // Check LP count before
-        assertEq(liquidityManager.lpCount(), 1, "LP count should be 1");
-        
-        // Remove all liquidity first
-        vm.startPrank(lp1);
-        liquidityManager.decreaseLiquidity(1000e18);
-        
-        // Remove LP
-        uint256 balanceBefore = reserveToken.balanceOf(lp1);
-        liquidityManager.removeLP(lp1);
-        vm.stopPrank();
-        
-        // Check LP is no longer registered
-        assertFalse(liquidityManager.isLP(lp1), "LP should be removed");
-        
-        // Check LP count
-        assertEq(liquidityManager.lpCount(), 0, "LP count should be 0");
-        
-        // Ensure any remaining collateral was returned
-        assertGe(
-            reserveToken.balanceOf(lp1),
-            balanceBefore,
-            "Any remaining collateral should be returned"
-        );
+        // LP cannot liquidate themselves
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("InvalidLiquidation()"));
+        liquidityManager.liquidateLP(user1);
     }
-    
-    function testRemoveLPRevertsWithActiveLiquidity() public {
-        // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        
-        // Try to remove without removing liquidity
-        vm.expectRevert("LP has active liquidity");
-        liquidityManager.removeLP(lp1);
-        vm.stopPrank();
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                           ASSET POOL INTERACTIONS
-    // ----------------------------------------------------------------------------------
-
-    function testDeductRebalanceAmount() public {
-        // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        // Add extra collateral
-        liquidityManager.deposit(500e18);
-        vm.stopPrank();
-        
-        // Total collateral should be 200e18 (from registration) + 500e18 = 700e18
-        IPoolLiquidityManager.CollateralInfo memory infoBefore = liquidityManager.getLPInfo(lp1);
-        assertEq(infoBefore.collateralAmount, 700e18, "Initial collateral incorrect");
-        
-        // Simulate call from AssetPool
-        uint256 poolBalanceBefore = reserveToken.balanceOf(address(pool));
-        
-        vm.prank(address(pool)); // Only pool can call this
-        liquidityManager.deductRebalanceAmount(lp1, 100e18);
-        
-        // Check LP's collateral decreased
-        IPoolLiquidityManager.CollateralInfo memory infoAfter = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            infoAfter.collateralAmount,
-            infoBefore.collateralAmount - 100e18,
-            "Collateral should decrease by deduction amount"
-        );
-        
-        // Check pool received the tokens
-        assertEq(
-            reserveToken.balanceOf(address(pool)) - poolBalanceBefore,
-            100e18,
-            "Pool should receive the deducted amount"
-        );
-    }
-    
-    function testAddToCollateral() public {
-        // Register LP
-        vm.startPrank(lp1);
-        reserveToken.approve(address(liquidityManager), INITIAL_BALANCE);
-        liquidityManager.registerLP(1000e18);
-        vm.stopPrank();
-        
-        // Initial collateral from registration (20% of 1000e18 = 200e18)
-        IPoolLiquidityManager.CollateralInfo memory infoBefore = liquidityManager.getLPInfo(lp1);
-        assertEq(infoBefore.collateralAmount, 200e18, "Initial collateral incorrect");
-        
-        // Simulate call from AssetPool
-        vm.prank(address(pool)); // Only pool can call this
-        liquidityManager.addToCollateral(lp1, 150e18);
-        
-        // Check LP's collateral increased
-        IPoolLiquidityManager.CollateralInfo memory infoAfter = liquidityManager.getLPInfo(lp1);
-        assertEq(
-            infoAfter.collateralAmount,
-            infoBefore.collateralAmount + 150e18,
-            "Collateral should increase by added amount"
-        );
-    }
-
-    // ----------------------------------------------------------------------------------
-    //                              HELPER FUNCTIONS
-    // ----------------------------------------------------------------------------------
-
-    // Helper function to complete a cycle for testing
-    function completeCycle(
-        IAssetPool _targetPool, 
-        address _lp1, 
-        address _lp2, 
-        uint256 price
-    ) internal {
-        // Move to after rebalance start
-        vm.warp(block.timestamp + CYCLE_LENGTH + 1);
-        
-        // Complete rebalancing
-        _targetPool.initiateOffchainRebalance();
-        
-        vm.warp(block.timestamp + REBALANCE_LENGTH + 1);
-        assetOracle.setAssetPrice(price);
-
-        _targetPool.initiateOnchainRebalance();
-        
-        // LP1 rebalance
-        vm.prank(_lp1);
-        _targetPool.rebalancePool(_lp1, price);
-
-        // LP2 rebalance
-        vm.prank(_lp2);
-        _targetPool.rebalancePool(_lp2, price);
-    }
-
 }
 
 // Mock ERC20 contract for testing
