@@ -158,9 +158,9 @@ interface IAssetPool {
     function cancelRequest() external;
 
     /**
-     * @notice Claim processed request
+     * @notice Claim processed request for the user
      */
-    function claimRequest() external;
+    function claimRequest(address user) external;
 
     /**
      * @notice Allows users to deposit additional collateral

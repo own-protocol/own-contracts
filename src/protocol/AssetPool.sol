@@ -319,9 +319,10 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
 
     /**
      * @notice Claim processed request
+     * @param user Address of the user
      */
-    function claimRequest() external nonReentrant onlyActiveCycle {
-        UserRequest storage request = userRequests[msg.sender];
+    function claimRequest(address user) external nonReentrant onlyActiveCycle {
+        UserRequest storage request = userRequests[user];
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
         bool isDeposit = request.isDeposit;
@@ -334,9 +335,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
         
         // Clear request
-        delete userRequests[msg.sender];
+        delete userRequests[user];
 
-        Position storage position = positions[msg.sender];
+        Position storage position = positions[user];
         
         if (isDeposit) {
             // Mint case - convert reserve to asset using rebalance price
@@ -363,9 +364,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
             position.collateralAmount += collateralAmount;
             
             // Mint tokens
-            assetToken.mint(msg.sender, assetAmount, amount);
+            assetToken.mint(user, assetAmount, amount);
             
-            emit AssetClaimed(msg.sender, assetAmount, requestCycle);
+            emit AssetClaimed(user, assetAmount, requestCycle);
         } else {
             // Withdraw case - convert asset to reserve using rebalance price
             uint256 reserveAmount = Math.mulDiv(
@@ -375,17 +376,17 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
             );
 
             uint256 balanceCollateral = 0;
-            if(assetToken.balanceOf(msg.sender) == 0) {
-                uint256 interestDebt = getInterestDebt(msg.sender);
+            if(assetToken.balanceOf(user) == 0) {
+                uint256 interestDebt = getInterestDebt(user);
                 balanceCollateral = position.collateralAmount - interestDebt;
                 position.scaledInterest = 0;
                 position.collateralAmount = 0;
             }
         
             // Transfer reserve tokens from poolCycleManager to user
-            reserveToken.transferFrom(address(this), msg.sender, reserveAmount + balanceCollateral);
+            reserveToken.transferFrom(address(this), user, reserveAmount + balanceCollateral);
             
-            emit ReserveWithdrawn(msg.sender, reserveAmount, requestCycle);
+            emit ReserveWithdrawn(user, reserveAmount, requestCycle);
         }
     }
 
