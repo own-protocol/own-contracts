@@ -75,25 +75,6 @@ abstract contract PoolStorage is Initializable {
     uint256 internal constant SECONDS_PER_YEAR = 365 days;
 
     // --------------------------------------------------------------------------------
-    //                                  ERRORS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Error thrown when a zero address is provided where a valid address is required
-     */
-    error ZeroAddress();
-
-    /**
-     * @notice Error thrown when an operation is requested with an invalid amount
-     */
-    error InvalidAmount();
-
-    /**
-     * @notice Error thrown when a call is made by an unauthorized address
-     */
-    error Unauthorized();
-
-    // --------------------------------------------------------------------------------
     //                          INITIALIZATION HELPER
     // --------------------------------------------------------------------------------
 

@@ -134,6 +134,12 @@ interface IAssetPool {
     error PositionNotLiquidatable();
     /// @notice Thrown when a user has insufficient collateral to make a deposit
     error InsufficientCollateral();
+    /// @notice Thrown when an is zero address
+    error ZeroAddress();
+    /// @notice Thrown when the amount is invalid
+    error InvalidAmount();
+    /// @notice Thrown when the caller is unauthorized
+    error Unauthorized();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -245,16 +251,22 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Get the minimum collateral ratio
-     * @return The minimum collateral ratio (scaled by 10000)
+     * @notice Get healthy collateral ratio
+     * @return The healthy collateral ratio (scaled by 10000)
      */
-    function getHealthyCollateralRatio() external view returns (uint256);
+    function healthyCollateralRatio() external view returns (uint256);
 
     /**
      * @notice Get the liquidation threshold
      * @return The liquidation threshold (scaled by 10000)
      */
-    function getLiquidationThreshold() external view returns (uint256);
+    function liquidationThreshold() external view returns (uint256);
+
+    /**
+     * @notice Get the liquidation reward
+     * @return The liquidation reward (scaled by 10000)
+     */
+    function liquidationReward() external view returns (uint256);
 
     /**
      * @notice Get total pending deposit requests for the current cycle

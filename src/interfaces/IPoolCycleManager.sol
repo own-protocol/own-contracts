@@ -118,6 +118,8 @@ interface IPoolCycleManager {
     error PriceDeviationTooHigh();
     /// @notice Thrown when caller is not authorized
     error UnauthorizedCaller();
+    /// @notice Thrown when an is zero address
+    error ZeroAddress();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS

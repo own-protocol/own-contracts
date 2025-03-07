@@ -124,26 +124,41 @@ interface IPoolLiquidityManager {
      */
     error NotPoolCycleManager();
 
+    /**
+     * @notice Thrown when an is zero address
+     */
+    error ZeroAddress();
     
     /**
-     * @notice Minimum required collateral ratio (50%)
+     * @notice Thrown when an amount is invalid
      */
-    function HEALTHY_COLLATERAL_RATIO() external view returns (uint256);
+    error InvalidAmount();
+    
+    /**
+     * @notice Thrown when caller is not authorized
+     */
+    error Unauthorized();
+
+    
+    /**
+     * @notice Healthy collateral ratio (50%)
+     */
+    function healthyCollateralRatio() external view returns (uint256);
 
     /**
      * @notice Warning threshold for collateral ratio (30%)
      */
-    function COLLATERAL_THRESHOLD() external view returns (uint256);
+    function collateralThreshold() external view returns (uint256);
     
     /**
      * @notice Registration collateral ratio (20%)
      */
-    function REGISTRATION_COLLATERAL_RATIO() external view returns (uint256);
+    function registrationCollateralRatio() external view returns (uint256);
     
     /**
-     * @notice Liquidation reward percentage (5%)
+     * @notice Liquidation reward (5%)
      */
-    function LIQUIDATION_REWARD_PERCENTAGE() external view returns (uint256);
+    function liquidationReward() external view returns (uint256);
     
     /**
      * @notice Total liquidity in the pool

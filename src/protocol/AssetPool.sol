@@ -567,22 +567,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     }
 
     /**
-     * @notice Get the minimum collateral ratio
-     * @return The minimum collateral ratio (scaled by 10000)
-     */
-    function getHealthyCollateralRatio() external view returns (uint256) {
-        return healthyCollateralRatio;
-    }
-
-    /**
-     * @notice Get the liquidation threshold
-     * @return The liquidation threshold (scaled by 10000)
-     */
-    function getLiquidationThreshold() external view returns (uint256) {
-        return liquidationThreshold;
-    }
-
-    /**
      * @notice Returns the reserve token contract
      */
     function getReserveToken() external view returns (IERC20Metadata) {
