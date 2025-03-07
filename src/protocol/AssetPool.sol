@@ -149,7 +149,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @notice Allows users to deposit additional collateral
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(uint256 amount) external nonReentrant whenNotPaused {
+    function addCollateral(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
         Position storage position = positions[msg.sender];
@@ -167,7 +167,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @notice Allows users to withdraw excess collateral
      * @param amount Amount of collateral to withdraw
      */
-    function withdrawCollateral(uint256 amount) external nonReentrant whenNotPaused {
+    function withdrawCollateral(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         
         Position storage position = positions[msg.sender];
@@ -195,8 +195,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     /**
      * @notice Liquidate an undercollateralized position
      * @param user Address of the user whose position to liquidate
+     * ToDo: Require liquidator to add the assetToken to the pool which will be used to liquidate the position
      */
-    function liquidatePosition(address user) external nonReentrant whenNotPaused {
+    function liquidatePosition(address user) external nonReentrant {
         if (user == address(0) || user == msg.sender) revert InvalidAmount();
         
         Position storage position = positions[user];
@@ -207,10 +208,11 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         // Calculate liquidation reward
         uint256 liquidationRewardAmount = (position.collateralAmount * liquidationReward) / BPS;
-        uint256 remainingCollateral = position.collateralAmount - liquidationRewardAmount;
+        uint256 remainingCollateral = position.collateralAmount - (liquidationRewardAmount + getInterestDebt(user));
         
         // Clear the user's position
         position.collateralAmount = 0;
+        position.scaledInterest = 0;
         
         // Transfer reward to liquidator
         reserveToken.transfer(msg.sender, liquidationRewardAmount);
@@ -232,7 +234,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant whenNotPaused onlyActiveCycle {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
         
@@ -262,7 +264,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @notice Process a redemption request
      * @param amount Amount of asset tokens to redeem
      */
-    function redemptionRequest(uint256 amount) external nonReentrant whenNotPaused onlyActiveCycle {
+    function redemptionRequest(uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
@@ -318,7 +320,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     /**
      * @notice Claim processed request
      */
-    function claimRequest() external nonReentrant whenNotPaused onlyActiveCycle {
+    function claimRequest() external nonReentrant onlyActiveCycle {
         UserRequest storage request = userRequests[msg.sender];
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
