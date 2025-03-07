@@ -345,15 +345,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
             );
 
             // Get total cumulative interest in reserve from cycle manager
-            uint256 totalInterestInReserve = poolCycleManager.cumulativeInterestInReserve();
+            uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
             
             // Calculate user's scaled interest based on their deposit amount
             // For initial deposits, the deposit amount is the correct measure of their capital at risk
-            if (totalInterestInReserve > 0) {
+            if (totalInterest > 0) {
                 // Calculate proportional interest based on deposit amount
                 position.scaledInterest += Math.mulDiv(
                     assetAmount, 
-                    totalInterestInReserve, 
+                    totalInterest, 
                     cycleTotalDepositRequests
                 ); 
             }
@@ -401,13 +401,13 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         uint256 scaledInterest = position.scaledInterest;
         if (scaledInterest == 0) return 0;
         
-        uint256 totalInterestInReserve = poolCycleManager.cumulativeInterestInReserve();
-        if (totalInterestInReserve == 0) return 0;
+        uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
+        if (totalInterest == 0) return 0;
         
         // Calculate user's share of total interest
         return Math.mulDiv(
             scaledInterest,
-            totalInterestInReserve,
+            totalInterest,
             PRECISION
         );
     }
@@ -490,6 +490,26 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         // Required collateral = asset value * minimum collateral ratio / BPS
         return (assetValue * healthyCollateralRatio) / BPS;
+    }
+
+    // --------------------------------------------------------------------------------
+    //                               EXTERNAL FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+    * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param amount Amount of interest to deduct
+    */
+    function deductInterest(uint256 amount) external onlyPoolCycleManager {
+        if (amount == 0) revert InvalidAmount();
+
+        // Check if we have enough reserve tokens for the interest
+        uint256 reserveBalance = reserveToken.balanceOf(address(this));
+
+        if(reserveBalance < amount) revert InsufficientBalance();
+        
+        // Transfer interest to liquidity manager
+        reserveToken.transfer(address(poolLiquidityManager), amount);   
     }
 
     // --------------------------------------------------------------------------------

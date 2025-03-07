@@ -119,6 +119,11 @@ interface IPoolLiquidityManager {
      */
     error InsufficientLiquidity();
 
+    /**
+     * @notice Error when caller is not the pool cycle manager
+     */
+    error NotPoolCycleManager();
+
     
     /**
      * @notice Minimum required collateral ratio (50%)

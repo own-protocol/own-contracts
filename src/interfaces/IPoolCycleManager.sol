@@ -116,6 +116,8 @@ interface IPoolCycleManager {
     error OracleNotUpdated();
     /// @notice Thrown when price deviation is too high
     error PriceDeviationTooHigh();
+    /// @notice Thrown when caller is not authorized
+    error UnauthorizedCaller();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
@@ -252,14 +254,19 @@ interface IPoolCycleManager {
     function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
 
     /**
-     * @notice Returns the cumulative interest accrued in the pool
+     * @notice Returns the cumulative interest percent accrued in the pool
      */
     function cumulativePoolInterest() external view returns (uint256);
 
     /**
-     * @notice Returns the cumulative interest amount accrued in reserve tokens
+     * @notice Returns the cumulative interest amount accrued
      */
-    function cumulativeInterestInReserve() external view returns (uint256);
+    function cumulativeInterestAmount() external view returns (uint256);
+
+    /**
+     * @notice Returns the interest amount accrued in the current cycle
+     */
+    function cycleInterestAmount() external view returns (uint256);
 
     /**
      * @notice Returns the timestamp of the last interest accrual

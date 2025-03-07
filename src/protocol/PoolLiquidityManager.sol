@@ -40,6 +40,18 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
 
+    // --------------------------------------------------------------------------------
+    //                                  MODIFIERS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @dev Ensures the caller is the pool cycle manager
+     */
+    modifier onlyPoolCycleManager() {
+        if (msg.sender != address(poolCycleManager)) revert NotPoolCycleManager();
+        _;
+    }
+
     /**
      * @notice Modifier to ensure the caller is a registered LP
      */
@@ -295,8 +307,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
      * @param lp Address of the LP
      * @param amount Amount to deduct
      */
-    function deductRebalanceAmount(address lp, uint256 amount) external {
-        if (msg.sender != address(assetPool)) revert Unauthorized();
+    function deductRebalanceAmount(address lp, uint256 amount) external onlyPoolCycleManager {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
             
         CollateralInfo storage info = lpInfo[lp];
@@ -313,12 +324,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     }
 
     /**
-     * @notice Add rebalance amount to LP's collateral
+     * @notice Add rebalance amount or interest to LP's collateral
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToCollateral(address lp, uint256 amount) external {
-        if (msg.sender != address(assetPool)) revert Unauthorized();
+    function addToCollateral(address lp, uint256 amount) external onlyPoolCycleManager {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpInfo[lp].collateralAmount += amount;

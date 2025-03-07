@@ -114,21 +114,6 @@ interface IAssetPool {
      */
     event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
 
-    /**
-     * @notice Emitted when interest is charged
-     * @param user Address of the user
-     * @param amount Amount of interest charged
-     * @param cycleIndex Cycle index when interest was charged
-     */
-    event InterestCharged(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-
-    /**
-     * @notice Emitted when interest is distributed to LPs
-     * @param amount Total interest amount distributed
-     * @param cycleIndex Cycle index when the distribution occurred
-     */
-    event InterestDistributed(uint256 amount, uint256 indexed cycleIndex);
-
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
@@ -194,6 +179,16 @@ interface IAssetPool {
      * @param user Address of the user whose position to liquidate
      */
     function liquidatePosition(address user) external;
+
+    // --------------------------------------------------------------------------------
+    //                               EXTERNAL FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+    * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param amount Amount of interest to deduct
+    */
+    function deductInterest(uint256 amount) external;
 
 
     // --------------------------------------------------------------------------------
