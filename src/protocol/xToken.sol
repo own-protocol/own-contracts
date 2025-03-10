@@ -38,7 +38,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Ensures the caller is a pool contract
      */
     modifier onlyPool() {
-        if (msg.sender != pool || msg.sender != poolCycleManager) revert NotPool();
+        if (msg.sender != pool && msg.sender != poolCycleManager) revert NotPool();
         _;
     }
 
