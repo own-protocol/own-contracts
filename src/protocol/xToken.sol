@@ -19,6 +19,9 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Address of the pool contract that manages this token
     address public immutable pool;
 
+    /// @notice Address of the pool cycle manager contract
+    address public immutable poolCycleManager;
+
     /// @notice Version identifier for the xToken implementation
     uint256 public constant XTOKEN_VERSION = 0x1;
 
@@ -32,10 +35,10 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     uint256 private _totalReserveSupply;
 
     /**
-     * @notice Ensures the caller is the pool contract
+     * @notice Ensures the caller is a pool contract
      */
     modifier onlyPool() {
-        if (msg.sender != pool) revert NotPool();
+        if (msg.sender != pool || msg.sender != poolCycleManager) revert NotPool();
         _;
     }
 
@@ -43,9 +46,11 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Constructs the xToken contract
      * @param name The name of the token
      * @param symbol The symbol of the token
+     * @param _poolManager The address of the pool cycle manager contract
      */
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) ERC20Permit(name) {
+    constructor(string memory name, string memory symbol, address _poolManager) ERC20(name, symbol) ERC20Permit(name) {
         pool = msg.sender;
+        poolCycleManager = _poolManager;
     }
 
      /**

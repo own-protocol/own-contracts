@@ -133,7 +133,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
 
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
-        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol);
+        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol, _poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         interestRateStrategy = IInterestRateStrategy(_interestRateStrategy);
@@ -236,7 +236,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
         
