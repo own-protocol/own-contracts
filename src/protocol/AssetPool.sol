@@ -200,7 +200,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * ToDo: Require liquidator to add the assetToken to the pool which will be used to liquidate the position
      */
     function liquidatePosition(address user) external nonReentrant {
-        if (user == address(0) || user == msg.sender) revert InvalidAmount();
+        if (user == address(0) || user == msg.sender) revert Unauthorized();
         
         Position storage position = positions[user];
         
