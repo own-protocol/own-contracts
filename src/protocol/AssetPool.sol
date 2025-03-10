@@ -425,16 +425,14 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     function getCollateralHealth(address user) public view returns (uint8 health) {
         Position storage position = positions[user];
         uint256 assetBalance = assetToken.balanceOf(user);
-        
+        uint256 reserveBalance = assetToken.reserveBalanceOf(user);
+
         if (assetBalance == 0) {
             return 3; // Healthy - no asset balance means no risk
         }
         
-        uint256 assetPrice = assetOracle.assetPrice();
-        uint256 assetValue = Math.mulDiv(assetBalance, assetPrice, PRECISION);
-        
         // Calculate required collateral
-        uint256 requiredCollateral = Math.mulDiv(assetValue, healthyCollateralRatio, BPS);
+        uint256 requiredCollateral = Math.mulDiv(reserveBalance, healthyCollateralRatio, BPS);
         
         // Calculate interest debt
         uint256 interestDebt = getInterestDebt(user);
@@ -443,7 +441,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         uint256 totalRequired = requiredCollateral + interestDebt;
         
         // Calculate liquidation threshold amount
-        uint256 liquidationThresholdAmount = Math.mulDiv(assetValue, liquidationThreshold, BPS) + interestDebt;
+        uint256 liquidationThresholdAmount = Math.mulDiv(reserveBalance, liquidationThreshold, BPS ) + interestDebt;
         
         if (position.collateralAmount >= totalRequired) {
             return 3; // Healthy
@@ -490,11 +488,10 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         uint256 assetBalance = assetToken.balanceOf(user);
         if (assetBalance == 0) return 0;
         
-        uint256 assetPrice = assetOracle.assetPrice();
-        uint256 assetValue = Math.mulDiv(assetBalance, assetPrice, PRECISION);
+        uint256 reserveAmount = assetToken.reserveBalanceOf(user);
+        uint256 interestDebt = getInterestDebt(user);
         
-        // Required collateral = asset value * minimum collateral ratio / BPS
-        return (assetValue * healthyCollateralRatio) / BPS;
+        return Math.mulDiv(reserveAmount, healthyCollateralRatio - BPS, BPS) + interestDebt;
     }
 
     // --------------------------------------------------------------------------------

@@ -229,11 +229,13 @@ contract ProtocolTestUtils is Test {
         uint256 _rebalancePrice
     ) public {
         // Process deposit requests
-        vm.prank(user1);
-        assetPool.depositRequest(_depositAmount, _depositAmount / 5); // 20% collateral
-        
-        vm.prank(user2);
-        assetPool.depositRequest(_depositAmount, _depositAmount / 5);
+        if (_depositAmount > 0) {
+            vm.prank(user1);
+            assetPool.depositRequest(_depositAmount, _depositAmount / 5); // 20% collateral
+            
+            vm.prank(user2);
+            assetPool.depositRequest(_depositAmount, _depositAmount / 5);
+        }
         
         // Process redemption requests (if there are any assets to redeem)
         if (assetToken.balanceOf(user3) >= _redemptionAmount && _redemptionAmount > 0) {
@@ -266,11 +268,13 @@ contract ProtocolTestUtils is Test {
         cycleManager.rebalancePool(liquidityProvider2, _rebalancePrice);
         
         // Claim processed requests
-        vm.prank(user1);
-        assetPool.claimRequest(user1);
-        
-        vm.prank(user2);
-        assetPool.claimRequest(user2);
+        if (_depositAmount > 0) {
+            vm.prank(user1);
+            assetPool.claimRequest(user1);
+            
+            vm.prank(user2);
+            assetPool.claimRequest(user2);
+        }
         
         if (assetToken.balanceOf(user3) >= _redemptionAmount && _redemptionAmount > 0) {
             vm.prank(user3);
