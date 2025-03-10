@@ -10,7 +10,7 @@ contract MockPool {
     xToken public token;
     
     constructor(string memory name, string memory symbol) {
-        token = new xToken(name, symbol);
+        token = new xToken(name, symbol, address(this));
     }
     
     function mint(address account, uint256 amount, uint256 reserve) external {
