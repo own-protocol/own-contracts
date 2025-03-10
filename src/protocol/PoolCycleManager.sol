@@ -280,10 +280,12 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
 
         // Deduct interest from the pool and add to LP's collateral
         uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidity, totalLiquidity);
-        poolLiquidityManager.addToCollateral(lp, lpCycleInterest);
-        assetPool.deductInterest(lpCycleInterest);
+        if (lpCycleInterest > 0) {
+            poolLiquidityManager.addToCollateral(lp, lpCycleInterest);
+            assetPool.deductInterest(lpCycleInterest);
 
-        emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
+            emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
+        }
 
         cycleWeightedSum += rebalancePrice * lpLiquidity;
         lastRebalancedCycle[lp] = cycleIndex;
@@ -295,7 +297,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
             uint256 assetBalance = assetToken.balanceOf(address(this));
             uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            if (assetBalance > 0) {
+                assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            }
             cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
             
             _startNewCycle();
