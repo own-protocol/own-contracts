@@ -35,17 +35,17 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     /**
      * @notice Healthy collateral ratio required (scaled by 10000, default: 120%)
      */
-    uint256 public healthyCollateralRatio = 120_00;
+    uint256 public constant healthyCollateralRatio = 120_00;
 
     /**
      * @notice Liquidation threshold ratio (scaled by 10000, default: 110%)
      */
-    uint256 public liquidationThreshold = 110_00;
+    uint256 public constant liquidationThreshold = 110_00;
 
     /**
      * @notice Liquidation reward percentage (scaled by 10000, default: 5%)
      */
-    uint256 public liquidationReward = 5_00;
+    uint256 public constant liquidationReward = 5_00;
 
     /**
      * @notice Total interest collected in the current cycle
@@ -236,7 +236,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActiveCycle {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
         
