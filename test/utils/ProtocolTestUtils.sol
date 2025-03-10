@@ -236,7 +236,7 @@ contract ProtocolTestUtils is Test {
         assetPool.depositRequest(_depositAmount, _depositAmount / 5);
         
         // Process redemption requests (if there are any assets to redeem)
-        if (assetToken.balanceOf(user3) >= _redemptionAmount) {
+        if (assetToken.balanceOf(user3) >= _redemptionAmount && _redemptionAmount > 0) {
             vm.startPrank(user3);
             assetToken.approve(address(assetPool), type(uint256).max);
             assetPool.redemptionRequest(_redemptionAmount);
@@ -244,6 +244,7 @@ contract ProtocolTestUtils is Test {
         }
         
         // Start offchain rebalance
+        vm.warp(block.timestamp + CYCLE_LENGTH);
         vm.prank(owner);
         cycleManager.initiateOffchainRebalance();
         
@@ -271,7 +272,7 @@ contract ProtocolTestUtils is Test {
         vm.prank(user2);
         assetPool.claimRequest(user2);
         
-        if (assetToken.balanceOf(user3) >= _redemptionAmount) {
+        if (assetToken.balanceOf(user3) >= _redemptionAmount && _redemptionAmount > 0) {
             vm.prank(user3);
             assetPool.claimRequest(user3);
         }
@@ -285,7 +286,7 @@ contract ProtocolTestUtils is Test {
         vm.warp(block.timestamp + CYCLE_LENGTH);
         
         // Start offchain rebalance
-        vm.prank(owner);
+        vm.prank(liquidityProvider1);
         cycleManager.initiateOffchainRebalance();
         
         // Advance time to simulate offchain rebalance period
@@ -296,19 +297,21 @@ contract ProtocolTestUtils is Test {
         
         // If there are no deposits or redemptions, we can start a new cycle
         if (assetPool.cycleTotalDepositRequests() == 0 && assetPool.cycleTotalRedemptionRequests() == 0) {
-            vm.prank(owner);
+            vm.prank(liquidityProvider1);
             cycleManager.startNewCycle();
         } else {
             // Otherwise start onchain rebalance
-            vm.prank(owner);
+            vm.prank(liquidityProvider1);
             cycleManager.initiateOnchainRebalance();
             
             // LPs rebalance
-            vm.prank(liquidityProvider1);
+            vm.startPrank(liquidityProvider1);
             cycleManager.rebalancePool(liquidityProvider1, assetOracle.assetPrice());
+            vm.stopPrank();
             
-            vm.prank(liquidityProvider2);
+            vm.startPrank(liquidityProvider2);
             cycleManager.rebalancePool(liquidityProvider2, assetOracle.assetPrice());
+            vm.stopPrank();
         }
     }
 }
