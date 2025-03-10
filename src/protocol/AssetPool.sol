@@ -386,7 +386,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
             }
         
             // Transfer reserve tokens from poolCycleManager to user
-            reserveToken.transferFrom(address(this), user, reserveAmount + balanceCollateral);
+            reserveToken.transfer(user, reserveAmount + balanceCollateral);
             
             emit ReserveWithdrawn(user, reserveAmount, requestCycle);
         }
