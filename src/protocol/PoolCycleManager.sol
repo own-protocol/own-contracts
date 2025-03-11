@@ -158,6 +158,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         cycleLength = _cycleLength;
         rebalanceLength = _rebalanceLength;
         lastCycleActionDateTime = block.timestamp;
+        cycleIndex = 1;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
     }
@@ -243,7 +244,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
-        if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
+        if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
 
         _validateRebalancingPrice(rebalancePrice);
@@ -260,14 +261,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
-            amount = uint256(rebalanceAmount) * lpLiquidity / totalLiquidity;
+            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidity, totalLiquidity);
             
             // Deduct from LP's collateral and transfer to pool
             poolLiquidityManager.deductRebalanceAmount(lp, amount);
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP collateral
             // The LP gets back funds which are added to their collateral
-            amount = uint256(-rebalanceAmount) * lpLiquidity / totalLiquidity;
+            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidity, totalLiquidity);
             
             // Transfer from pool to LP's collateral
             reserveToken.transfer(address(poolLiquidityManager), amount);
