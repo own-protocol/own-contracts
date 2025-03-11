@@ -210,7 +210,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Value of redemption requests in reserve tokens
         uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequests, assetPrice, PRECISION * reserveToAssetDecimalFactor);
         // Initial purchase value of redemption requests i.e asset tokens in the pool
-        uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(this));
+        uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(assetPool));
         // Expected new asset mints
         uint256 expectedNewAssetMints = Math.mulDiv(depositRequests, PRECISION * reserveToAssetDecimalFactor, assetPrice);
 
@@ -294,11 +294,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            uint256 assetBalance = assetToken.balanceOf(address(this));
-            uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-            if (assetBalance > 0) {
-                assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
-            }
             cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
             
             _startNewCycle();
@@ -400,12 +395,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
-        poolReserveBalance = reserveToken.balanceOf(address(this));
+        poolReserveBalance = reserveToken.balanceOf(address(assetPool));
         poolAssetBalance = assetToken.totalSupply();
         netReserveDelta = 0;
         netAssetDelta = 0;
         rebalanceAmount = 0;
         cycleInterestAmount = 0;
+
+        assetPool.resetCycleData();
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }

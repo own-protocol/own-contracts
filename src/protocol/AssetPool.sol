@@ -48,11 +48,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     uint256 public constant liquidationReward = 5_00;
 
     /**
-     * @notice Total interest collected in the current cycle
-     */
-    uint256 public currentCycleInterest;
-
-    /**
      * @notice Total user deposit requests for the current cycle
      */
     uint256 public cycleTotalDepositRequests;
@@ -133,7 +128,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
 
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
-        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol, _poolCycleManager);
+        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         interestRateStrategy = IInterestRateStrategy(_interestRateStrategy);
@@ -512,6 +507,20 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         // Transfer interest to liquidity manager
         reserveToken.transfer(address(poolLiquidityManager), amount);   
+    }
+
+    /**
+     * @notice Reset cycle data at the end of a cycle
+     */
+    function resetCycleData() external onlyPoolCycleManager {
+        uint256 assetBalance = assetToken.balanceOf(address(this));
+        uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
+        if (assetBalance > 0) {
+            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+        }
+
+        cycleTotalDepositRequests = 0;
+        cycleTotalRedemptionRequests = 0;
     }
 
     // --------------------------------------------------------------------------------

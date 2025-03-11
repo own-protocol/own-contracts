@@ -196,6 +196,10 @@ interface IAssetPool {
     */
     function deductInterest(uint256 amount) external;
 
+    /**
+     * @notice Reset cycle data at the end of a cycle
+     */
+    function resetCycleData() external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
