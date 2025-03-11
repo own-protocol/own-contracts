@@ -347,15 +347,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
             // Get total cumulative interest in reserve from cycle manager
             uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
             
-            // Calculate user's scaled interest based on their deposit amount
-            // For initial deposits, the deposit amount is the correct measure of their capital at risk
             if (totalInterest > 0) {
-                // Calculate proportional interest based on deposit amount
-                position.scaledInterest += Math.mulDiv(
-                    assetAmount, 
-                    totalInterest, 
-                    cycleTotalDepositRequests
-                ); 
+                // Calculate scaled interest based on asset amount
+                position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest);
             }
         
             position.collateralAmount += collateralAmount;
