@@ -46,7 +46,7 @@ contract ProtocolIntegrationTest is ProtocolTestUtils {
         assertEq(reqAmount, depositAmount);
         assertEq(reqCollateral, collateralAmount);
         assertTrue(isDeposit);
-        assertEq(reqCycle, 0); // First cycle
+        assertEq(reqCycle, 1); // First cycle
         
         // Move to offchain rebalance
         vm.warp(block.timestamp + CYCLE_LENGTH);
@@ -76,7 +76,7 @@ contract ProtocolIntegrationTest is ProtocolTestUtils {
         
         // Check cycle state - should be active after all LPs rebalance
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.ACTIVE));
-        assertEq(cycleManager.cycleIndex(), 1); // Now in cycle 1
+        assertEq(cycleManager.cycleIndex(), 2); // Now in cycle 2
         
         // User1 claims their xTokens
         vm.prank(user1);
