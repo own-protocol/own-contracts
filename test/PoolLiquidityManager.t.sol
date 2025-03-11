@@ -12,7 +12,7 @@ import "./utils/ProtocolTestUtils.sol";
 contract PoolLiquidityManagerTest is ProtocolTestUtils {
     // Constants for testing
     uint256 constant LP_LIQUIDITY_AMOUNT = 1_000_000 * 1e6; // 1M USDC
-    uint256 constant USER_BALANCE = 1_000_000 * 1e6; // 100k USDC
+    uint256 constant USER_BALANCE = 1_000_000 * 1e6; // 1M USDC
     uint256 constant LP_BALANCE = 2_000_000 * 1e6; // 2M USDC
     uint256 constant INITIAL_PRICE = 100 * 1e18; // $100.00 per asset
     

@@ -4,7 +4,6 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
@@ -18,7 +17,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -182,7 +181,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     /**
      * @notice Initiates the off-chain rebalance process.
      */
-    function initiateOffchainRebalance() external whenNotPaused {
+    function initiateOffchainRebalance() external {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
 
@@ -197,7 +196,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      * @notice Initiates the onchain rebalance, calculates how much asset & stablecoin
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
-    function initiateOnchainRebalance() external whenNotPaused {
+    function initiateOnchainRebalance() external {
         if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
         uint256 expectedDateTime = lastCycleActionDateTime + rebalanceLength;
         if (block.timestamp < expectedDateTime) revert OffChainRebalanceInProgress();
@@ -241,7 +240,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
      */
-    function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP whenNotPaused {
+    function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (cycleIndex > 0 && lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
@@ -309,7 +308,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     /**
      * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
      */
-    function settlePool() external onlyLP whenNotPaused {
+    function settlePool() external onlyLP {
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
@@ -319,7 +318,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Pausable {
     /**
      * @notice If there is nothing to rebalance, start the next cycle.
      */
-    function startNewCycle() external whenNotPaused {
+    function startNewCycle() external {
         if (cycleState == CycleState.ACTIVE) revert InvalidCycleState();
         if (assetPool.cycleTotalDepositRequests() > 0) revert InvalidCycleRequest();
         if (assetPool.cycleTotalRedemptionRequests() > 0) revert InvalidCycleRequest();
