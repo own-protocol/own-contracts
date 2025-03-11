@@ -56,12 +56,6 @@ interface IXToken is IERC20Metadata {
      **/
     function pool() external view returns (address);
 
-    /**
-     * @dev Returns the pool cycle manager contract address
-     * @return The address of the pool cycle manager contract
-     **/
-    function poolCycleManager() external view returns (address);
-
      /**
      * @dev Returns the reserve balance of the user that is backing the xTokens.
      * @param user The user whose balance is calculated
