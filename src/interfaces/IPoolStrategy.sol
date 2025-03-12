@@ -181,27 +181,38 @@ interface IPoolStrategy {
     
     /**
      * @notice Calculates required user collateral
-     * @param userAssetValue Value of user's asset holdings
-     * @param userDeposit Amount of user's deposit
-     * @param interestDebt User's interest debt
+     * @param assetPool Address of the asset pool
+     * @param user Address of the user
      * @return requiredCollateral Required collateral amount
      */
     function calculateUserRequiredCollateral(
-        uint256 userAssetValue,
-        uint256 userDeposit,
-        uint256 interestDebt
+        address assetPool,
+        address user
     ) external view returns (uint256 requiredCollateral);
     
     /**
      * @notice Calculates required LP collateral
-     * @param lpAssetValue Value of LP's asset holdings share
-     * @param lpLiquidity LP's liquidity amount
-     * @param totalLPLiquidity Total LP liquidity 
-     * @return requiredCollateral Required collateral amount
+     * @param liquidityManager Address of the LP Registry contract
+     * @param lp Address of the LP
      */
     function calculateLPRequiredCollateral(
-        uint256 lpAssetValue,
-        uint256 lpLiquidity, 
-        uint256 totalLPLiquidity
+        address liquidityManager, 
+        address lp
     ) external view returns (uint256 requiredCollateral);
+
+    /**
+     * @notice Check collateral health status of a user
+     * @param assetPool Address of the asset pool
+     * @param user User address
+     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
+     */
+    function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health);
+
+    /**
+     * @notice Check collateral health status of an LP
+     * @param liquidityManager Address of the pool liquidity manager
+     * @param lp LP address
+     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
+     */
+    function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health);
 }
