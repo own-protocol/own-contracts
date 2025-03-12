@@ -230,13 +230,15 @@ interface IAssetPool {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return requiredCollateral Minimum required collateral
-     * @return isLiquidatable Whether position can be liquidated
+     * @return reserveAmount Amount of reserve tokens in position
+     * @return collateralAmount Amount of collateral in position
+     * @return interestDebt Amount of interest debt in reserve tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 requiredCollateral,
-        bool isLiquidatable
+        uint256 reserveAmount,
+        uint256 collateralAmount,
+        uint256 interestDebt
     );
 
     /**
@@ -255,22 +257,16 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Get healthy collateral ratio
-     * @return The healthy collateral ratio (scaled by 10000)
+     * @notice Get user collateral params
+     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
      */
-    function healthyCollateralRatio() external view returns (uint256);
-
-    /**
-     * @notice Get the liquidation threshold
-     * @return The liquidation threshold (scaled by 10000)
-     */
-    function liquidationThreshold() external view returns (uint256);
-
-    /**
-     * @notice Get the liquidation reward
-     * @return The liquidation reward (scaled by 10000)
-     */
-    function liquidationReward() external view returns (uint256);
+    function userCollateralParams() external view returns (
+        uint256 _healthyRatio,
+        uint256 _liquidationThreshold,
+        uint256 _liquidationReward
+    );
 
     /**
      * @notice Get total pending deposit requests for the current cycle
@@ -305,13 +301,6 @@ interface IAssetPool {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() external view returns (uint256 utilization);
-
-    /**
-     * @notice Calculate required collateral for a user
-     * @param user Address of the user
-     * @return requiredCollateral Required collateral amount
-     */
-    function calculateRequiredCollateral(address user) external view returns (uint256 requiredCollateral);
 
     // --------------------------------------------------------------------------------
     //                               DEPENDENCIES

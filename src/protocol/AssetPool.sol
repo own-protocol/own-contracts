@@ -13,7 +13,7 @@ import {IXToken} from "../interfaces/IXToken.sol";
 import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
-import {IInterestRateStrategy} from "../interfaces/IInterestRateStrategy.sol";
+import {IPoolStrategy} from "../interfaces/IPoolStrategy.sol";
 import {PoolStorage} from"./PoolStorage.sol";
 import {xToken} from "./xToken.sol";
 
@@ -28,24 +28,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Interest rate strategy contract
+     * @notice Pool strategy contract that manages pool economics
      */
-    IInterestRateStrategy public interestRateStrategy;
-
-    /**
-     * @notice Healthy collateral ratio required (scaled by 10000, default: 120%)
-     */
-    uint256 public constant healthyCollateralRatio = 120_00;
-
-    /**
-     * @notice Liquidation threshold ratio (scaled by 10000, default: 110%)
-     */
-    uint256 public constant liquidationThreshold = 110_00;
-
-    /**
-     * @notice Liquidation reward percentage (scaled by 10000, default: 5%)
-     */
-    uint256 public constant liquidationReward = 5_00;
+    IPoolStrategy public poolStrategy;
 
     /**
      * @notice Total user deposit requests for the current cycle
@@ -111,6 +96,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @param _assetOracle Address of the asset oracle
      * @param _poolCycleManager Address of the pool cycle manager contract
      * @param _poolLiquidityManager Address of the pool liquidity manager contract
+     * @param _poolStrategy Address of the pool strategy contract
      * @param _owner Address of the contract owner
      */
     function initialize(
@@ -119,7 +105,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         address _assetOracle,
         address _poolCycleManager,
         address _poolLiquidityManager,
-        address _interestRateStrategy,
+        address _poolStrategy,
         address _owner
     ) external initializer {
         if (_reserveToken == address(0) || _assetOracle == address(0) || 
@@ -131,7 +117,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
-        interestRateStrategy = IInterestRateStrategy(_interestRateStrategy);
+        poolStrategy = IPoolStrategy(_poolStrategy);
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -171,7 +157,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         if (position.collateralAmount < amount) revert InsufficientBalance();
         
         // Calculate required collateral
-        uint256 requiredCollateral = calculateRequiredCollateral(msg.sender);
+        uint256 requiredCollateral = poolStrategy.calculateUserRequiredCollateral(address(this), msg.sender);
         uint256 excessCollateral = 0;
         
         if (position.collateralAmount > requiredCollateral) {
@@ -200,11 +186,14 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         Position storage position = positions[user];
         
         // Check if position is liquidatable
-        (,, bool isLiquidatable) = userPosition(user);
+        uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
+        bool isLiquidatable = collateralHealth == 1;
         if (!isLiquidatable) revert PositionNotLiquidatable();
+
+        ( , , uint256 liquidationReward) = poolStrategy.getUserCollateralParams();
         
         // Calculate liquidation reward
-        uint256 liquidationRewardAmount = (position.collateralAmount * liquidationReward) / BPS;
+        uint256 liquidationRewardAmount = Math.mulDiv(position.collateralAmount, liquidationReward, BPS);
         uint256 remainingCollateral = position.collateralAmount - (liquidationRewardAmount + getInterestDebt(user));
         
         // Clear the user's position
@@ -237,9 +226,11 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         UserRequest storage request = userRequests[msg.sender];
         if (request.amount > 0) revert RequestPending();
+
+        (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();
         
         // Calculate minimum required collateral based on deposit amount
-        uint256 minRequiredCollateral = Math.mulDiv(amount, healthyCollateralRatio - BPS, BPS);
+        uint256 minRequiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         
         // Ensure provided collateral meets minimum requirement
         if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
@@ -407,47 +398,12 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     }
 
     /**
-     * @notice Check collateral health status of a user
-     * @param user User address
-     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
-     */
-    function getCollateralHealth(address user) public view returns (uint8 health) {
-        Position storage position = positions[user];
-        uint256 assetBalance = assetToken.balanceOf(user);
-        uint256 reserveBalance = assetToken.reserveBalanceOf(user);
-
-        if (assetBalance == 0) {
-            return 3; // Healthy - no asset balance means no risk
-        }
-        
-        // Calculate required collateral
-        uint256 requiredCollateral = Math.mulDiv(reserveBalance, healthyCollateralRatio, BPS);
-        
-        // Calculate interest debt
-        uint256 interestDebt = getInterestDebt(user);
-        
-        // Total required = collateral requirement + interest debt
-        uint256 totalRequired = requiredCollateral + interestDebt;
-        
-        // Calculate liquidation threshold amount
-        uint256 liquidationThresholdAmount = Math.mulDiv(reserveBalance, liquidationThreshold, BPS ) + interestDebt;
-        
-        if (position.collateralAmount >= totalRequired) {
-            return 3; // Healthy
-        } else if (position.collateralAmount >= liquidationThresholdAmount) {
-            return 2; // Warning
-        } else {
-            return 1; // Liquidatable
-        }
-    }
-
-    /**
      * @notice Calculate current interest rate based on pool utilization
      * @return rate Current interest rate (scaled by 10000)
      */
     function getCurrentInterestRate() public view returns (uint256 rate) {
         uint256 utilization = getPoolUtilization();
-        return interestRateStrategy.calculateInterestRate(utilization);
+        return poolStrategy.calculateInterestRate(utilization);
     }
 
     /**
@@ -466,21 +422,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
         
         return Math.min((totalValue * BPS) / totalLiquidity, BPS);
-    }
-
-    /**
-     * @notice Calculate required collateral for a user
-     * @param user Address of the user
-     * @return requiredCollateral Required collateral amount
-     */
-    function calculateRequiredCollateral(address user) public view returns (uint256 requiredCollateral) {
-        uint256 assetBalance = assetToken.balanceOf(user);
-        if (assetBalance == 0) return 0;
-        
-        uint256 reserveAmount = assetToken.reserveBalanceOf(user);
-        uint256 interestDebt = getInterestDebt(user);
-        
-        return Math.mulDiv(reserveAmount, healthyCollateralRatio - BPS, BPS) + interestDebt;
     }
 
     // --------------------------------------------------------------------------------
@@ -534,20 +475,21 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return requiredCollateral Minimum required collateral
-     * @return isLiquidatable Whether position can be liquidated
+     * @return reserveAmount Amount of reserve tokens in position
+     * @return collateralAmount Amount of collateral in position
+     * @return interestDebt Amount of interest debt in reserve tokens
      */
-    function userPosition(address user) public view returns (
+    function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 requiredCollateral,
-        bool isLiquidatable
+        uint256 reserveAmount,
+        uint256 collateralAmount,
+        uint256 interestDebt
     ) {
-        uint8 health = getCollateralHealth(user);
+        Position storage position = positions[user];
         assetAmount = assetToken.balanceOf(user);
-        requiredCollateral = calculateRequiredCollateral(user);
-        isLiquidatable = (health == 1);
-        
-        return (assetAmount, requiredCollateral, isLiquidatable);
+        reserveAmount = assetToken.reserveBalanceOf(user);
+        collateralAmount = position.collateralAmount;
+        interestDebt = getInterestDebt(user);
     }
 
     /**
@@ -566,6 +508,20 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
     ) {
         UserRequest storage request = userRequests[user];
         return (request.amount, request.collateralAmount, request.isDeposit, request.requestCycle);
+    }
+
+    /**
+     * @notice Get user collateral params
+     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
+     */
+    function userCollateralParams() external view returns (
+        uint256 _healthyRatio,
+        uint256 _liquidationThreshold,
+        uint256 _liquidationReward
+    ) {
+        (_healthyRatio, _liquidationThreshold, _liquidationReward) = poolStrategy.getUserCollateralParams();
     }
 
     /**
