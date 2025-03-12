@@ -1,0 +1,207 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// author: bhargavaparoksham
+
+pragma solidity ^0.8.20;
+
+/**
+ * @title IPoolStrategy
+ * @notice Interface for strategy contracts that manage pool economics
+ * @dev Handles interest rates, collateral requirements, fees, and profit sharing
+ */
+interface IPoolStrategy {
+    // --------------------------------------------------------------------------------
+    //                             STRATEGY TYPE FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Enum defining collateral calculation methods
+     */
+    enum CollateralMethod {
+        VARIABLE_ASSET_BASED,   // Based on asset holdings (variable)
+        FIXED_DEPOSIT_BASED     // Based on fixed percentage of deposit/liquidity
+    }
+
+    /**
+     * @notice Returns the method used for calculating LP collateral
+     * @return method The calculation method for LP collateral
+     */
+    function getLPCollateralMethod() external view returns (CollateralMethod);
+    
+    /**
+     * @notice Returns the method used for calculating user collateral
+     * @return method The calculation method for user collateral
+     */
+    function getUserCollateralMethod() external view returns (CollateralMethod);
+    
+    /**
+     * @notice Returns whether aToken (yield-bearing) is being used
+     * @return isAToken True if aToken is used as reserve token
+     */
+    function isATokenReserve() external view returns (bool);
+    
+    /**
+     * @notice Returns whether profit sharing is enabled
+     * @return isEnabled True if profit sharing is enabled
+     */
+    function isProfitSharingEnabled() external view returns (bool);
+
+    // --------------------------------------------------------------------------------
+    //                             ASSET INTEREST FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the current interest rate based on utilization
+     * @param utilization Current utilization rate of the pool (scaled by 10000)
+     * @return rate Current interest rate (scaled by 10000)
+     */
+    function calculateInterestRate(uint256 utilization) external view returns (uint256 rate);
+
+    /**
+     * @notice Returns the maximum utilization point
+     * @return Maximum utilization point (scaled by 10000)
+     */
+    function getMaxUtilization() external view returns (uint256);
+    
+    // --------------------------------------------------------------------------------
+    //                             RESERVE INTEREST FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Returns the underlying token for aToken if applicable
+     * @return underlyingToken The address of the underlying token
+     */
+    function getUnderlyingToken() external view returns (address underlyingToken);
+    
+    /**
+     * @notice Calculates accrued interest from reserve tokens (aTokens)
+     * @param currentBalance Current aToken balance
+     * @param lastBalance Previous balance for comparison
+     * @return interestAmount Amount of interest accrued
+     */
+    function calculateReserveInterest(
+        uint256 currentBalance,
+        uint256 lastBalance
+    ) external view returns (uint256 interestAmount);
+    
+    /**
+     * @notice Determines how reserve interest is distributed
+     * @param interestAmount Total interest amount
+     * @param isUserFunds Whether interest is from user funds or LP collateral
+     * @return protocolAmount Amount for protocol
+     * @return lpAmount Amount for LPs
+     */
+    function distributeReserveInterest(
+        uint256 interestAmount,
+        bool isUserFunds
+    ) external view returns (
+        uint256 protocolAmount,
+        uint256 lpAmount
+    );
+
+    // --------------------------------------------------------------------------------
+    //                             PROFIT SHARING FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Calculates profit share distribution for an LP
+     * @param rebalanceAmount Total rebalance amount (profit/loss)
+     * @param lpLiquidity Individual LP's liquidity
+     * @param totalLPLiquidity Total LP liquidity
+     * @return keepAmount Amount LP keeps
+     * @return poolAmount Amount LP contributes to pool
+     */
+    function calculateProfitShare(
+        int256 rebalanceAmount,
+        uint256 lpLiquidity,
+        uint256 totalLPLiquidity
+    ) external view returns (uint256 keepAmount, uint256 poolAmount);
+    
+    // --------------------------------------------------------------------------------
+    //                             FEE FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Returns fee percentages for different operations
+     * @return depositFee Fee percentage for deposits (scaled by 10000)
+     * @return redemptionFee Fee percentage for redemptions (scaled by 10000)
+     * @return protocolFee Fee percentage taken by protocol from interest (scaled by 10000)
+     */
+    function getFeePercentages() external view returns (
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 protocolFee
+    );
+    
+    /**
+     * @notice Returns the fee recipient address
+     * @return recipient The fee recipient address
+     */
+    function getFeeRecipient() external view returns (address recipient);
+    
+    /**
+     * @notice Calculate fee amount for an operation
+     * @param amount Amount involved in the operation
+     * @param operationType 0=deposit, 1=redemption
+     * @return feeAmount Amount of fee to take
+     */
+    function calculateFee(
+        uint256 amount,
+        uint8 operationType
+    ) external view returns (uint256 feeAmount);
+
+    // --------------------------------------------------------------------------------
+    //                             COLLATERAL FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Returns user collateral parameters
+     * @return healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @return liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @return liquidationReward Liquidation reward percentage (scaled by 10000)
+     */
+    function getUserCollateralParams() external view returns (
+        uint256 healthyRatio,
+        uint256 liquidationThreshold,
+        uint256 liquidationReward
+    );
+    
+    /**
+     * @notice Returns LP collateral parameters
+     * @return healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @return warningThreshold Warning threshold (scaled by 10000)
+     * @return registrationRatio Registration minimum ratio (scaled by 10000)
+     * @return liquidationReward Liquidation reward percentage (scaled by 10000)
+     */
+    function getLPCollateralParams() external view returns (
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    );
+    
+    /**
+     * @notice Calculates required user collateral
+     * @param userAssetValue Value of user's asset holdings
+     * @param userDeposit Amount of user's deposit
+     * @param interestDebt User's interest debt
+     * @return requiredCollateral Required collateral amount
+     */
+    function calculateUserRequiredCollateral(
+        uint256 userAssetValue,
+        uint256 userDeposit,
+        uint256 interestDebt
+    ) external view returns (uint256 requiredCollateral);
+    
+    /**
+     * @notice Calculates required LP collateral
+     * @param lpAssetValue Value of LP's asset holdings share
+     * @param lpLiquidity LP's liquidity amount
+     * @param totalLPLiquidity Total LP liquidity 
+     * @return requiredCollateral Required collateral amount
+     */
+    function calculateLPRequiredCollateral(
+        uint256 lpAssetValue,
+        uint256 lpLiquidity, 
+        uint256 totalLPLiquidity
+    ) external view returns (uint256 requiredCollateral);
+}
