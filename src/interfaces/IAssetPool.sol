@@ -8,7 +8,7 @@ import {IXToken} from "./IXToken.sol";
 import {IPoolLiquidityManager} from "./IPoolLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
 import {IPoolCycleManager} from "./IPoolCycleManager.sol";
-import {IInterestRateStrategy} from "./IInterestRateStrategy.sol";
+import {IPoolStrategy} from "./IPoolStrategy.sol";
 
 /**
  * @title IAssetPool
@@ -122,6 +122,18 @@ interface IAssetPool {
      */
     event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
 
+    /**
+     * @notice Emitted when interest is distributed to an LP
+     * @param lp Address of the LP
+     * @param amount Amount of interest distributed
+     * @param cycleIndex Index of the cycle
+     */
+    event InterestDistributedToLP(
+        address indexed lp,
+        uint256 indexed amount,
+        uint256 indexed cycleIndex
+    );
+
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
@@ -200,9 +212,10 @@ interface IAssetPool {
 
     /**
     * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param lp Address of the LP to whom interest is owed
     * @param amount Amount of interest to deduct
     */
-    function deductInterest(uint256 amount) external;
+    function deductInterest(address lp, uint256 amount) external;
 
     /**
      * @notice Reset cycle data at the end of a cycle
@@ -219,13 +232,6 @@ interface IAssetPool {
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function getInterestDebt(address user) external view returns (uint256 interestDebt);
-
-        /**
-     * @notice Check collateral health status of a user
-     * @param user User address
-     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
-     */
-    function getCollateralHealth(address user) external view returns (uint8 health);
 
     /**
      * @notice Get a user's collateral amount
@@ -294,11 +300,6 @@ interface IAssetPool {
     function totalUserCollateral() external view returns (uint256);
 
     /**
-     * @notice Returns the interest rate strategy
-     */
-    function interestRateStrategy() external view returns (IInterestRateStrategy);
-
-    /**
      * @notice Calculate current interest rate based on pool utilization
      * @return rate Current interest rate (scaled by 10000)
      */
@@ -333,6 +334,11 @@ interface IAssetPool {
      * @notice Returns the pool liquidity manager contract
      */
     function getPoolLiquidityManager() external view returns (IPoolLiquidityManager);
+
+    /**
+     * @notice Returns the pool strategy contract
+     */
+    function getPoolStrategy() external view returns (IPoolStrategy);
 
     /**
      * @notice Returns the asset oracle contract

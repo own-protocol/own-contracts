@@ -10,6 +10,7 @@ import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
 import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
+import {IPoolStrategy} from "../interfaces/IPoolStrategy.sol";
 
 /**
  * @title PoolStorage
@@ -50,6 +51,11 @@ abstract contract PoolStorage is Initializable {
      * @notice Pool Cycle Manager contract
      */
     IPoolCycleManager public poolCycleManager;
+
+    /**
+     * @notice Pool Strategy contract
+     */
+    IPoolStrategy public poolStrategy;
 
     /**
      * @notice Reserve to asset decimal factor for conversion calculations

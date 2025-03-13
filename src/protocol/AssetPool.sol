@@ -5,7 +5,6 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
@@ -22,15 +21,10 @@ import {xToken} from "./xToken.sol";
  * @notice Manages user positions, collateral, and interest payments in the protocol
  * @dev Handles the lifecycle of user positions and calculates interest based on pool utilization
  */
-contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuard {
+contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Pool strategy contract that manages pool economics
-     */
-    IPoolStrategy public poolStrategy;
 
     /**
      * @notice Total user deposit requests for the current cycle
@@ -459,18 +453,35 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
 
     /**
     * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param lp Address of the LP to whom interest is owed
     * @param amount Amount of interest to deduct
     */
-    function deductInterest(uint256 amount) external onlyPoolCycleManager {
+    function deductInterest(address lp, uint256 amount) external onlyPoolCycleManager {
         if (amount == 0) revert InvalidAmount();
 
         // Check if we have enough reserve tokens for the interest
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
 
         if(reserveBalance < amount) revert InsufficientBalance();
+
+        // Calculate and deduct protocol interest fee
+        (, uint256 protocolFeePercentage , ) = poolStrategy.getFeePercentages();
+        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        if (protocolFee > 0) {
+            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
+            emit FeeDeducted(lp, protocolFee, 2);
+        }
         
+        uint256 lpCycleInterest = amount - protocolFee;
+
+        uint256 cycleIndex = poolCycleManager.cycleIndex();
+
         // Transfer interest to liquidity manager
-        reserveToken.transfer(address(poolLiquidityManager), amount);   
+        reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
+
+        poolLiquidityManager.addToCollateral(lp, lpCycleInterest);
+            
+        emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
     }
 
     /**
@@ -579,6 +590,13 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
      */
     function getPoolLiquidityManager() external view returns (IPoolLiquidityManager) {
         return poolLiquidityManager;
+    }
+
+    /**
+     * @notice Returns the pool strategy contract
+     */
+    function getPoolStrategy() external view returns (IPoolStrategy) {
+        return poolStrategy;
     }
 
     /**
