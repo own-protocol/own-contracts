@@ -459,4 +459,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     function getTotalLPLiquidity() external view returns (uint256) {
         return totalLPLiquidity;
     }
+
+    /**
+     * @notice Returns the reserve to asset decimal factor
+     */
+    function getReserveToAssetDecimalFactor() external view returns (uint256) {
+        return reserveToAssetDecimalFactor;
+    }
 }

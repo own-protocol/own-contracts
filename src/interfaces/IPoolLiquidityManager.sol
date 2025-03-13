@@ -281,4 +281,9 @@ interface IPoolLiquidityManager {
      * @return uint256 The total liquidity amount
      */
     function getTotalLPLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Returns the reserve to asset decimal factor
+     */
+    function getReserveToAssetDecimalFactor() external view returns (uint256);
 }
