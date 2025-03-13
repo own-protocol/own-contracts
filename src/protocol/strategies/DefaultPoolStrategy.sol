@@ -369,6 +369,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
         uint256 lpAssetValue = manager.getLPAssetHolding(lp);
         uint256 decimalFactor = manager.getReserveToAssetDecimalFactor();
 
+        //ToDo: Need to consider expectedNewAssetMints when calculating required collateral
+
         return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS * decimalFactor);
     }
 
