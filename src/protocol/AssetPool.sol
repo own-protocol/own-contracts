@@ -234,9 +234,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         // Ensure provided collateral meets minimum requirement
         if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
-        
+
+        // Calculate deposit fee
+        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
+
+        uint256 totalDeposit = amount + collateralAmount + depositFee;
+
         // Transfer tokens from user to poolCycleManager
-        reserveToken.transferFrom(msg.sender, address(this), amount + collateralAmount);
+        reserveToken.transferFrom(msg.sender, address(this), totalDeposit);
         
         // Update request state
         request.amount = amount;
@@ -286,6 +292,12 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         
         if (requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
         if (amount == 0) revert NothingToCancel();
+
+        // Calculate deposit fee
+        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
+
+        uint256 totalDeposit = amount + collateralAmount + depositFee;
         
         // Clear request
         delete userRequests[msg.sender];
@@ -293,7 +305,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
         if (isDeposit) {
             cycleTotalDepositRequests -= amount;
             // Return reserve tokens and collateral
-            reserveToken.transfer(msg.sender, amount + collateralAmount);
+            reserveToken.transfer(msg.sender, totalDeposit);
             
             
             emit DepositCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
@@ -335,6 +347,14 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
                 rebalancePrice
             );
 
+            // Calculate and deduct deposit fee
+            (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+            uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
+            if (depositFee > 0) {
+                reserveToken.transfer(poolStrategy.getFeeRecipient(), depositFee);
+                emit FeeDeducted(user, depositFee, 0);
+            }
+
             // Get total cumulative interest in reserve from cycle manager
             uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
             
@@ -364,9 +384,18 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, Pausable, ReentrancyGuar
                 position.scaledInterest = 0;
                 position.collateralAmount = 0;
             }
+
+            // Calculate and deduct redemption fee
+            (, uint256 redemptionFeePercentage , ) = poolStrategy.getFeePercentages();
+            uint256 redemptionFee = (redemptionFeePercentage > 0) ? Math.mulDiv(amount, redemptionFeePercentage, BPS) : 0;
+            if (redemptionFee > 0) {
+                reserveToken.transfer(poolStrategy.getFeeRecipient(), redemptionFee);
+                emit FeeDeducted(user, redemptionFee, 1);
+            }
         
+            uint256 totalAmount = reserveAmount + balanceCollateral - redemptionFee;
             // Transfer reserve tokens from poolCycleManager to user
-            reserveToken.transfer(user, reserveAmount + balanceCollateral);
+            reserveToken.transfer(user, totalAmount);
             
             emit ReserveWithdrawn(user, reserveAmount, requestCycle);
         }

@@ -107,6 +107,14 @@ interface IAssetPool {
     event CollateralWithdrawn(address indexed user, uint256 amount);
 
     /**
+     * @notice Emitted when fee is deducted from user
+     * @param user Address of the user
+     * @param amount Amount of fee deducted
+     * @param feeType Type of fee deducted (0 = deposit, 1 = redemption)
+     */
+    event FeeDeducted(address indexed user, uint256 amount, uint8 feeType);
+
+    /**
      * @notice Emitted when a position is liquidated
      * @param user Address of the user whose position was liquidated
      * @param liquidator Address of the liquidator
