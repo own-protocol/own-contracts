@@ -306,31 +306,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
         return feeRecipient;
     }
     
-    /**
-     * @notice Calculate fee amount for an operation
-     * @param amount Amount involved in the operation
-     * @param operationType 0=deposit, 1=redemption, 2=interestTransfer
-     * @return feeAmount Amount of fee to take
-     */
-    function calculateFee(
-        uint256 amount,
-        uint8 operationType
-    ) external view returns (uint256) {
-        if (operationType == 0) {
-            // Deposit fee
-            return amount * depositFeePercentage / BPS;
-        } else if (operationType == 1) {
-            // Redemption fee
-            return amount * redemptionFeePercentage / BPS;
-        } else if (operationType == 2) {
-            // Interest transfer fee
-            return amount * protocolFeePercentage / BPS;
-        } else {
-            // Unknown operation type
-            return 0;
-        }
-    }
-    
     // --------------------------------------------------------------------------------
     //                             COLLATERAL FUNCTIONS
     // --------------------------------------------------------------------------------

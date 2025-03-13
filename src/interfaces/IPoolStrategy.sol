@@ -137,17 +137,6 @@ interface IPoolStrategy {
      * @return recipient The fee recipient address
      */
     function getFeeRecipient() external view returns (address recipient);
-    
-    /**
-     * @notice Calculate fee amount for an operation
-     * @param amount Amount involved in the operation
-     * @param operationType 0=deposit, 1=redemption
-     * @return feeAmount Amount of fee to take
-     */
-    function calculateFee(
-        uint256 amount,
-        uint8 operationType
-    ) external view returns (uint256 feeAmount);
 
     // --------------------------------------------------------------------------------
     //                             COLLATERAL FUNCTIONS
