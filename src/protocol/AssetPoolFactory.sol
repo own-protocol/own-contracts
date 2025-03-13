@@ -52,7 +52,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * @param depositToken Address of the token used for deposits.
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
-     * @param interestRateStrategy Address of the interest rate strategy contract.
+     * @param poolStrategy Address of the pool strategy contract.
      * @param cycleLength Length of each investment cycle in seconds.
      * @param rebalanceLength Length of the rebalancing period within a cycle in seconds.
      * @return address The address of the newly created asset pool.
@@ -61,7 +61,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         address depositToken,
         string memory assetSymbol,
         address oracle,
-        address interestRateStrategy,
+        address poolStrategy,
         uint256 cycleLength,
         uint256 rebalanceLength
     ) external returns (address) {
@@ -87,7 +87,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             cycleManager,
             liquidityManager,
-            interestRateStrategy,
+            poolStrategy,
             owner
         );
 
