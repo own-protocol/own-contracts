@@ -46,15 +46,6 @@ interface IPoolLiquidityManager {
     event LPLiquidated(address indexed lp, address indexed liquidator, uint256 reward);
 
     /**
-     * @notice Emitted when LP's collateral ratio falls below threshold
-     */
-    event CollateralWarning(
-        address indexed lp,
-        uint256 currentRatio,
-        uint256 requiredTopUp
-    );
-    
-    /**
      * @notice Emitted when a new LP is registered
      */
     event LPRegistered(address indexed lp, uint256 liquidityAmount, uint256 collateralAmount);
@@ -139,27 +130,6 @@ interface IPoolLiquidityManager {
      */
     error Unauthorized();
 
-    
-    /**
-     * @notice Healthy collateral ratio (50%)
-     */
-    function healthyCollateralRatio() external view returns (uint256);
-
-    /**
-     * @notice Warning threshold for collateral ratio (30%)
-     */
-    function collateralThreshold() external view returns (uint256);
-    
-    /**
-     * @notice Registration collateral ratio (20%)
-     */
-    function registrationCollateralRatio() external view returns (uint256);
-    
-    /**
-     * @notice Liquidation reward (5%)
-     */
-    function liquidationReward() external view returns (uint256);
-    
     /**
      * @notice Total liquidity in the pool
      */
@@ -227,28 +197,10 @@ interface IPoolLiquidityManager {
     function addToCollateral(address lp, uint256 amount) external;
 
     /**
-     * @notice Calculate required collateral for an LP
-     * @param lp Address of the LP
-     */
-    function getRequiredCollateral(address lp) external view returns (uint256);
-
-    /**
      * @notice Get LP asset holdings
      * @param lp Address of the LP
      */
     function getLPAssetHolding(address lp) external view returns (uint256);
-
-    /**
-     * @notice Calculate current collateral ratio for an LP
-     * @param lp Address of the LP
-     */
-    function getCurrentRatio(address lp) external view returns (uint256);
-
-    /**
-     * @notice Check LP's collateral health
-     * @param lp Address of the LP
-     */
-    function checkCollateralHealth(address lp) external view returns (uint8);
     
     /**
      * @notice Get LP's current collateral and liquidity info
@@ -281,4 +233,9 @@ interface IPoolLiquidityManager {
      * @return uint256 The total liquidity amount
      */
     function getTotalLPLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Returns the reserve to asset decimal factor
+     */
+    function getReserveToAssetDecimalFactor() external view returns (uint256);
 }
