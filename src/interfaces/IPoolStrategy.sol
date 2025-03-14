@@ -6,7 +6,7 @@ pragma solidity ^0.8.20;
 /**
  * @title IPoolStrategy
  * @notice Interface for strategy contracts that manage pool economics
- * @dev Handles interest rates, collateral requirements, fees, and profit sharing
+ * @dev Handles interest rates, collateral requirements, fees, etc.
  */
 interface IPoolStrategy {
     // --------------------------------------------------------------------------------
@@ -32,18 +32,6 @@ interface IPoolStrategy {
      * @return method The calculation method for user collateral
      */
     function getUserCollateralMethod() external view returns (CollateralMethod);
-    
-    /**
-     * @notice Returns whether aToken (yield-bearing) is being used
-     * @return isAToken True if aToken is used as reserve token
-     */
-    function isATokenReserve() external view returns (bool);
-    
-    /**
-     * @notice Returns whether profit sharing is enabled
-     * @return isEnabled True if profit sharing is enabled
-     */
-    function isProfitSharingEnabled() external view returns (bool);
 
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
@@ -61,60 +49,6 @@ interface IPoolStrategy {
      * @return Maximum utilization point (scaled by 10000)
      */
     function getMaxUtilization() external view returns (uint256);
-    
-    // --------------------------------------------------------------------------------
-    //                             RESERVE INTEREST FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Returns the underlying token for aToken if applicable
-     * @return underlyingToken The address of the underlying token
-     */
-    function getUnderlyingToken() external view returns (address underlyingToken);
-    
-    /**
-     * @notice Calculates accrued interest from reserve tokens (aTokens)
-     * @param currentBalance Current aToken balance
-     * @param lastBalance Previous balance for comparison
-     * @return interestAmount Amount of interest accrued
-     */
-    function calculateReserveInterest(
-        uint256 currentBalance,
-        uint256 lastBalance
-    ) external view returns (uint256 interestAmount);
-    
-    /**
-     * @notice Determines how reserve interest is distributed
-     * @param interestAmount Total interest amount
-     * @param isUserFunds Whether interest is from user funds or LP collateral
-     * @return protocolAmount Amount for protocol
-     * @return lpAmount Amount for LPs
-     */
-    function distributeReserveInterest(
-        uint256 interestAmount,
-        bool isUserFunds
-    ) external view returns (
-        uint256 protocolAmount,
-        uint256 lpAmount
-    );
-
-    // --------------------------------------------------------------------------------
-    //                             PROFIT SHARING FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Calculates profit share distribution for an LP
-     * @param rebalanceAmount Total rebalance amount (profit/loss)
-     * @param lpLiquidity Individual LP's liquidity
-     * @param totalLPLiquidity Total LP liquidity
-     * @return keepAmount Amount LP keeps
-     * @return poolAmount Amount LP contributes to pool
-     */
-    function calculateProfitShare(
-        int256 rebalanceAmount,
-        uint256 lpLiquidity,
-        uint256 totalLPLiquidity
-    ) external view returns (uint256 keepAmount, uint256 poolAmount);
     
     // --------------------------------------------------------------------------------
     //                             FEE FUNCTIONS

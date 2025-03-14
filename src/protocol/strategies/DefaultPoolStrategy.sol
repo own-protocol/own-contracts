@@ -43,16 +43,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
     uint256 public lpRegistrationRatio;           // Registration minimum (e.g., 20%)
     uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
     
-    // Reserve interest distribution
-    uint256 public userInterestProtocolShare;     // Protocol share of user reserve interest
-    uint256 public userInterestLPShare;           // LP share of user reserve interest
-    uint256 public lpInterestProtocolShare;       // Protocol share of LP reserve interest
-    uint256 public lpInterestLPShare;             // LP self-share of LP reserve interest
-    
-    // Configuration flags
-    bool public isAToken;                 // Whether reserve token is an aToken
-    address public underlyingToken;       // Underlying token for aToken (if applicable)
-    
     // Constants
     uint256 private constant BPS = 100_00;  // 100% in basis points (10000)
     
@@ -83,15 +73,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
         uint256 _lpHealthyRatio,
         uint256 _lpWarningThreshold,
         uint256 _lpRegistrationRatio,
-        uint256 _lpLiquidationReward,
-        
-        // Reserve interest parameters
-        bool _isAToken,
-        address _underlyingToken,
-        uint256 _userInterestProtocolShare,
-        uint256 _userInterestLPShare,
-        uint256 _lpInterestProtocolShare,
-        uint256 _lpInterestLPShare
+        uint256 _lpLiquidationReward
     ) {
         // Parameter validation
         require(_baseRate <= _maxRate, "Base rate must be <= max rate");
@@ -103,12 +85,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
         require(_lpRegistrationRatio <= _lpWarningThreshold, "LP registration ratio must be <= warning threshold");
         require(_depositFee <= BPS && _redemptionFee <= BPS && _protocolFee <= BPS, "Fees cannot exceed 100%");
         require(_feeRecipient != address(0), "Invalid fee recipient");
-        
-        if (_isAToken) {
-            require(_underlyingToken != address(0), "Invalid underlying token");
-            require(_userInterestProtocolShare + _userInterestLPShare == BPS, "User interest shares must sum to 100%");
-            require(_lpInterestProtocolShare + _lpInterestLPShare == BPS, "LP interest shares must sum to 100%");
-        }
         
         // Asset interest parameters
         baseInterestRate = _baseRate;
@@ -133,14 +109,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
         lpWarningThreshold = _lpWarningThreshold;
         lpRegistrationRatio = _lpRegistrationRatio;
         lpLiquidationReward = _lpLiquidationReward;
-        
-        // Reserve interest parameters
-        isAToken = _isAToken;
-        underlyingToken = _underlyingToken;
-        userInterestProtocolShare = _userInterestProtocolShare;
-        userInterestLPShare = _userInterestLPShare;
-        lpInterestProtocolShare = _lpInterestProtocolShare;
-        lpInterestLPShare = _lpInterestLPShare;
     }
     
     // --------------------------------------------------------------------------------
@@ -161,22 +129,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
      */
     function getUserCollateralMethod() external pure returns (CollateralMethod) {
         return CollateralMethod.FIXED_DEPOSIT_BASED;
-    }
-    
-    /**
-     * @notice Returns whether aToken (yield-bearing) is being used
-     * @return isAToken True if aToken is used as reserve token
-     */
-    function isATokenReserve() external view returns (bool) {
-        return isAToken;
-    }
-    
-    /**
-     * @notice Returns whether profit sharing is enabled
-     * @return isEnabled Always false for this strategy
-     */
-    function isProfitSharingEnabled() external pure returns (bool) {
-        return false;
     }
     
     // --------------------------------------------------------------------------------
@@ -213,76 +165,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
         return maxUtilization;
     }
     
-    // --------------------------------------------------------------------------------
-    //                             RESERVE INTEREST FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Returns the underlying token for aToken if applicable
-     * @return underlyingToken The address of the underlying token
-     */
-    function getUnderlyingToken() external view returns (address) {
-        return underlyingToken;
-    }
-    
-    /**
-     * @notice Calculates accrued interest from reserve tokens (aTokens)
-     * @param currentBalance Current aToken balance
-     * @param lastBalance Previous balance for comparison
-     * @return interestAmount Amount of interest accrued
-     */
-    function calculateReserveInterest(
-        uint256 currentBalance,
-        uint256 lastBalance
-    ) external pure returns (uint256) {
-        return currentBalance > lastBalance ? currentBalance - lastBalance : 0;
-    }
-    
-    /**
-     * @notice Determines how reserve interest is distributed
-     * @param interestAmount Total interest amount
-     * @param isUserFunds Whether interest is from user funds or LP collateral
-     * @return protocolAmount Amount for protocol
-     * @return lpAmount Amount for LPs
-     */
-    function distributeReserveInterest(
-        uint256 interestAmount,
-        bool isUserFunds
-    ) external view override returns (uint256 protocolAmount, uint256 lpAmount) {
-        if (isUserFunds) {
-            protocolAmount = interestAmount * userInterestProtocolShare / BPS;
-            lpAmount = interestAmount * userInterestLPShare / BPS;
-        } else {
-            protocolAmount = interestAmount * lpInterestProtocolShare / BPS;
-            lpAmount = interestAmount * lpInterestLPShare / BPS;
-        }
-        return (protocolAmount, lpAmount);
-    }
-    
-    // --------------------------------------------------------------------------------
-    //                             PROFIT SHARING FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Calculates profit share distribution for an LP
-     * @dev Always returns 0 for keepAmount since profit sharing is disabled
-     */
-    function calculateProfitShare(
-        int256 rebalanceAmount,
-        uint256 lpLiquidity,
-        uint256 totalLPLiquidity
-    ) external pure returns (uint256 keepAmount, uint256 poolAmount) {
-        // No profit sharing in default strategy
-        if (rebalanceAmount <= 0) {
-            // Handle loss case
-            poolAmount = uint256(-rebalanceAmount) * lpLiquidity / totalLPLiquidity;
-            return (0, poolAmount);
-        } else {
-            // Handle profit case - LP contributes full amount to pool
-            poolAmount = uint256(rebalanceAmount) * lpLiquidity / totalLPLiquidity;
-            return (0, poolAmount);
-        }
-    }
     
     // --------------------------------------------------------------------------------
     //                             FEE FUNCTIONS

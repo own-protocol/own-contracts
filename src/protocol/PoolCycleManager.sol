@@ -253,7 +253,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = poolLiquidityManager.checkCollateralHealth(lp);
+        uint8 lpCollateralHealth = poolStrategy.getLPCollateralHealth(address(poolLiquidityManager), lp);
         if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
         uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
