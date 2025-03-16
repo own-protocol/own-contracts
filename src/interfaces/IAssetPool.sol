@@ -8,7 +8,7 @@ import {IXToken} from "./IXToken.sol";
 import {IPoolLiquidityManager} from "./IPoolLiquidityManager.sol";
 import {IAssetOracle} from "./IAssetOracle.sol";
 import {IPoolCycleManager} from "./IPoolCycleManager.sol";
-import {IInterestRateStrategy} from "./IInterestRateStrategy.sol";
+import {IPoolStrategy} from "./IPoolStrategy.sol";
 
 /**
  * @title IAssetPool
@@ -107,12 +107,32 @@ interface IAssetPool {
     event CollateralWithdrawn(address indexed user, uint256 amount);
 
     /**
+     * @notice Emitted when fee is deducted from user
+     * @param user Address of the user
+     * @param amount Amount of fee deducted
+     * @param feeType Type of fee deducted (0 = deposit, 1 = redemption)
+     */
+    event FeeDeducted(address indexed user, uint256 amount, uint8 feeType);
+
+    /**
      * @notice Emitted when a position is liquidated
      * @param user Address of the user whose position was liquidated
      * @param liquidator Address of the liquidator
      * @param reward Amount of collateral given as reward
      */
     event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
+
+    /**
+     * @notice Emitted when interest is distributed to an LP
+     * @param lp Address of the LP
+     * @param amount Amount of interest distributed
+     * @param cycleIndex Index of the cycle
+     */
+    event InterestDistributedToLP(
+        address indexed lp,
+        uint256 indexed amount,
+        uint256 indexed cycleIndex
+    );
 
     // --------------------------------------------------------------------------------
     //                                     ERRORS
@@ -192,9 +212,10 @@ interface IAssetPool {
 
     /**
     * @notice Deducts interest from the pool and transfers it to the liquidity manager
+    * @param lp Address of the LP to whom interest is owed
     * @param amount Amount of interest to deduct
     */
-    function deductInterest(uint256 amount) external;
+    function deductInterest(address lp, uint256 amount) external;
 
     /**
      * @notice Reset cycle data at the end of a cycle
@@ -212,13 +233,6 @@ interface IAssetPool {
      */
     function getInterestDebt(address user) external view returns (uint256 interestDebt);
 
-        /**
-     * @notice Check collateral health status of a user
-     * @param user User address
-     * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
-     */
-    function getCollateralHealth(address user) external view returns (uint8 health);
-
     /**
      * @notice Get a user's collateral amount
      * @param user Address of the user
@@ -230,13 +244,15 @@ interface IAssetPool {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return requiredCollateral Minimum required collateral
-     * @return isLiquidatable Whether position can be liquidated
+     * @return reserveAmount Amount of reserve tokens in position
+     * @return collateralAmount Amount of collateral in position
+     * @return interestDebt Amount of interest debt in reserve tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 requiredCollateral,
-        bool isLiquidatable
+        uint256 reserveAmount,
+        uint256 collateralAmount,
+        uint256 interestDebt
     );
 
     /**
@@ -255,22 +271,16 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Get healthy collateral ratio
-     * @return The healthy collateral ratio (scaled by 10000)
+     * @notice Get user collateral params
+     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
      */
-    function healthyCollateralRatio() external view returns (uint256);
-
-    /**
-     * @notice Get the liquidation threshold
-     * @return The liquidation threshold (scaled by 10000)
-     */
-    function liquidationThreshold() external view returns (uint256);
-
-    /**
-     * @notice Get the liquidation reward
-     * @return The liquidation reward (scaled by 10000)
-     */
-    function liquidationReward() external view returns (uint256);
+    function userCollateralParams() external view returns (
+        uint256 _healthyRatio,
+        uint256 _liquidationThreshold,
+        uint256 _liquidationReward
+    );
 
     /**
      * @notice Get total pending deposit requests for the current cycle
@@ -290,11 +300,6 @@ interface IAssetPool {
     function totalUserCollateral() external view returns (uint256);
 
     /**
-     * @notice Returns the interest rate strategy
-     */
-    function interestRateStrategy() external view returns (IInterestRateStrategy);
-
-    /**
      * @notice Calculate current interest rate based on pool utilization
      * @return rate Current interest rate (scaled by 10000)
      */
@@ -305,13 +310,6 @@ interface IAssetPool {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() external view returns (uint256 utilization);
-
-    /**
-     * @notice Calculate required collateral for a user
-     * @param user Address of the user
-     * @return requiredCollateral Required collateral amount
-     */
-    function calculateRequiredCollateral(address user) external view returns (uint256 requiredCollateral);
 
     // --------------------------------------------------------------------------------
     //                               DEPENDENCIES
@@ -336,6 +334,11 @@ interface IAssetPool {
      * @notice Returns the pool liquidity manager contract
      */
     function getPoolLiquidityManager() external view returns (IPoolLiquidityManager);
+
+    /**
+     * @notice Returns the pool strategy contract
+     */
+    function getPoolStrategy() external view returns (IPoolStrategy);
 
     /**
      * @notice Returns the asset oracle contract

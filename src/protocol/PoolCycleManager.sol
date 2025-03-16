@@ -10,6 +10,7 @@ import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
 import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
+import {IPoolStrategy} from "../interfaces/IPoolStrategy.sol";
 import {PoolStorage} from "./PoolStorage.sol";
 
 /**
@@ -133,6 +134,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @param _assetOracle Address of the asset price oracle contract.
      * @param _assetPool Address of the asset pool contract.
      * @param _poolLiquidityManager Address of the LP liquidity manager contract.
+     * @param _poolStrategy Address of the pool strategy contract.
      * @param _cycleLength Duration of each operational cycle.
      * @param _rebalanceLength Duration of the rebalance period.
      */
@@ -142,6 +144,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         address _assetOracle,
         address _assetPool,
         address _poolLiquidityManager,
+        address _poolStrategy,
         uint256 _cycleLength,
         uint256 _rebalanceLength
     ) external initializer {
@@ -153,6 +156,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         assetToken = IXToken(_assetToken);
         assetPool = IAssetPool(_assetPool);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
+        poolStrategy = IPoolStrategy(_poolStrategy);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
         cycleLength = _cycleLength;
@@ -249,7 +253,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = poolLiquidityManager.checkCollateralHealth(lp);
+        uint8 lpCollateralHealth = poolStrategy.getLPCollateralHealth(address(poolLiquidityManager), lp);
         if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
         uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
@@ -281,12 +285,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Deduct interest from the pool and add to LP's collateral
         uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidity, totalLiquidity);
         if (lpCycleInterest > 0) {
-            poolLiquidityManager.addToCollateral(lp, lpCycleInterest);
-            assetPool.deductInterest(lpCycleInterest);
-
-            emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
+            assetPool.deductInterest(lp, lpCycleInterest);
         }
-
+        
         cycleWeightedSum += rebalancePrice * lpLiquidity;
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
