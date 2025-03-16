@@ -160,6 +160,8 @@ interface IAssetPool {
     error InvalidAmount();
     /// @notice Thrown when the caller is unauthorized
     error Unauthorized();
+    /// @notice Thrown when the pool utilization exceeds the limit
+    error PoolUtilizationExceeded();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -310,6 +312,13 @@ interface IAssetPool {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate pool utilization ratio considering the deposit amount
+     * @param depositAmount Additional deposit amount to consider in calculation
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilizationWithDeposit(uint256 depositAmount) external view returns (uint256 utilization);
 
     // --------------------------------------------------------------------------------
     //                               DEPENDENCIES

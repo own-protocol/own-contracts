@@ -221,6 +221,11 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         UserRequest storage request = userRequests[msg.sender];
         if (request.amount > 0) revert RequestPending();
 
+        // Check if deposit would exceed utilization threshold
+        uint256 newUtilization = getPoolUtilizationWithDeposit(amount);
+        (, , , uint256 utilizationThreshold, ) = poolStrategy.getInterestRateParameters();
+        if (newUtilization > utilizationThreshold) revert PoolUtilizationExceeded();
+
         (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();
         
         // Calculate minimum required collateral based on deposit amount
@@ -443,6 +448,25 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         
         // Calculate total value: current asset supply * price + new expected mints
         uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
+        
+        return Math.min((totalValue * BPS) / totalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate pool utilization ratio considering the deposit amount
+     * @param depositAmount Additional deposit amount to consider in calculation
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilizationWithDeposit(uint256 depositAmount) public view returns (uint256 utilization) {
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        if (totalLiquidity == 0) return 0;
+        
+        uint256 assetSupply = assetToken.totalSupply();
+        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 newMints = cycleTotalDepositRequests;
+        
+        // Calculate total value: current asset supply * price + existing pending deposits + new deposit
+        uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints + depositAmount;
         
         return Math.min((totalValue * BPS) / totalLiquidity, BPS);
     }

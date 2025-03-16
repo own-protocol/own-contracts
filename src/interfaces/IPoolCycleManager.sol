@@ -108,6 +108,8 @@ interface IPoolCycleManager {
     error UnauthorizedCaller();
     /// @notice Thrown when an is zero address
     error ZeroAddress();
+    /// @notice Thrown when the pool utilization exceeds the limit
+    error PoolUtilizationExceeded();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
