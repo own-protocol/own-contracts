@@ -136,6 +136,30 @@ contract DefaultPoolStrategy is IPoolStrategy {
     // --------------------------------------------------------------------------------
 
     /**
+     * @notice Returns all interest rate parameters
+     * @return baseRate The base interest rate (scaled by 10000)
+     * @return maxRate The maximum interest rate (scaled by 10000)
+     * @return utilTier1 The first utilization tier (scaled by 10000)
+     * @return utilTier2 The second utilization tier (scaled by 10000)
+     * @return maxUtil The maximum utilization (scaled by 10000)
+     */
+    function getInterestRateParameters() external view returns (
+        uint256 baseRate,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    ) {
+        return (
+            baseInterestRate,
+            maxInterestRate,
+            utilizationTier1,
+            utilizationTier2,
+            maxUtilization
+        );
+    }
+
+    /**
      * @notice Calculate interest rate based on utilization
      * @param utilization Current utilization rate (scaled by 10000)
      * @return rate Current interest rate (scaled by 10000)
@@ -155,14 +179,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
             // Constant max rate when utilization > Tier2
             return maxInterestRate;
         }
-    }
-
-    /**
-     * @notice Returns the maximum utilization point
-     * @return Maximum utilization point (scaled by 10000)
-     */
-    function getMaxUtilization() external view returns (uint256) {
-        return maxUtilization;
     }
     
     

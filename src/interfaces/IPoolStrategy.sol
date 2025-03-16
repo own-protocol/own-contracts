@@ -38,17 +38,27 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
 
     /**
+     * @notice Returns all interest rate parameters 
+     * @return baseRate The base interest rate (scaled by 10000)
+     * @return maxRate The maximum interest rate (scaled by 10000)
+     * @return utilTier1 The first utilization tier (scaled by 10000)
+     * @return utilTier2 The second utilization tier (scaled by 10000)
+     * @return maxUtil The maximum utilization (scaled by 10000)
+    */
+    function getInterestRateParameters() external view returns (
+        uint256 baseRate,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    );
+
+    /**
      * @notice Returns the current interest rate based on utilization
      * @param utilization Current utilization rate of the pool (scaled by 10000)
      * @return rate Current interest rate (scaled by 10000)
      */
     function calculateInterestRate(uint256 utilization) external view returns (uint256 rate);
-
-    /**
-     * @notice Returns the maximum utilization point
-     * @return Maximum utilization point (scaled by 10000)
-     */
-    function getMaxUtilization() external view returns (uint256);
     
     // --------------------------------------------------------------------------------
     //                             FEE FUNCTIONS
