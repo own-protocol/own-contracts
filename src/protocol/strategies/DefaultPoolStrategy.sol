@@ -20,7 +20,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     // --------------------------------------------------------------------------------
     
     // Asset interest rate parameters
-    uint256 public baseInterestRate;      // Base interest rate (e.g., 6%)
+    uint256 public baseInterestRate;      // Base interest rate (e.g., 12%)
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 36%)
     uint256 public utilizationTier1;      // First utilization tier (e.g., 50%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 75%)
