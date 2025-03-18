@@ -52,13 +52,13 @@ interface IPoolCycleManager {
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
      * @param assetPrice Current price of the asset
-     * @param netReserveDelta Net change in reserves required
+     * @param netAssetDelta Net change in assets after rebalance
      * @param rebalanceAmount Total amount to be rebalanced
      */
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
         uint256 assetPrice,
-        int256 netReserveDelta,
+        int256 netAssetDelta,
         int256 rebalanceAmount
     );
 
@@ -156,7 +156,6 @@ interface IPoolCycleManager {
      * @return _assetBalance Asset token balance of the pool
      * @return _totalDepositRequests Total deposit requests for the cycle
      * @return _totalRedemptionRequests Total redemption requests for the cycle
-     * @return _netReserveDelta Net change in reserves after rebalance
      * @return _netAssetDelta Net change in assets after rebalance
      * @return _rebalanceAmount Total amount to be rebalanced
      */
@@ -169,7 +168,6 @@ interface IPoolCycleManager {
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests,
-        int256 _netReserveDelta,
         int256 _netAssetDelta,
         int256 _rebalanceAmount
     );
@@ -207,11 +205,6 @@ interface IPoolCycleManager {
      * @notice Returns reserve token balance of the pool (excluding new deposits).
      */
     function poolReserveBalance() external view returns (uint256);
-
-    /**
-     * @notice Returns the net change in reserves after rebalance
-     */
-    function netReserveDelta() external view returns (int256);
 
     /**
      * @notice Returns the asset token balance of the pool
