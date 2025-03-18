@@ -9,11 +9,9 @@ import "../src/protocol/AssetPool.sol";
 import "../src/protocol/PoolLiquidityManager.sol";
 import "../src/protocol/PoolCycleManager.sol";
 import "../src/protocol/xToken.sol";
-import "../src/protocol/DefaultInterestRateStrategy.sol";
 import "../src/protocol/AssetOracle.sol";
 import "../src/interfaces/IAssetPool.sol";
 import "../src/interfaces/IAssetOracle.sol";
-import "../src/interfaces/IInterestRateStrategy.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@chainlink/contracts/v0.8/functions/v1_0_0/FunctionsClient.sol";
 
@@ -24,7 +22,7 @@ contract AssetPoolFactoryTest is Test {
     PoolCycleManager public poolCycleManagerImpl;
     PoolLiquidityManager public poolLiquidityManagerImpl;
     AssetOracle public assetOracle;
-    DefaultInterestRateStrategy public interestRateStrategy;
+    IPoolStrategy public poolStrategy;
     IERC20Metadata public reserveToken;
     
     // Chainlink related addresses
@@ -43,16 +41,6 @@ contract AssetPoolFactoryTest is Test {
         // Deploy mock USDC
         MockERC20 mockUSDC = new MockERC20("USDC", "USDC", 6);
         reserveToken = IERC20Metadata(address(mockUSDC));
-
-        // Deploy real DefaultInterestRateStrategy with appropriate parameters
-        // Parameters: baseRate (6%), maxRate (36%), utilTier1 (50%), utilTier2 (75%), maxUtil (95%)
-        interestRateStrategy = new DefaultInterestRateStrategy(
-            6_00,  // 6% base rate
-            36_00, // 36% max rate
-            50_00, // 50% first tier
-            75_00, // 75% second tier
-            95_00  // 95% max utilization
-        );
         
         // For AssetOracle, we need to mock the Chainlink Functions Router
         // Create a source hash for the oracle - this would normally be a hash of the JavaScript source
@@ -116,7 +104,7 @@ contract AssetPoolFactoryTest is Test {
             address(reserveToken),
             "xAAPL",  // asset symbol
             address(assetOracle),
-            address(interestRateStrategy),
+            address(poolStrategy),
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
@@ -129,7 +117,7 @@ contract AssetPoolFactoryTest is Test {
         AssetPool poolInstance = AssetPool(newPool);
         assertEq(address(poolInstance.getReserveToken()), address(reserveToken));
         assertEq(address(poolInstance.getAssetOracle()), address(assetOracle));
-        assertEq(address(poolInstance.interestRateStrategy()), address(interestRateStrategy));
+        assertEq(address(poolInstance.poolStrategy()), address(poolStrategy));
         
         // Get cycle manager address
         address cycleManagerAddr = address(poolInstance.getPoolCycleManager());
@@ -142,19 +130,6 @@ contract AssetPoolFactoryTest is Test {
         // Verify liquidity manager was initialized correctly
         address liquidityManagerAddr = address(poolInstance.getPoolLiquidityManager());
         assertTrue(liquidityManagerAddr != address(0));
-        
-        // Verify interest rate strategy parameters
-        IInterestRateStrategy strategy = poolInstance.interestRateStrategy();
-        
-        // Test interest rates at different utilization levels
-        uint256 lowUtilizationRate = strategy.calculateInterestRate(40_00); // 40% utilization
-        uint256 midUtilizationRate = strategy.calculateInterestRate(60_00); // 60% utilization
-        uint256 highUtilizationRate = strategy.calculateInterestRate(80_00); // 80% utilization
-        
-        // Verify interest rate calculations match our expected values
-        assertEq(lowUtilizationRate, 6_00); // Base rate at 40% utilization
-        assertTrue(midUtilizationRate > 6_00 && midUtilizationRate < 36_00); // Between base and max rate
-        assertEq(highUtilizationRate, 36_00); // Max rate at 80% utilization
     }
 
     function testCreatePoolRevertsWithZeroAddress() public {
@@ -166,7 +141,7 @@ contract AssetPoolFactoryTest is Test {
             address(0),  // Zero address for deposit token
             "xAAPL",
             address(assetOracle),
-            address(interestRateStrategy),
+            address(poolStrategy),
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
@@ -177,7 +152,7 @@ contract AssetPoolFactoryTest is Test {
             address(reserveToken),
             "xAAPL",
             address(0),  // Zero address for oracle
-            address(interestRateStrategy),
+            address(poolStrategy),
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
@@ -194,7 +169,7 @@ contract AssetPoolFactoryTest is Test {
             address(reserveToken),
             "xAAPL",
             address(assetOracle),
-            address(interestRateStrategy),
+            address(poolStrategy),
             0,  // Zero cycle length
             REBALANCE_LENGTH
         );
@@ -205,7 +180,7 @@ contract AssetPoolFactoryTest is Test {
             address(reserveToken),
             "xAAPL",
             address(assetOracle),
-            address(interestRateStrategy),
+            address(poolStrategy),
             CYCLE_LENGTH,
             CYCLE_LENGTH  // Rebalance length equal to cycle length
         );

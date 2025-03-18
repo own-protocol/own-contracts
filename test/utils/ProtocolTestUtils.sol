@@ -10,7 +10,7 @@ import "../../src/protocol/AssetPool.sol";
 import "../../src/protocol/PoolCycleManager.sol";
 import "../../src/protocol/PoolLiquidityManager.sol";
 import "../../src/protocol/xToken.sol";
-import "../../src/protocol/DefaultInterestRateStrategy.sol";
+import "../../src/protocol/strategies/DefaultPoolStrategy.sol";
 import "../../src/protocol/AssetOracle.sol";
 import "../mocks/MockFunctionsRouter.sol";
 import "../mocks/MockAssetOracle.sol";
@@ -25,7 +25,7 @@ contract ProtocolTestUtils is Test {
     PoolCycleManager public cycleManager;
     PoolLiquidityManager public liquidityManager;
     xToken public assetToken;
-    DefaultInterestRateStrategy public interestRateStrategy;
+    IPoolStrategy public poolStrategy;
     MockAssetOracle public assetOracle;
     
     // Mock contracts
@@ -72,15 +72,6 @@ contract ProtocolTestUtils is Test {
         reserveToken = new MockERC20("USD Coin", "USDC", _reserveTokenDecimals);
         functionsRouter = new MockFunctionsRouter();
         
-        // Deploy real interest rate strategy
-        interestRateStrategy = new DefaultInterestRateStrategy(
-            6_00,  // 6% base rate
-            36_00, // 36% max rate
-            50_00, // 50% first tier
-            75_00, // 75% second tier
-            95_00  // 95% max utilization
-        );
-        
         // Deploy oracle
         assetOracle = new MockAssetOracle(
             _assetOracleSymbol,
@@ -109,7 +100,7 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(cycleManager),
             address(liquidityManager),
-            address(interestRateStrategy),
+            address(poolStrategy),
             owner
         );
         
@@ -124,6 +115,7 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(assetPool),
             address(liquidityManager),
+            address(poolStrategy),
             CYCLE_LENGTH,
             REBALANCE_LENGTH
         );
@@ -135,6 +127,7 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(assetPool),
             address(cycleManager),
+            address(poolStrategy),
             owner
         );
     }
