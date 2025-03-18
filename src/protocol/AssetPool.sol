@@ -223,7 +223,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
         // Check if deposit would exceed utilization threshold
         uint256 newUtilization = getPoolUtilizationWithDeposit(amount);
-        (, , , uint256 utilizationThreshold, ) = poolStrategy.getInterestRateParameters();
+        (, , , , uint256 utilizationThreshold, ) = poolStrategy.getInterestRateParameters();
         if (newUtilization > utilizationThreshold) revert PoolUtilizationExceeded();
 
         (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();

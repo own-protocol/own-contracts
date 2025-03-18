@@ -17,6 +17,7 @@ interface IPoolStrategy {
     /**
      * @notice Returns all interest rate parameters 
      * @return baseRate The base interest rate (scaled by 10000)
+     * @return rate1 The tier 1 interest rate (scaled by 10000)
      * @return maxRate The maximum interest rate (scaled by 10000)
      * @return utilTier1 The first utilization tier (scaled by 10000)
      * @return utilTier2 The second utilization tier (scaled by 10000)
@@ -24,6 +25,7 @@ interface IPoolStrategy {
     */
     function getInterestRateParameters() external view returns (
         uint256 baseRate,
+        uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
         uint256 utilTier2,

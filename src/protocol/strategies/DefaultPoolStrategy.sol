@@ -20,10 +20,11 @@ contract DefaultPoolStrategy is IPoolStrategy {
     // --------------------------------------------------------------------------------
     
     // Asset interest rate parameters
-    uint256 public baseInterestRate;      // Base interest rate (e.g., 12%)
-    uint256 public maxInterestRate;       // Maximum interest rate (e.g., 36%)
+    uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
+    uint256 public interestRate1;       // Maximum interest rate (e.g., 18%)
+    uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
     uint256 public utilizationTier1;      // First utilization tier (e.g., 50%)
-    uint256 public utilizationTier2;      // Second utilization tier (e.g., 75%)
+    uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
     uint256 public maxUtilization;        // Maximum utilization (e.g., 95%)
     
     // Fee parameters
@@ -53,6 +54,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     constructor(
         // Asset interest parameters
         uint256 _baseRate,
+        uint256 _interestRate1,
         uint256 _maxRate,
         uint256 _utilTier1,
         uint256 _utilTier2,
@@ -76,7 +78,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
         uint256 _lpLiquidationReward
     ) {
         // Parameter validation
-        require(_baseRate <= _maxRate, "Base rate must be <= max rate");
+        require(_baseRate <= _interestRate1, "Base rate must be <= Interest rate 1");
+        require(_interestRate1 <= _maxRate, "Interest rate 1 must be <= max rate");
         require(_maxRate <= BPS, "Max rate cannot exceed 100%");
         require(_utilTier1 < _utilTier2, "Tier1 must be < Tier2");
         require(_utilTier2 < _maxUtil, "Tier2 must be < max utilization");
@@ -88,6 +91,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
         
         // Asset interest parameters
         baseInterestRate = _baseRate;
+        interestRate1 = _interestRate1;
         maxInterestRate = _maxRate;
         utilizationTier1 = _utilTier1;
         utilizationTier2 = _utilTier2;
@@ -119,6 +123,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     /**
      * @notice Returns all interest rate parameters
      * @return baseRate The base interest rate (scaled by 10000)
+     * @return rate1 The tier 1 interest rate (scaled by 10000)
      * @return maxRate The maximum interest rate (scaled by 10000)
      * @return utilTier1 The first utilization tier (scaled by 10000)
      * @return utilTier2 The second utilization tier (scaled by 10000)
@@ -126,6 +131,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
      */
     function getInterestRateParameters() external view returns (
         uint256 baseRate,
+        uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
         uint256 utilTier2,
@@ -133,6 +139,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     ) {
         return (
             baseInterestRate,
+            interestRate1,
             maxInterestRate,
             utilizationTier1,
             utilizationTier2,
@@ -154,11 +161,17 @@ contract DefaultPoolStrategy is IPoolStrategy {
             uint256 utilizationDelta = utilization - utilizationTier1;
             uint256 optimalDelta = utilizationTier2 - utilizationTier1;
             
-            uint256 additionalRate = ((maxInterestRate - baseInterestRate) * utilizationDelta) / optimalDelta;
+            uint256 additionalRate = ((interestRate1 - baseInterestRate) * utilizationDelta) / optimalDelta;
             return baseInterestRate + additionalRate;
+        } else if (utilization <= maxUtilization) {
+            // Linear increase from interest rate 1 to max rate
+            uint256 utilizationDelta = utilization - utilizationTier2;
+            uint256 optimalDelta = maxUtilization - utilizationTier2;
+            
+            uint256 additionalRate = ((maxInterestRate - interestRate1) * utilizationDelta) / optimalDelta;
+            return interestRate1 + additionalRate;
         } else {
-            // Constant max rate when utilization > Tier2
-            return maxInterestRate;
+            return maxInterestRate; // Max rate
         }
     }
     
@@ -229,14 +242,10 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
 
         IAssetPool pool = IAssetPool(assetPool);
-        ( uint256 assetAmount, 
-          uint256 reserveAmount, 
-          uint256 collateralAmount, 
-          uint256 interestDebt
-        ) = pool.userPosition(user);
+        (uint256 assetAmount, , , uint256 interestDebt) = pool.userPosition(user);
 
-        IAssetOracle oracle = IAssetOracle(pool.getOracle());
-        uint256 assetValue = assetAmount * oracle.getPrice();
+        IAssetOracle oracle = IAssetOracle(pool.getAssetOracle());
+        uint256 assetValue = assetAmount * oracle.assetPrice();
         
         uint256 baseCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         return baseCollateral + interestDebt;
@@ -263,8 +272,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
         IAssetPool pool = IAssetPool(assetPool);
         
-        ( uint256 assetAmount, 
-          uint256 reserveAmount, 
+        ( uint256 assetAmount, , 
           uint256 collateralAmount, 
           uint256 interestDebt
         ) = pool.userPosition(user);
@@ -273,8 +281,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
             return 3; // Healthy - no asset balance means no risk
         }
 
-        IAssetOracle oracle = IAssetOracle(pool.getOracle());
-        uint256 assetValue = assetAmount * oracle.getPrice();
+        IAssetOracle oracle = IAssetOracle(pool.getAssetOracle());
+        uint256 assetValue = assetAmount * oracle.assetPrice();
 
         uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS);
