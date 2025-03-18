@@ -246,7 +246,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
 
         IAssetPool pool = IAssetPool(assetPool);
-        (uint256 assetAmount, , , uint256 interestDebt) = pool.userPosition(user);
+        (uint256 assetAmount, , uint256 interestDebt) = pool.userPosition(user);
 
         IAssetOracle oracle = IAssetOracle(pool.getAssetOracle());
         uint256 assetValue = assetAmount * oracle.assetPrice();
@@ -276,7 +276,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
         IAssetPool pool = IAssetPool(assetPool);
         
-        ( uint256 assetAmount, , 
+        ( uint256 assetAmount, 
           uint256 collateralAmount, 
           uint256 interestDebt
         ) = pool.userPosition(user);

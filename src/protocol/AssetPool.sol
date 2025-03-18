@@ -572,19 +572,16 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return reserveAmount Amount of reserve tokens in position
      * @return collateralAmount Amount of collateral in position
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 reserveAmount,
         uint256 collateralAmount,
         uint256 interestDebt
     ) {
         Position storage position = positions[user];
-        assetAmount = assetToken.balanceOf(user);
-        reserveAmount = assetToken.reserveBalanceOf(user);
+        assetAmount = position.assetAmount;
         collateralAmount = position.collateralAmount;
         interestDebt = getInterestDebt(user);
     }
