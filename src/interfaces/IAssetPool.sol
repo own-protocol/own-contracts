@@ -32,10 +32,12 @@ interface IAssetPool {
 
     /**
      * @notice User position in the protocol
+     * @param assetAmount Amount of asset tokens held
      * @param collateralAmount Amount of collateral provided
      * @param scaledInterest User's scaled interest value for debt calculation
      */
     struct Position {
+        uint256 assetAmount;
         uint256 collateralAmount;
         uint256 scaledInterest;
     }
@@ -162,6 +164,8 @@ interface IAssetPool {
     error Unauthorized();
     /// @notice Thrown when the pool utilization exceeds the limit
     error PoolUtilizationExceeded();
+    /// @notice Thrown when redemption request is invalid
+    error InvalidRedemptionRequest();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS

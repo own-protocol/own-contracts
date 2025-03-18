@@ -254,6 +254,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      */
     function redemptionRequest(uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
+
+        Position memory position = positions[msg.sender];
+        if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
@@ -356,7 +359,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
                 // Calculate scaled interest based on asset amount
                 position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest);
             }
-        
+
+            // Update user's position
+            position.assetAmount += assetAmount;
             position.collateralAmount += collateralAmount;
             
             // Mint tokens
@@ -372,12 +377,16 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             );
 
             uint256 balanceCollateral = 0;
-            if(assetToken.balanceOf(user) == 0) {
+            uint256 positionAssetAmount = position.assetAmount;
+            if(positionAssetAmount - amount == 0) {
                 uint256 interestDebt = getInterestDebt(user);
                 balanceCollateral = position.collateralAmount - interestDebt;
                 position.scaledInterest = 0;
+                position.assetAmount = 0;
                 position.collateralAmount = 0;
-            }
+            } else {
+                position.assetAmount -= amount;
+            }         
 
             // Calculate and deduct redemption fee
             (, uint256 redemptionFeePercentage , ,) = poolStrategy.getFeePercentages();
