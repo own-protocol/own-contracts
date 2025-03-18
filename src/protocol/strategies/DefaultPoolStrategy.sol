@@ -21,16 +21,17 @@ contract DefaultPoolStrategy is IPoolStrategy {
     
     // Asset interest rate parameters
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
-    uint256 public interestRate1;       // Maximum interest rate (e.g., 18%)
+    uint256 public interestRate1;         // Tier 1 interest rate (e.g., 18%)
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
     uint256 public utilizationTier1;      // First utilization tier (e.g., 50%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
-    uint256 public maxUtilization;        // Maximum utilization (e.g., 95%)
+    uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
     // Fee parameters
-    uint256 public depositFeePercentage;  // Fee for deposits (e.g., 0.5%)
-    uint256 public redemptionFeePercentage; // Fee for redemptions (e.g., 0.5%)
-    uint256 public protocolFeePercentage; // Protocol fee on interest (e.g., 20%)
+    uint256 public depositFeePercentage;  // Fee for deposits (e.g., 0.0%)
+    uint256 public redemptionFeePercentage; // Fee for redemptions (e.g., 0.0%)
+    uint256 public interestFeePercentage; // Fee on interest (e.g., 0.0%)
+    uint256 public yieldFeePercentage; // Fee on reserve token yield (e.g., 0.0%)
     address public feeRecipient;          // Address to receive fees
     
     // User collateral parameters (fixed deposit based)
@@ -63,7 +64,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
         // Fee parameters
         uint256 _depositFee,
         uint256 _redemptionFee,
-        uint256 _protocolFee,
+        uint256 _interestFee,
+        uint256 _yieldFee,
         address _feeRecipient,
         
         // User collateral parameters
@@ -86,7 +88,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
         require(_userLiquidationRatio < _userHealthyRatio, "User liquidation ratio must be < healthy ratio");
         require(_lpWarningThreshold < _lpHealthyRatio, "LP warning threshold must be < healthy ratio");
         require(_lpRegistrationRatio <= _lpWarningThreshold, "LP registration ratio must be <= warning threshold");
-        require(_depositFee <= BPS && _redemptionFee <= BPS && _protocolFee <= BPS, "Fees cannot exceed 100%");
+        require(_depositFee <= BPS && _redemptionFee <= BPS && _interestFee <= BPS && _yieldFee <= BPS, "Fees cannot exceed 100%");
         require(_feeRecipient != address(0), "Invalid fee recipient");
         
         // Asset interest parameters
@@ -100,7 +102,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
         // Fee parameters
         depositFeePercentage = _depositFee;
         redemptionFeePercentage = _redemptionFee;
-        protocolFeePercentage = _protocolFee;
+        interestFeePercentage = _interestFee;
+        yieldFeePercentage = _yieldFee;
         feeRecipient = _feeRecipient;
         
         // User collateral parameters
@@ -186,9 +189,10 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function getFeePercentages() external view returns (
         uint256 depositFee,
         uint256 redemptionFee,
-        uint256 protocolFee
+        uint256 interestFee,
+        uint256 yieldFee
     ) {
-        return (depositFeePercentage, redemptionFeePercentage, protocolFeePercentage);
+        return (depositFeePercentage, redemptionFeePercentage, interestFeePercentage, yieldFeePercentage);
     }
     
     /**

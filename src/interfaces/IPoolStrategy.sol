@@ -47,12 +47,14 @@ interface IPoolStrategy {
      * @notice Returns fee percentages for different operations
      * @return depositFee Fee percentage for deposits (scaled by 10000)
      * @return redemptionFee Fee percentage for redemptions (scaled by 10000)
-     * @return protocolFee Fee percentage taken by protocol from interest (scaled by 10000)
+     * @return interestFee Fee percentage taken by protocol from interest (scaled by 10000)
+     * @return yieldFee Fee percentage taken by protocol from yield generated on reserve tokens (scaled by 10000)
      */
     function getFeePercentages() external view returns (
         uint256 depositFee,
         uint256 redemptionFee,
-        uint256 protocolFee
+        uint256 interestFee,
+        uint256 yieldFee
     );
     
     /**

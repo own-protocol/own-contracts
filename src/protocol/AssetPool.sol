@@ -221,11 +221,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         UserRequest storage request = userRequests[msg.sender];
         if (request.amount > 0) revert RequestPending();
 
-        // Check if deposit would exceed utilization threshold
-        uint256 newUtilization = getPoolUtilizationWithDeposit(amount);
-        (, , , , uint256 utilizationThreshold, ) = poolStrategy.getInterestRateParameters();
-        if (newUtilization > utilizationThreshold) revert PoolUtilizationExceeded();
-
         (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();
         
         // Calculate minimum required collateral based on deposit amount
@@ -235,7 +230,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
 
         // Calculate deposit fee
-        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
         uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
 
         uint256 totalDeposit = amount + collateralAmount + depositFee;
@@ -293,7 +288,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (amount == 0) revert NothingToCancel();
 
         // Calculate deposit fee
-        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
         uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
 
         uint256 totalDeposit = amount + collateralAmount + depositFee;
@@ -347,7 +342,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             );
 
             // Calculate and deduct deposit fee
-            (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+            (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
             uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
             if (depositFee > 0) {
                 reserveToken.transfer(poolStrategy.getFeeRecipient(), depositFee);
@@ -385,7 +380,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             }
 
             // Calculate and deduct redemption fee
-            (, uint256 redemptionFeePercentage , ) = poolStrategy.getFeePercentages();
+            (, uint256 redemptionFeePercentage , ,) = poolStrategy.getFeePercentages();
             uint256 redemptionFee = (redemptionFeePercentage > 0) ? Math.mulDiv(amount, redemptionFeePercentage, BPS) : 0;
             if (redemptionFee > 0) {
                 reserveToken.transfer(poolStrategy.getFeeRecipient(), redemptionFee);
@@ -518,8 +513,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if(reserveBalance < amount) revert InsufficientBalance();
 
         // Calculate and deduct protocol interest fee
-        (, uint256 protocolFeePercentage , ) = poolStrategy.getFeePercentages();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        (, uint256 interestFeePercentage , ,) = poolStrategy.getFeePercentages();
+        uint256 protocolFee = (interestFeePercentage > 0) ? Math.mulDiv(amount, interestFeePercentage, BPS) : 0;
         if (protocolFee > 0) {
             reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
             emit FeeDeducted(lp, protocolFee, 2);
