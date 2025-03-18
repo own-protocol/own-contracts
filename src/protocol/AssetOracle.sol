@@ -43,7 +43,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         uint256 high;
         uint256 low;
         uint256 close;
-        uint256 volume;
         uint256 timestamp;
     }
     
@@ -54,7 +53,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     struct TradingPeriod {
         uint256 start;
         uint256 end;
-        uint256 gmtOffset;
     }
     
     /// @notice Regular market trading period
@@ -123,20 +121,17 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         if (response.length > 0) {
             // Decode the ABI encoded response data
             (
-                uint256 currentPrice,
                 uint256 openPrice,
                 uint256 highPrice,
                 uint256 lowPrice,
                 uint256 closePrice,
-                uint256 volume,
                 uint256 dataTimestamp,
                 uint256 periodStart,
-                uint256 periodEnd,
-                uint256 gmtOffset
-            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256));
+                uint256 periodEnd
+            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256, uint256, uint256));
             
             // Update asset price
-            assetPrice = currentPrice;
+            assetPrice = closePrice;
             
             // Update OHLC data
             ohlcData = OHLCData({
@@ -144,15 +139,13 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 high: highPrice,
                 low: lowPrice,
                 close: closePrice,
-                volume: volume,
                 timestamp: dataTimestamp
             });
             
             // Update regular market trading period
             regularMarketPeriod = TradingPeriod({
                 start: periodStart,
-                end: periodEnd,
-                gmtOffset: gmtOffset
+                end: periodEnd
             });
             
             // Update timestamp
@@ -164,7 +157,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 ohlcData.high,
                 ohlcData.low,
                 ohlcData.close,
-                ohlcData.volume,
                 ohlcData.timestamp
             );
         }
@@ -194,7 +186,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
      * @return high The highest price
      * @return low The lowest price
      * @return close The closing price
-     * @return volume The trading volume
      * @return timestamp The timestamp of the OHLC data
      */
     function getOHLCData() external view returns (
@@ -202,7 +193,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         uint256 high,
         uint256 low,
         uint256 close,
-        uint256 volume,
         uint256 timestamp
     ) {
         return (
@@ -210,7 +200,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
             ohlcData.high,
             ohlcData.low,
             ohlcData.close,
-            ohlcData.volume,
             ohlcData.timestamp
         );
     }
@@ -219,17 +208,14 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
      * @notice Returns the regular market trading period data
      * @return start The start time of the regular market
      * @return end The end time of the regular market
-     * @return gmtOffset The GMT offset in seconds
      */
     function getRegularMarketPeriod() external view returns (
         uint256 start,
-        uint256 end,
-        uint256 gmtOffset
+        uint256 end
     ) {
         return (
             regularMarketPeriod.start,
-            regularMarketPeriod.end,
-            regularMarketPeriod.gmtOffset
+            regularMarketPeriod.end
         );
     }
 }

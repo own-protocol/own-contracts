@@ -34,7 +34,6 @@ interface IAssetOracle {
      * @param high The highest price
      * @param low The lowest price
      * @param close The closing price
-     * @param volume The trading volume
      * @param timestamp The timestamp of the OHLC data
      */
     event OHLCDataUpdated(
@@ -42,7 +41,6 @@ interface IAssetOracle {
         uint256 high,
         uint256 low,
         uint256 close,
-        uint256 volume,
         uint256 timestamp
     );
 
@@ -119,7 +117,6 @@ interface IAssetOracle {
      * @return high The highest price
      * @return low The lowest price
      * @return close The closing price
-     * @return volume The trading volume
      * @return timestamp The timestamp of the OHLC data
      */
     function getOHLCData() external view returns (
@@ -127,7 +124,6 @@ interface IAssetOracle {
         uint256 high,
         uint256 low,
         uint256 close,
-        uint256 volume,
         uint256 timestamp
     );
     
@@ -135,11 +131,9 @@ interface IAssetOracle {
      * @notice Returns the regular market trading period data
      * @return start The start time of the regular market
      * @return end The end time of the regular market
-     * @return gmtOffset The GMT offset in seconds
      */
     function getRegularMarketPeriod() external view returns (
         uint256 start,
-        uint256 end,
-        uint256 gmtOffset
+        uint256 end
     );
 }
