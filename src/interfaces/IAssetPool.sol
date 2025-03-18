@@ -273,18 +273,6 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Get user collateral params
-     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
-     */
-    function userCollateralParams() external view returns (
-        uint256 _healthyRatio,
-        uint256 _liquidationThreshold,
-        uint256 _liquidationReward
-    );
-
-    /**
      * @notice Get total pending deposit requests for the current cycle
      * @return Total amount of pending deposits
      */
@@ -319,6 +307,24 @@ interface IAssetPool {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilizationWithDeposit(uint256 depositAmount) external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getUtilisedLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Calculate pool delta
+     * @return delta Pool delta in reserve tokens
+     */
+    function getPoolDelta() external view returns (int256 delta);
+
+     /**
+     * @notice Calculate pool value
+     * @return value Pool value in reserve tokens
+     */
+    function getPoolValue() external view returns (uint256 value);
 
     // --------------------------------------------------------------------------------
     //                               DEPENDENCIES

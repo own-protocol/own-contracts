@@ -441,15 +441,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function getPoolUtilization() public view returns (uint256 utilization) {
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
         if (totalLiquidity == 0) return 0;
+        uint256 utilisedLiquidity = getUtilisedLiquidity();
         
-        uint256 assetSupply = assetToken.totalSupply();
-        uint256 assetPrice = assetOracle.assetPrice();
-        uint256 newMints = cycleTotalDepositRequests;
-        
-        // Calculate total value: current asset supply * price + new expected mints
-        uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
-        
-        return Math.min((totalValue * BPS) / totalLiquidity, BPS);
+        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
     }
 
     /**
@@ -461,14 +455,49 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
         if (totalLiquidity == 0) return 0;
         
+        uint256 utilisedLiquidity = getUtilisedLiquidity() + depositAmount;
+        
+        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getUtilisedLiquidity() public view returns (uint256) {      
+
+        uint256 poolValue = getPoolValue();
+        (uint256 healthyRatio, , , ) = poolStrategy.getLPCollateralParams();
+        uint256 totalRatio = BPS + healthyRatio;
+        uint256 newMints = cycleTotalDepositRequests * reserveToAssetDecimalFactor;
+
+        uint256 lpLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
+        
+        uint256 utilisedLiquidity = lpLiquidity + newMints;
+        
+        return utilisedLiquidity;
+    }
+
+    /**
+     * @notice Calculate pool delta
+     * @return delta Pool delta in reserve tokens
+     */
+    function getPoolDelta() public view returns (int256 delta) {
+        uint256 poolValue = getPoolValue();
+        uint256 reserveBalanceOfAsset = assetToken.totalReserveSupply() * reserveToAssetDecimalFactor; 
+
+        return int256(poolValue) - int256(reserveBalanceOfAsset);
+    }
+
+    /**
+     * @notice Calculate pool value
+     * @return value Pool value in reserve tokens
+     */
+    function getPoolValue() public view returns (uint256 value) {
         uint256 assetSupply = assetToken.totalSupply();
         uint256 assetPrice = assetOracle.assetPrice();
-        uint256 newMints = cycleTotalDepositRequests;
-        
-        // Calculate total value: current asset supply * price + existing pending deposits + new deposit
-        uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints + depositAmount;
-        
-        return Math.min((totalValue * BPS) / totalLiquidity, BPS);
+
+        return Math.mulDiv(assetSupply, assetPrice, PRECISION);
     }
 
     // --------------------------------------------------------------------------------
@@ -572,20 +601,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     ) {
         UserRequest storage request = userRequests[user];
         return (request.amount, request.collateralAmount, request.isDeposit, request.requestCycle);
-    }
-
-    /**
-     * @notice Get user collateral params
-     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
-     */
-    function userCollateralParams() external view returns (
-        uint256 _healthyRatio,
-        uint256 _liquidationThreshold,
-        uint256 _liquidationReward
-    ) {
-        (_healthyRatio, _liquidationThreshold, _liquidationReward) = poolStrategy.getUserCollateralParams();
     }
 
     /**
