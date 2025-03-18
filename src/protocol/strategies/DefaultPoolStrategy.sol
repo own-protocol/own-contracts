@@ -111,26 +111,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
         lpLiquidationReward = _lpLiquidationReward;
     }
     
-    // --------------------------------------------------------------------------------
-    //                             STRATEGY TYPE FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Returns the method used for calculating LP collateral
-     * @return method Variable asset-based for LP collateral
-     */
-    function getLPCollateralMethod() external pure returns (CollateralMethod) {
-        return CollateralMethod.VARIABLE_ASSET_BASED;
-    }
-    
-    /**
-     * @notice Returns the method used for calculating user collateral
-     * @return method Fixed deposit-based for user collateral
-     */
-    function getUserCollateralMethod() external pure returns (CollateralMethod) {
-        return CollateralMethod.FIXED_DEPOSIT_BASED;
-    }
-    
+
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
     // --------------------------------------------------------------------------------
@@ -241,23 +222,28 @@ contract DefaultPoolStrategy is IPoolStrategy {
     }
     
     /**
-     * @notice Calculates required user collateral (fixed based on deposit)
+     * @notice Calculates required user collateral
      * @param assetPool Address of the asset pool
      * @param user Address of the user
      */
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
 
         IAssetPool pool = IAssetPool(assetPool);
-        IXToken assetToken = IXToken(pool.getAssetToken());
+        ( uint256 assetAmount, 
+          uint256 reserveAmount, 
+          uint256 collateralAmount, 
+          uint256 interestDebt
+        ) = pool.userPosition(user);
+
+        IAssetOracle oracle = IAssetOracle(pool.getOracle());
+        uint256 assetValue = assetAmount * oracle.getPrice();
         
-        uint256 userReserveBalance = assetToken.reserveBalanceOf(user);
-        uint256 interestDebt = pool.getInterestDebt(user);
-        uint256 baseCollateral = Math.mulDiv(userReserveBalance, userHealthyCollateralRatio, BPS);
+        uint256 baseCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         return baseCollateral + interestDebt;
     }
     
     /**
-     * @notice Calculates required LP collateral (variable based on asset holdings)
+     * @notice Calculates required LP collateral
      * @param liquidityManager Address of the pool liquidity manager
      * @param lp Address of the LP
      */
@@ -265,11 +251,8 @@ contract DefaultPoolStrategy is IPoolStrategy {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHolding(lp);
-        uint256 decimalFactor = manager.getReserveToAssetDecimalFactor();
 
-        //ToDo: Need to consider expectedNewAssetMints when calculating required collateral
-
-        return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS * decimalFactor);
+        return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
     }
 
     /**
@@ -290,8 +273,11 @@ contract DefaultPoolStrategy is IPoolStrategy {
             return 3; // Healthy - no asset balance means no risk
         }
 
-        uint256 healthyCollateral = Math.mulDiv(reserveAmount, userHealthyCollateralRatio, BPS);
-        uint256 reqCollateral = Math.mulDiv(reserveAmount, userLiquidationThreshold, BPS);
+        IAssetOracle oracle = IAssetOracle(pool.getOracle());
+        uint256 assetValue = assetAmount * oracle.getPrice();
+
+        uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
+        uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS);
         
         if (collateralAmount >= healthyCollateral + interestDebt) {
             return 3; // Healthy

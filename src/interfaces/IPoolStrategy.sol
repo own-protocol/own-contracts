@@ -9,30 +9,7 @@ pragma solidity ^0.8.20;
  * @dev Handles interest rates, collateral requirements, fees, etc.
  */
 interface IPoolStrategy {
-    // --------------------------------------------------------------------------------
-    //                             STRATEGY TYPE FUNCTIONS
-    // --------------------------------------------------------------------------------
     
-    /**
-     * @notice Enum defining collateral calculation methods
-     */
-    enum CollateralMethod {
-        VARIABLE_ASSET_BASED,   // Based on asset holdings (variable)
-        FIXED_DEPOSIT_BASED     // Based on fixed percentage of deposit/liquidity
-    }
-
-    /**
-     * @notice Returns the method used for calculating LP collateral
-     * @return method The calculation method for LP collateral
-     */
-    function getLPCollateralMethod() external view returns (CollateralMethod);
-    
-    /**
-     * @notice Returns the method used for calculating user collateral
-     * @return method The calculation method for user collateral
-     */
-    function getUserCollateralMethod() external view returns (CollateralMethod);
-
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
     // --------------------------------------------------------------------------------
