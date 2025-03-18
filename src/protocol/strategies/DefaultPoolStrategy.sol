@@ -7,14 +7,16 @@ import "../../interfaces/IPoolStrategy.sol";
 import "../../interfaces/IPoolLiquidityManager.sol";
 import "../../interfaces/IAssetPool.sol";
 import "../../interfaces/IXToken.sol";
+import "../../interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
  * @title DefaultPoolStrategy
  * @notice Default implementation of pool strategy with standard interest and collateral models
  * @dev Uses variable LP collateral based on asset holdings and fixed user collateral based on deposits
  */
-contract DefaultPoolStrategy is IPoolStrategy {
+contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -31,7 +33,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     uint256 public depositFeePercentage;  // Fee for deposits (e.g., 0.0%)
     uint256 public redemptionFeePercentage; // Fee for redemptions (e.g., 0.0%)
     uint256 public interestFeePercentage; // Fee on interest (e.g., 0.0%)
-    uint256 public yieldFeePercentage; // Fee on reserve token yield (e.g., 0.0%)
+    uint256 public yieldFeePercentage;    // Fee on reserve token yield (e.g., 0.0%)
     address public feeRecipient;          // Address to receive fees
     
     // User collateral parameters (fixed deposit based)
@@ -52,73 +54,152 @@ contract DefaultPoolStrategy is IPoolStrategy {
     //                                  CONSTRUCTOR
     // --------------------------------------------------------------------------------
 
-    constructor(
-        // Asset interest parameters
-        uint256 _baseRate,
-        uint256 _interestRate1,
-        uint256 _maxRate,
-        uint256 _utilTier1,
-        uint256 _utilTier2,
-        uint256 _maxUtil,
-        
-        // Fee parameters
-        uint256 _depositFee,
-        uint256 _redemptionFee,
-        uint256 _interestFee,
-        uint256 _yieldFee,
-        address _feeRecipient,
-        
-        // User collateral parameters
-        uint256 _userHealthyRatio,
-        uint256 _userLiquidationRatio,
-        uint256 _userLiquidationReward,
-        
-        // LP collateral parameters
-        uint256 _lpHealthyRatio,
-        uint256 _lpWarningThreshold,
-        uint256 _lpRegistrationRatio,
-        uint256 _lpLiquidationReward
-    ) {
-        // Parameter validation
-        require(_baseRate <= _interestRate1, "Base rate must be <= Interest rate 1");
-        require(_interestRate1 <= _maxRate, "Interest rate 1 must be <= max rate");
-        require(_maxRate <= BPS, "Max rate cannot exceed 100%");
-        require(_utilTier1 < _utilTier2, "Tier1 must be < Tier2");
-        require(_utilTier2 < _maxUtil, "Tier2 must be < max utilization");
-        require(_userLiquidationRatio < _userHealthyRatio, "User liquidation ratio must be < healthy ratio");
-        require(_lpWarningThreshold < _lpHealthyRatio, "LP warning threshold must be < healthy ratio");
-        require(_lpRegistrationRatio <= _lpWarningThreshold, "LP registration ratio must be <= warning threshold");
-        require(_depositFee <= BPS && _redemptionFee <= BPS && _interestFee <= BPS && _yieldFee <= BPS, "Fees cannot exceed 100%");
-        require(_feeRecipient != address(0), "Invalid fee recipient");
-        
-        // Asset interest parameters
-        baseInterestRate = _baseRate;
-        interestRate1 = _interestRate1;
-        maxInterestRate = _maxRate;
-        utilizationTier1 = _utilTier1;
-        utilizationTier2 = _utilTier2;
-        maxUtilization = _maxUtil;
-        
-        // Fee parameters
-        depositFeePercentage = _depositFee;
-        redemptionFeePercentage = _redemptionFee;
-        interestFeePercentage = _interestFee;
-        yieldFeePercentage = _yieldFee;
-        feeRecipient = _feeRecipient;
-        
-        // User collateral parameters
-        userHealthyCollateralRatio = _userHealthyRatio;
-        userLiquidationThreshold = _userLiquidationRatio;
-        userLiquidationReward = _userLiquidationReward;
-        
-        // LP collateral parameters
-        lpHealthyCollateralRatio = _lpHealthyRatio;
-        lpWarningThreshold = _lpWarningThreshold;
-        lpRegistrationRatio = _lpRegistrationRatio;
-        lpLiquidationReward = _lpLiquidationReward;
+    /**
+     * @notice Initializes the DefaultPoolStrategy contract with default owner
+     * @dev Parameters are set separately via setter functions
+     */
+    constructor() Ownable(msg.sender) {
     }
     
-
+    // --------------------------------------------------------------------------------
+    //                                CONFIGURATION FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Sets the interest rate parameters
+     * @param baseRate Base interest rate (scaled by 10000)
+     * @param rate1 Tier 1 interest rate (scaled by 10000)
+     * @param maxRate Maximum interest rate (scaled by 10000)
+     * @param utilTier1 First utilization tier (scaled by 10000)
+     * @param utilTier2 Second utilization tier (scaled by 10000)
+     * @param maxUtil Maximum utilization (scaled by 10000)
+     */
+    function setInterestRateParams(
+        uint256 baseRate,
+        uint256 rate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    ) external onlyOwner {
+        // Parameter validation
+        require(baseRate <= rate1, "Base rate must be <= Interest rate 1");
+        require(rate1 <= maxRate, "Interest rate 1 must be <= max rate");
+        require(maxRate <= BPS, "Max rate cannot exceed 100%");
+        require(utilTier1 < utilTier2, "Tier1 must be < Tier2");
+        require(utilTier2 < maxUtil, "Tier2 must be < max utilization");
+        
+        baseInterestRate = baseRate;
+        interestRate1 = rate1;
+        maxInterestRate = maxRate;
+        utilizationTier1 = utilTier1;
+        utilizationTier2 = utilTier2;
+        maxUtilization = maxUtil;
+        
+        emit InterestRateParamsUpdated(
+            baseRate,
+            interestRate1,
+            maxRate,
+            utilTier1,
+            utilTier2,
+            maxUtil
+        );
+    }
+    
+    /**
+     * @notice Sets the fee parameters
+     * @param depositFee Fee for deposits (scaled by 10000)
+     * @param redemptionFee Fee for redemptions (scaled by 10000)
+     * @param interestFee Fee on interest (scaled by 10000)
+     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param _feeRecipient Address to receive fees
+     */
+    function setFeeParams(
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 interestFee,
+        uint256 yieldFee,
+        address _feeRecipient
+    ) external onlyOwner {
+        require(
+            depositFee <= BPS && 
+            redemptionFee <= BPS && 
+            interestFee <= BPS && 
+            yieldFee <= BPS, 
+            "Fees cannot exceed 100%"
+        );
+        require(_feeRecipient != address(0), "Invalid fee recipient");
+        
+        depositFeePercentage = depositFee;
+        redemptionFeePercentage = redemptionFee;
+        interestFeePercentage = interestFee;
+        yieldFeePercentage = yieldFee;
+        feeRecipient = _feeRecipient;
+        
+        emit FeeParamsUpdated(
+            depositFee,
+            redemptionFee,
+            interestFee,
+            yieldFee,
+            _feeRecipient
+        );
+    }
+    
+    /**
+     * @notice Sets the user collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param liquidationRatio Liquidation threshold (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setUserCollateralParams(
+        uint256 healthyRatio,
+        uint256 liquidationRatio,
+        uint256 liquidationReward
+    ) external onlyOwner {
+        require(liquidationRatio < healthyRatio, "Liquidation ratio must be < healthy ratio");
+        require(liquidationReward <= BPS, "Reward cannot exceed 100%");
+        
+        userHealthyCollateralRatio = healthyRatio;
+        userLiquidationThreshold = liquidationRatio;
+        userLiquidationReward = liquidationReward;
+        
+        emit UserCollateralParamsUpdated(
+            healthyRatio,
+            liquidationRatio,
+            liquidationReward
+        );
+    }
+    
+    /**
+     * @notice Sets the LP collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param warningThreshold Warning threshold (scaled by 10000)
+     * @param registrationRatio Registration minimum ratio (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setLPCollateralParams(
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    ) external onlyOwner {
+        require(warningThreshold < healthyRatio, "Warning threshold must be < healthy ratio");
+        require(registrationRatio <= warningThreshold, "Registration ratio must be <= warning threshold");
+        require(liquidationReward <= BPS, "Reward cannot exceed 100%");
+        
+        lpHealthyCollateralRatio = healthyRatio;
+        lpWarningThreshold = warningThreshold;
+        lpRegistrationRatio = registrationRatio;
+        lpLiquidationReward = liquidationReward;
+        
+        emit LPCollateralParamsUpdated(
+            healthyRatio,
+            warningThreshold,
+            registrationRatio,
+            liquidationReward
+        );
+    }
+    
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
     // --------------------------------------------------------------------------------
@@ -160,7 +241,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
             // Base rate when utilization <= Tier1
             return baseInterestRate;
         } else if (utilization <= utilizationTier2) {
-            // Linear increase from base rate to max rate
+            // Linear increase from base rate to interest rate 1
             uint256 utilizationDelta = utilization - utilizationTier1;
             uint256 optimalDelta = utilizationTier2 - utilizationTier1;
             
@@ -177,7 +258,6 @@ contract DefaultPoolStrategy is IPoolStrategy {
             return maxInterestRate; // Max rate
         }
     }
-    
     
     // --------------------------------------------------------------------------------
     //                             FEE FUNCTIONS
@@ -276,7 +356,7 @@ contract DefaultPoolStrategy is IPoolStrategy {
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
         IAssetPool pool = IAssetPool(assetPool);
         
-        ( uint256 assetAmount, 
+        ( uint256 assetAmount,
           uint256 collateralAmount, 
           uint256 interestDebt
         ) = pool.userPosition(user);

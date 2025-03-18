@@ -11,6 +11,116 @@ pragma solidity ^0.8.20;
 interface IPoolStrategy {
     
     // --------------------------------------------------------------------------------
+    //                                    EVENTS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Emitted when interest rate parameters are updated
+     */
+    event InterestRateParamsUpdated(
+        uint256 baseRate,
+        uint256 interestRate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    );
+    
+    /**
+     * @notice Emitted when fee parameters are updated
+     */
+    event FeeParamsUpdated(
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 interestFee,
+        uint256 yieldFee,
+        address feeRecipient
+    );
+    
+    /**
+     * @notice Emitted when user collateral parameters are updated
+     */
+    event UserCollateralParamsUpdated(
+        uint256 healthyRatio,
+        uint256 liquidationRatio,
+        uint256 liquidationReward
+    );
+    
+    /**
+     * @notice Emitted when LP collateral parameters are updated
+     */
+    event LPCollateralParamsUpdated(
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    );
+
+    // --------------------------------------------------------------------------------
+    //                             CONFIGURATION FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Sets the interest rate parameters
+     * @param baseRate Base interest rate (scaled by 10000)
+     * @param rate1 Tier 1 interest rate (scaled by 10000)
+     * @param maxRate Maximum interest rate (scaled by 10000)
+     * @param utilTier1 First utilization tier (scaled by 10000)
+     * @param utilTier2 Second utilization tier (scaled by 10000)
+     * @param maxUtil Maximum utilization (scaled by 10000)
+     */
+    function setInterestRateParams(
+        uint256 baseRate,
+        uint256 rate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    ) external;
+    
+    /**
+     * @notice Sets the fee parameters
+     * @param depositFee Fee for deposits (scaled by 10000)
+     * @param redemptionFee Fee for redemptions (scaled by 10000)
+     * @param interestFee Fee on interest (scaled by 10000)
+     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param _feeRecipient Address to receive fees
+     */
+    function setFeeParams(
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 interestFee,
+        uint256 yieldFee,
+        address _feeRecipient
+    ) external;
+    
+    /**
+     * @notice Sets the user collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param liquidationRatio Liquidation threshold (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setUserCollateralParams(
+        uint256 healthyRatio,
+        uint256 liquidationRatio,
+        uint256 liquidationReward
+    ) external;
+    
+    /**
+     * @notice Sets the LP collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param warningThreshold Warning threshold (scaled by 10000)
+     * @param registrationRatio Registration minimum ratio (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setLPCollateralParams(
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    ) external;
+    
+    // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
     // --------------------------------------------------------------------------------
 
