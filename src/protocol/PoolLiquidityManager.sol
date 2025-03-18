@@ -345,24 +345,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     function getLPAssetHolding(address lp) public view returns (uint256) {
         if (!registeredLPs[lp]) return 0;
         
-        CollateralInfo storage info = lpInfo[lp];
-        
-        uint256 totalSupply = assetToken.totalSupply();
-        uint256 assetPrice = assetOracle.assetPrice();
-        
-        // Calculate LP's share of total supply based on their proportion of total liquidity
-        uint256 lpShare = info.liquidityAmount;
-        
-        // If no total liquidity, no collateral required
-        if (totalLPLiquidity == 0) return 0;
+        uint256 poolValue = assetPool.getPoolValue();
+        uint256 lpShare = getLPLiquidityShare(lp);
 
-        uint256 lpAssetHolding = Math.mulDiv(
-            Math.mulDiv(totalSupply, assetPrice, PRECISION),
-            lpShare,
-            totalLPLiquidity
-        );
+        uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue, PRECISION);
         
         return lpAssetHolding;
+    }
+
+    /**
+     * @notice Get LP's current liquidity share of the pool
+     * @param lp Address of the LP
+     */
+    function getLPLiquidityShare(address lp) public view returns (uint256) {
+        if (!registeredLPs[lp]) return 0;
+        // If no total liquidity, no collateral required
+        if (totalLPLiquidity == 0) return 0;
+        return Math.mulDiv(lpInfo[lp].liquidityAmount, PRECISION, totalLPLiquidity);
     }
     
     /**
