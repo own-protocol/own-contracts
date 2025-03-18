@@ -48,15 +48,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     
     /// @notice Current OHLC data for the asset
     OHLCData public ohlcData;
-    
-    /// @notice Trading period data structure
-    struct TradingPeriod {
-        uint256 start;
-        uint256 end;
-    }
-    
-    /// @notice Regular market trading period
-    TradingPeriod public regularMarketPeriod;
 
     /**
      * @notice Constructs the AssetOracle contract
@@ -125,10 +116,8 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 uint256 highPrice,
                 uint256 lowPrice,
                 uint256 closePrice,
-                uint256 dataTimestamp,
-                uint256 periodStart,
-                uint256 periodEnd
-            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256, uint256, uint256));
+                uint256 dataTimestamp
+            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256));
             
             // Update asset price
             assetPrice = closePrice;
@@ -142,23 +131,10 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 timestamp: dataTimestamp
             });
             
-            // Update regular market trading period
-            regularMarketPeriod = TradingPeriod({
-                start: periodStart,
-                end: periodEnd
-            });
-            
             // Update timestamp
             lastUpdated = block.timestamp;
             
             emit AssetPriceUpdated(assetPrice, block.timestamp);
-            emit OHLCDataUpdated(
-                ohlcData.open,
-                ohlcData.high,
-                ohlcData.low,
-                ohlcData.close,
-                ohlcData.timestamp
-            );
         }
     }
 
@@ -201,21 +177,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
             ohlcData.low,
             ohlcData.close,
             ohlcData.timestamp
-        );
-    }
-    
-    /**
-     * @notice Returns the regular market trading period data
-     * @return start The start time of the regular market
-     * @return end The end time of the regular market
-     */
-    function getRegularMarketPeriod() external view returns (
-        uint256 start,
-        uint256 end
-    ) {
-        return (
-            regularMarketPeriod.start,
-            regularMarketPeriod.end
         );
     }
 }

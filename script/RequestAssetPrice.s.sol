@@ -8,7 +8,7 @@ import "../src/protocol/AssetOracle.sol";
 
 contract RequestAssetPrice is Script {
     // Contract configuration - replace with your deployed contract address
-    address constant ORACLE_CONTRACT_ADDRESS = 0x9c4A8B561C2DbA80Be281274CAC3DdcAa0B95Df3;
+    address constant ORACLE_CONTRACT_ADDRESS = 0x56a8a5D47E316E10E5488118a6A8f966766571e1;
     
     // Chainlink Functions configuration - depends on your subscription and network
     address constant ROUTER_ADDRESS = 0xf9B8fc078197181C841c296C876945aaa425B278; 
@@ -16,7 +16,7 @@ contract RequestAssetPrice is Script {
     uint32 constant GAS_LIMIT = 300_000;
     bytes32 constant DON_ID = 0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000; 
     
-   string constant SOURCE = "const ethers = await import(\"npm:ethers@6.10.0\"); const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1d`; const response = await Functions.makeHttpRequest({ url: yahooFinanceUrl }); if (!response || response.status !== 200) throw new Error(\"Failed to fetch asset data\"); const data = response.data.chart.result[0]; const meta = data.meta; const timestamp = data.timestamp[0]; const indicators = data.indicators; const quote = indicators.quote[0]; const open = quote.open[0]; const high = quote.high[0]; const low = quote.low[0]; const close = quote.close[0]; const regularMarketPeriod = meta.currentTradingPeriod.regular; const regularMarketStart = regularMarketPeriod.start; const regularMarketEnd = regularMarketPeriod.end; const toWei = (value) => BigInt(Math.round(value * 1e18)); const encoded = ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256'], [toWei(open), toWei(high), toWei(low), toWei(close), BigInt(timestamp), BigInt(regularMarketStart), BigInt(regularMarketEnd)]); return ethers.getBytes(encoded);";
+   string constant SOURCE = "const ethers = await import(\"npm:ethers@6.10.0\"); const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1d`; const response = await Functions.makeHttpRequest({ url: yahooFinanceUrl }); if (!response || response.status !== 200) throw new Error(\"Failed to fetch asset data\"); const data = response.data.chart.result[0]; const timestamp = data.timestamp[0]; const indicators = data.indicators; const quote = indicators.quote[0]; const open = quote.open[0]; const high = quote.high[0]; const low = quote.low[0]; const close = quote.close[0]; const toWei = (value) => BigInt(Math.round(value * 1e18)); const encoded = ethers.AbiCoder.defaultAbiCoder().encode([\"uint256\", \"uint256\", \"uint256\", \"uint256\", \"uint256\"], [toWei(open), toWei(high), toWei(low), toWei(close), BigInt(timestamp)]); return ethers.getBytes(encoded);";
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

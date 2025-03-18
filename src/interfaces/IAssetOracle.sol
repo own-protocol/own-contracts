@@ -126,14 +126,4 @@ interface IAssetOracle {
         uint256 close,
         uint256 timestamp
     );
-    
-    /**
-     * @notice Returns the regular market trading period data
-     * @return start The start time of the regular market
-     * @return end The end time of the regular market
-     */
-    function getRegularMarketPeriod() external view returns (
-        uint256 start,
-        uint256 end
-    );
 }
