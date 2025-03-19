@@ -36,6 +36,18 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     
     /// @notice Timestamp of the last price update
     uint256 public lastUpdated;
+    
+    /// @notice OHLC data structure for the asset
+    struct OHLCData {
+        uint256 open;
+        uint256 high;
+        uint256 low;
+        uint256 close;
+        uint256 timestamp;
+    }
+    
+    /// @notice Current OHLC data for the asset
+    OHLCData public ohlcData;
 
     /**
      * @notice Constructs the AssetOracle contract
@@ -64,7 +76,7 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donID
-    ) external {
+    ) external onlyOwner {
         if (keccak256(abi.encodePacked(source)) != sourceHash) {
             revert InvalidSource();
         }
@@ -93,11 +105,37 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         if (requestId != s_lastRequestId) {
             revert UnexpectedRequestID(requestId);
         }
+        
         lastResponse = response;
         lastError = error;
-        assetPrice = abi.decode(response, (uint256));
-        lastUpdated = block.timestamp;
-        emit AssetPriceUpdated(assetPrice, block.timestamp);
+        
+        if (response.length > 0) {
+            // Decode the ABI encoded response data
+            (
+                uint256 openPrice,
+                uint256 highPrice,
+                uint256 lowPrice,
+                uint256 closePrice,
+                uint256 dataTimestamp
+            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256));
+            
+            // Update asset price
+            assetPrice = closePrice;
+            
+            // Update OHLC data
+            ohlcData = OHLCData({
+                open: openPrice,
+                high: highPrice,
+                low: lowPrice,
+                close: closePrice,
+                timestamp: dataTimestamp
+            });
+            
+            // Update timestamp
+            lastUpdated = block.timestamp;
+            
+            emit AssetPriceUpdated(assetPrice, block.timestamp);
+        }
     }
 
     /**
@@ -116,5 +154,29 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     function updateAssetSymbol(string memory newAssetSymbol) external onlyOwner {
         assetSymbol = newAssetSymbol;
         emit AssetSymbolUpdated(newAssetSymbol);
+    }
+    
+    /**
+     * @notice Returns the current OHLC data for the asset
+     * @return open The opening price
+     * @return high The highest price
+     * @return low The lowest price
+     * @return close The closing price
+     * @return timestamp The timestamp of the OHLC data
+     */
+    function getOHLCData() external view returns (
+        uint256 open,
+        uint256 high,
+        uint256 low,
+        uint256 close,
+        uint256 timestamp
+    ) {
+        return (
+            ohlcData.open,
+            ohlcData.high,
+            ohlcData.low,
+            ohlcData.close,
+            ohlcData.timestamp
+        );
     }
 }

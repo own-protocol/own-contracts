@@ -230,7 +230,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
 
         // Calculate deposit fee
-        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
         uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
 
         uint256 totalDeposit = amount + collateralAmount + depositFee;
@@ -254,6 +254,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      */
     function redemptionRequest(uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
+
+        Position memory position = positions[msg.sender];
+        if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
@@ -288,7 +291,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (amount == 0) revert NothingToCancel();
 
         // Calculate deposit fee
-        (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
         uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
 
         uint256 totalDeposit = amount + collateralAmount + depositFee;
@@ -342,7 +345,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             );
 
             // Calculate and deduct deposit fee
-            (uint256 depositFeePercentage, , ) = poolStrategy.getFeePercentages();
+            (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
             uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
             if (depositFee > 0) {
                 reserveToken.transfer(poolStrategy.getFeeRecipient(), depositFee);
@@ -356,7 +359,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
                 // Calculate scaled interest based on asset amount
                 position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest);
             }
-        
+
+            // Update user's position
+            position.assetAmount += assetAmount;
             position.collateralAmount += collateralAmount;
             
             // Mint tokens
@@ -372,15 +377,19 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             );
 
             uint256 balanceCollateral = 0;
-            if(assetToken.balanceOf(user) == 0) {
+            uint256 positionAssetAmount = position.assetAmount;
+            if(positionAssetAmount - amount == 0) {
                 uint256 interestDebt = getInterestDebt(user);
                 balanceCollateral = position.collateralAmount - interestDebt;
                 position.scaledInterest = 0;
+                position.assetAmount = 0;
                 position.collateralAmount = 0;
-            }
+            } else {
+                position.assetAmount -= amount;
+            }         
 
             // Calculate and deduct redemption fee
-            (, uint256 redemptionFeePercentage , ) = poolStrategy.getFeePercentages();
+            (, uint256 redemptionFeePercentage , ,) = poolStrategy.getFeePercentages();
             uint256 redemptionFee = (redemptionFeePercentage > 0) ? Math.mulDiv(amount, redemptionFeePercentage, BPS) : 0;
             if (redemptionFee > 0) {
                 reserveToken.transfer(poolStrategy.getFeeRecipient(), redemptionFee);
@@ -436,15 +445,63 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function getPoolUtilization() public view returns (uint256 utilization) {
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
         if (totalLiquidity == 0) return 0;
+        uint256 utilisedLiquidity = getUtilisedLiquidity();
         
+        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate pool utilization ratio considering the deposit amount
+     * @param depositAmount Additional deposit amount to consider in calculation
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilizationWithDeposit(uint256 depositAmount) public view returns (uint256 utilization) {
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        if (totalLiquidity == 0) return 0;
+        
+        uint256 utilisedLiquidity = getUtilisedLiquidity() + depositAmount;
+        
+        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getUtilisedLiquidity() public view returns (uint256) {      
+
+        uint256 poolValue = getPoolValue();
+        (uint256 healthyRatio, , , ) = poolStrategy.getLPCollateralParams();
+        uint256 totalRatio = BPS + healthyRatio;
+        uint256 newMints = cycleTotalDepositRequests * reserveToAssetDecimalFactor;
+
+        uint256 lpLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
+        
+        uint256 utilisedLiquidity = lpLiquidity + newMints;
+        
+        return utilisedLiquidity;
+    }
+
+    /**
+     * @notice Calculate pool delta
+     * @return delta Pool delta in reserve tokens
+     */
+    function getPoolDelta() public view returns (int256 delta) {
+        uint256 poolValue = getPoolValue();
+        uint256 reserveBalanceOfAsset = assetToken.totalReserveSupply() * reserveToAssetDecimalFactor; 
+
+        return int256(poolValue) - int256(reserveBalanceOfAsset);
+    }
+
+    /**
+     * @notice Calculate pool value
+     * @return value Pool value in reserve tokens
+     */
+    function getPoolValue() public view returns (uint256 value) {
         uint256 assetSupply = assetToken.totalSupply();
         uint256 assetPrice = assetOracle.assetPrice();
-        uint256 newMints = cycleTotalDepositRequests;
-        
-        // Calculate total value: current asset supply * price + new expected mints
-        uint256 totalValue = Math.mulDiv(assetSupply, assetPrice, PRECISION) + newMints;
-        
-        return Math.min((totalValue * BPS) / totalLiquidity, BPS);
+
+        return Math.mulDiv(assetSupply, assetPrice, PRECISION);
     }
 
     // --------------------------------------------------------------------------------
@@ -465,8 +522,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if(reserveBalance < amount) revert InsufficientBalance();
 
         // Calculate and deduct protocol interest fee
-        (, uint256 protocolFeePercentage , ) = poolStrategy.getFeePercentages();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        (, uint256 interestFeePercentage , ,) = poolStrategy.getFeePercentages();
+        uint256 protocolFee = (interestFeePercentage > 0) ? Math.mulDiv(amount, interestFeePercentage, BPS) : 0;
         if (protocolFee > 0) {
             reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
             emit FeeDeducted(lp, protocolFee, 2);
@@ -515,19 +572,16 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return reserveAmount Amount of reserve tokens in position
      * @return collateralAmount Amount of collateral in position
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 reserveAmount,
         uint256 collateralAmount,
         uint256 interestDebt
     ) {
         Position storage position = positions[user];
-        assetAmount = assetToken.balanceOf(user);
-        reserveAmount = assetToken.reserveBalanceOf(user);
+        assetAmount = position.assetAmount;
         collateralAmount = position.collateralAmount;
         interestDebt = getInterestDebt(user);
     }
@@ -548,20 +602,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     ) {
         UserRequest storage request = userRequests[user];
         return (request.amount, request.collateralAmount, request.isDeposit, request.requestCycle);
-    }
-
-    /**
-     * @notice Get user collateral params
-     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
-     */
-    function userCollateralParams() external view returns (
-        uint256 _healthyRatio,
-        uint256 _liquidationThreshold,
-        uint256 _liquidationReward
-    ) {
-        (_healthyRatio, _liquidationThreshold, _liquidationReward) = poolStrategy.getUserCollateralParams();
     }
 
     /**

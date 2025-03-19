@@ -9,33 +9,138 @@ pragma solidity ^0.8.20;
  * @dev Handles interest rates, collateral requirements, fees, etc.
  */
 interface IPoolStrategy {
+    
     // --------------------------------------------------------------------------------
-    //                             STRATEGY TYPE FUNCTIONS
+    //                                    EVENTS
     // --------------------------------------------------------------------------------
     
     /**
-     * @notice Enum defining collateral calculation methods
+     * @notice Emitted when interest rate parameters are updated
      */
-    enum CollateralMethod {
-        VARIABLE_ASSET_BASED,   // Based on asset holdings (variable)
-        FIXED_DEPOSIT_BASED     // Based on fixed percentage of deposit/liquidity
-    }
-
-    /**
-     * @notice Returns the method used for calculating LP collateral
-     * @return method The calculation method for LP collateral
-     */
-    function getLPCollateralMethod() external view returns (CollateralMethod);
+    event InterestRateParamsUpdated(
+        uint256 baseRate,
+        uint256 interestRate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    );
     
     /**
-     * @notice Returns the method used for calculating user collateral
-     * @return method The calculation method for user collateral
+     * @notice Emitted when fee parameters are updated
      */
-    function getUserCollateralMethod() external view returns (CollateralMethod);
+    event FeeParamsUpdated(
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 interestFee,
+        uint256 yieldFee,
+        address feeRecipient
+    );
+    
+    /**
+     * @notice Emitted when user collateral parameters are updated
+     */
+    event UserCollateralParamsUpdated(
+        uint256 healthyRatio,
+        uint256 liquidationRatio,
+        uint256 liquidationReward
+    );
+    
+    /**
+     * @notice Emitted when LP collateral parameters are updated
+     */
+    event LPCollateralParamsUpdated(
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    );
 
+    // --------------------------------------------------------------------------------
+    //                             CONFIGURATION FUNCTIONS
+    // --------------------------------------------------------------------------------
+    
+    /**
+     * @notice Sets the interest rate parameters
+     * @param baseRate Base interest rate (scaled by 10000)
+     * @param rate1 Tier 1 interest rate (scaled by 10000)
+     * @param maxRate Maximum interest rate (scaled by 10000)
+     * @param utilTier1 First utilization tier (scaled by 10000)
+     * @param utilTier2 Second utilization tier (scaled by 10000)
+     * @param maxUtil Maximum utilization (scaled by 10000)
+     */
+    function setInterestRateParams(
+        uint256 baseRate,
+        uint256 rate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    ) external;
+    
+    /**
+     * @notice Sets the fee parameters
+     * @param depositFee Fee for deposits (scaled by 10000)
+     * @param redemptionFee Fee for redemptions (scaled by 10000)
+     * @param interestFee Fee on interest (scaled by 10000)
+     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param _feeRecipient Address to receive fees
+     */
+    function setFeeParams(
+        uint256 depositFee,
+        uint256 redemptionFee,
+        uint256 interestFee,
+        uint256 yieldFee,
+        address _feeRecipient
+    ) external;
+    
+    /**
+     * @notice Sets the user collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param liquidationRatio Liquidation threshold (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setUserCollateralParams(
+        uint256 healthyRatio,
+        uint256 liquidationRatio,
+        uint256 liquidationReward
+    ) external;
+    
+    /**
+     * @notice Sets the LP collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
+     * @param warningThreshold Warning threshold (scaled by 10000)
+     * @param registrationRatio Registration minimum ratio (scaled by 10000)
+     * @param liquidationReward Liquidation reward (scaled by 10000)
+     */
+    function setLPCollateralParams(
+        uint256 healthyRatio,
+        uint256 warningThreshold,
+        uint256 registrationRatio,
+        uint256 liquidationReward
+    ) external;
+    
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns all interest rate parameters 
+     * @return baseRate The base interest rate (scaled by 10000)
+     * @return rate1 The tier 1 interest rate (scaled by 10000)
+     * @return maxRate The maximum interest rate (scaled by 10000)
+     * @return utilTier1 The first utilization tier (scaled by 10000)
+     * @return utilTier2 The second utilization tier (scaled by 10000)
+     * @return maxUtil The maximum utilization (scaled by 10000)
+    */
+    function getInterestRateParameters() external view returns (
+        uint256 baseRate,
+        uint256 rate1,
+        uint256 maxRate,
+        uint256 utilTier1,
+        uint256 utilTier2,
+        uint256 maxUtil
+    );
 
     /**
      * @notice Returns the current interest rate based on utilization
@@ -43,12 +148,6 @@ interface IPoolStrategy {
      * @return rate Current interest rate (scaled by 10000)
      */
     function calculateInterestRate(uint256 utilization) external view returns (uint256 rate);
-
-    /**
-     * @notice Returns the maximum utilization point
-     * @return Maximum utilization point (scaled by 10000)
-     */
-    function getMaxUtilization() external view returns (uint256);
     
     // --------------------------------------------------------------------------------
     //                             FEE FUNCTIONS
@@ -58,12 +157,14 @@ interface IPoolStrategy {
      * @notice Returns fee percentages for different operations
      * @return depositFee Fee percentage for deposits (scaled by 10000)
      * @return redemptionFee Fee percentage for redemptions (scaled by 10000)
-     * @return protocolFee Fee percentage taken by protocol from interest (scaled by 10000)
+     * @return interestFee Fee percentage taken by protocol from interest (scaled by 10000)
+     * @return yieldFee Fee percentage taken by protocol from yield generated on reserve tokens (scaled by 10000)
      */
     function getFeePercentages() external view returns (
         uint256 depositFee,
         uint256 redemptionFee,
-        uint256 protocolFee
+        uint256 interestFee,
+        uint256 yieldFee
     );
     
     /**

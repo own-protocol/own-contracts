@@ -54,11 +54,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public poolReserveBalance;
 
     /**
-     * @notice Net expected change in reserves post-rebalance.
-     */
-    int256 public netReserveDelta;
-
-    /**
      * @notice Asset token balance of the pool.
      */
     uint256 public poolAssetBalance;
@@ -212,19 +207,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         uint256 depositRequests = assetPool.cycleTotalDepositRequests();
         uint256 redemptionRequests = assetPool.cycleTotalRedemptionRequests();
 
-        // Value of redemption requests in reserve tokens
-        uint256 redemptionRequestsInReserve = Math.mulDiv(redemptionRequests, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        // Initial purchase value of redemption requests i.e asset tokens in the pool
-        uint256 assetReserveSupplyInPool = assetToken.reserveBalanceOf(address(assetPool));
         // Expected new asset mints
         uint256 expectedNewAssetMints = Math.mulDiv(depositRequests, PRECISION * reserveToAssetDecimalFactor, assetPrice);
 
-        // Calculate the net change in reserves post-rebalance
-        netReserveDelta = int256(depositRequests) - int256(assetReserveSupplyInPool);
         // Calculate the net change in assets post-rebalance
         netAssetDelta = int256(expectedNewAssetMints) - int256(redemptionRequests);
         // Calculate the total amount to rebalance
-        rebalanceAmount = int256(redemptionRequestsInReserve) - int256(assetReserveSupplyInPool);
+        rebalanceAmount = assetPool.getPoolDelta();
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -235,7 +224,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         emit RebalanceInitiated(
             cycleIndex,
             assetPrice,
-            netReserveDelta,
+            netAssetDelta,
             rebalanceAmount
         );
     }
@@ -244,6 +233,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
+     * ToDo: When rebalancing we need to ensure LPs have enough collateral to cover the new pool asset value
      */
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
@@ -399,7 +389,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         lastCycleActionDateTime = block.timestamp;
         poolReserveBalance = reserveToken.balanceOf(address(assetPool));
         poolAssetBalance = assetToken.totalSupply();
-        netReserveDelta = 0;
         netAssetDelta = 0;
         rebalanceAmount = 0;
         cycleInterestAmount = 0;
@@ -423,7 +412,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @return _assetBalance Asset token balance of the pool.
      * @return _totalDepositRequests Total deposit requests in the current cycle.
      * @return _totalRedemptionRequests Total redemption requests in the current cycle.
-     * @return _netReserveDelta Net expected change in reserves post-rebalance.
      * @return _netAssetDelta Net expected change in assets post-rebalance.
      * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
      */
@@ -436,7 +424,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests,
-        int256 _netReserveDelta,
         int256 _netAssetDelta,
         int256 _rebalanceAmount
     ) {
@@ -448,7 +435,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDepositRequests();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();
-        _netReserveDelta = netReserveDelta;
         _netAssetDelta = netAssetDelta;
         _rebalanceAmount = rebalanceAmount;
     }

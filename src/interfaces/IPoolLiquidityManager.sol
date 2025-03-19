@@ -5,7 +5,6 @@ pragma solidity ^0.8.20;
 
 import "../interfaces/IAssetPool.sol";
 import "../interfaces/IAssetOracle.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title IPoolLiquidityManager
@@ -201,6 +200,12 @@ interface IPoolLiquidityManager {
      * @param lp Address of the LP
      */
     function getLPAssetHolding(address lp) external view returns (uint256);
+
+    /**
+     * @notice Get LP's current liquidity share of the pool
+     * @param lp Address of the LP
+     */
+    function getLPLiquidityShare(address lp) external view returns (uint256);
     
     /**
      * @notice Get LP's current collateral and liquidity info

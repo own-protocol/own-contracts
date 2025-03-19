@@ -29,7 +29,7 @@
 ### Deploy Oracle
 
 ```bash
-forge script script/DeployOracle.s.sol:DeployScript \
+forge script script/DeployOracle.s.sol:DeployOracleScript \
     --rpc-url base_sepolia --broadcast --verify
 ```
 

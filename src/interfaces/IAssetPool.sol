@@ -32,10 +32,12 @@ interface IAssetPool {
 
     /**
      * @notice User position in the protocol
+     * @param assetAmount Amount of asset tokens held
      * @param collateralAmount Amount of collateral provided
      * @param scaledInterest User's scaled interest value for debt calculation
      */
     struct Position {
+        uint256 assetAmount;
         uint256 collateralAmount;
         uint256 scaledInterest;
     }
@@ -160,6 +162,10 @@ interface IAssetPool {
     error InvalidAmount();
     /// @notice Thrown when the caller is unauthorized
     error Unauthorized();
+    /// @notice Thrown when the pool utilization exceeds the limit
+    error PoolUtilizationExceeded();
+    /// @notice Thrown when redemption request is invalid
+    error InvalidRedemptionRequest();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -244,13 +250,11 @@ interface IAssetPool {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
-     * @return reserveAmount Amount of reserve tokens in position
      * @return collateralAmount Amount of collateral in position
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
-        uint256 reserveAmount,
         uint256 collateralAmount,
         uint256 interestDebt
     );
@@ -268,18 +272,6 @@ interface IAssetPool {
         uint256 collateralAmount,
         bool isDeposit,
         uint256 requestCycle
-    );
-
-    /**
-     * @notice Get user collateral params
-     * @return _healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @return _liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return _liquidationReward Liquidation reward percentage (scaled by 10000)
-     */
-    function userCollateralParams() external view returns (
-        uint256 _healthyRatio,
-        uint256 _liquidationThreshold,
-        uint256 _liquidationReward
     );
 
     /**
@@ -310,6 +302,31 @@ interface IAssetPool {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate pool utilization ratio considering the deposit amount
+     * @param depositAmount Additional deposit amount to consider in calculation
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function getPoolUtilizationWithDeposit(uint256 depositAmount) external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getUtilisedLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Calculate pool delta
+     * @return delta Pool delta in reserve tokens
+     */
+    function getPoolDelta() external view returns (int256 delta);
+
+     /**
+     * @notice Calculate pool value
+     * @return value Pool value in reserve tokens
+     */
+    function getPoolValue() external view returns (uint256 value);
 
     // --------------------------------------------------------------------------------
     //                               DEPENDENCIES

@@ -27,6 +27,22 @@ interface IAssetOracle {
      * @param newSourceHash The new hash of the JavaScript source code
      */
     event SourceHashUpdated(bytes32 newSourceHash);
+    
+    /**
+     * @dev Emitted when OHLC data is updated
+     * @param open The opening price
+     * @param high The highest price
+     * @param low The lowest price
+     * @param close The closing price
+     * @param timestamp The timestamp of the OHLC data
+     */
+    event OHLCDataUpdated(
+        uint256 open,
+        uint256 high,
+        uint256 low,
+        uint256 close,
+        uint256 timestamp
+    );
 
     /**
      * @dev Thrown when received requestId doesn't match the expected one
@@ -94,4 +110,20 @@ interface IAssetOracle {
      * @return The ID of the last Chainlink Functions request
      */
     function s_lastRequestId() external view returns (bytes32);
+    
+    /**
+     * @notice Returns the current OHLC data for the asset
+     * @return open The opening price
+     * @return high The highest price
+     * @return low The lowest price
+     * @return close The closing price
+     * @return timestamp The timestamp of the OHLC data
+     */
+    function getOHLCData() external view returns (
+        uint256 open,
+        uint256 high,
+        uint256 low,
+        uint256 close,
+        uint256 timestamp
+    );
 }

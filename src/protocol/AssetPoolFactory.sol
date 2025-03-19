@@ -99,6 +99,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             pool,
             liquidityManager,
+            poolStrategy,
             cycleLength,
             rebalanceLength
         );
@@ -109,6 +110,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle, 
             pool, 
             cycleManager, 
+            poolStrategy,
             owner
         );
 
