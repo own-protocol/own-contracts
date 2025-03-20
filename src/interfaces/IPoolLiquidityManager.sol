@@ -146,10 +146,10 @@ interface IPoolLiquidityManager {
     function registerLP(uint256 liquidityAmount) external;
 
     /**
-     * @notice Remove LP from registry (only owner)
-     * @param lp The address of the LP to remove
+     * @notice Unregister LP from registry
+     * @param lp The address of the LP
      */
-    function removeLP(address lp) external;
+    function unregisterLP(address lp) external;
 
     /**
      * @notice Increase your liquidity amount

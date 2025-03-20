@@ -3,7 +3,6 @@
 
 pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
@@ -18,7 +17,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @title PoolLiquidityManager
  * @notice Manages LP collateral requirements and registry for the asset pool
  */
-contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, ReentrancyGuard {
+contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
     
     // Total liquidity in the pool
     uint256 public totalLPLiquidity;
@@ -53,10 +52,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     }
 
     /**
-     * @dev Empty constructor that transfers ownership to the deployer
+     * @dev Empty constructor
      * Used for the implementation contract only, not for clones
      */
-    constructor() Ownable(msg.sender) {
+    constructor() {
         // This disables initialization of the implementation contract
         _disableInitializers();
     }
@@ -69,7 +68,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
      * @param _assetPool Address of the asset pool
      * @param _poolCycleManager Address of the pool cycle manager
      * @param _poolStrategy Address of the pool strategy
-     * @param _owner Address of the owner
      */
     function initialize(
         address _reserveToken,
@@ -77,11 +75,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
         address _assetOracle,
         address _assetPool,
         address _poolCycleManager,
-        address _poolStrategy,
-        address _owner
+        address _poolStrategy
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetPool == address(0) || 
-            _poolCycleManager == address(0) || _assetOracle == address(0) || _owner == address(0)) {
+            _poolCycleManager == address(0) || _assetOracle == address(0)) {
             revert ZeroAddress();
         }
             
@@ -94,8 +91,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
         
-        // Initialize Ownable
-        _transferOwnership(_owner);
     }
 
     /**
@@ -129,10 +124,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
     }
 
     /**
-     * @notice Remove LP from registry
-     * @param lp The address of the LP to remove
+     * @notice Unregister LP from registry
+     * @param lp The address of the LP
      */
-    function removeLP(address lp) external {
+    function unregisterLP(address lp) external {
         if (msg.sender != lp) revert Unauthorized();
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
@@ -146,7 +141,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, Ownable, Re
             reserveToken.transfer(lp, refundAmount);
         }
         
-        // Remove LP
         registeredLPs[lp] = false;
         lpCount--;
         

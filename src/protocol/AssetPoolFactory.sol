@@ -100,8 +100,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle, 
             pool, 
             cycleManager, 
-            poolStrategy,
-            owner
+            poolStrategy
         );
 
         // Emit the AssetPoolCreated event to notify listeners.
