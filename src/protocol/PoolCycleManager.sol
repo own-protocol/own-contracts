@@ -84,6 +84,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 private constant MAX_PRICE_DEVIATION = 3_00;
 
     /**
+     * @notice Threshold for oracle update.
+     */
+    uint256 private constant ORACLE_UPDATE_THRESHOLD = 3600; // 60 minutes
+
+    /**
      * @notice Cumulative pool interest accrued over time (in BPS)
      */
     uint256 public cumulativePoolInterest;
@@ -168,7 +173,15 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     function initiateOffchainRebalance() external {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
         (uint256 cycleLength,) = poolStrategy.getCycleParams();
-        if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
+        uint256 oracleLastUpdated = assetOracle.lastUpdated();
+        if (block.timestamp - oracleLastUpdated > ORACLE_UPDATE_THRESHOLD) revert OracleNotUpdated();
+        bool isMarketOpen = assetOracle.isMarketOpen();
+        if (!isMarketOpen) revert MarketClosed();
+
+        if (cycleLength > 0) {
+            uint256 expectedDateTime = lastCycleActionDateTime + cycleLength;
+            if (block.timestamp < expectedDateTime) revert CycleInProgress();
+        }
 
         // Accrue interest before changing cycle state
         _accrueInterest();

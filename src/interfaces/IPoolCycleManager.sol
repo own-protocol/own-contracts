@@ -110,6 +110,8 @@ interface IPoolCycleManager {
     error ZeroAddress();
     /// @notice Thrown when the pool utilization exceeds the limit
     error PoolUtilizationExceeded();
+    /// @notice Thrown when the market is closed
+    error MarketClosed();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
