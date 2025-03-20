@@ -483,18 +483,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Calculate pool delta
-     * @return delta Pool delta in reserve tokens
-     * ToDo: This is overall delta, we also need cycleDelta to calcualte rebalance amount.
-     */
-    function getPoolDelta() public view returns (int256 delta) {
-        uint256 poolValue = getPoolValue();
-        uint256 reserveBalanceOfAsset = assetToken.totalReserveSupply() * reserveToAssetDecimalFactor; 
-
-        return int256(poolValue) - int256(reserveBalanceOfAsset);
-    }
-
-    /**
      * @notice Calculate pool value
      * @return value Pool value in reserve tokens
      */

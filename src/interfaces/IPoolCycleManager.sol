@@ -51,15 +51,13 @@ interface IPoolCycleManager {
     /**
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
-     * @param assetPrice Current price of the asset
-     * @param netAssetDelta Net change in assets after rebalance
-     * @param rebalanceAmount Total amount to be rebalanced
+     * @param assetPriceHigh Highest price of the asset during the rebalance
+     * @param assetPriceLow Lowest price of the asset during the rebalance
      */
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
-        uint256 assetPrice,
-        int256 netAssetDelta,
-        int256 rebalanceAmount
+        uint256 assetPriceHigh,
+        uint256 assetPriceLow
     );
 
     /**
@@ -102,8 +100,8 @@ interface IPoolCycleManager {
     error OnChainRebalancingInProgress();
     /// @notice Thrown when oracle price is not updated
     error OracleNotUpdated();
-    /// @notice Thrown when price deviation is too high
-    error PriceDeviationTooHigh();
+    /// @notice Thrown when the rebalance price is invalid
+    error InvalidRebalancePrice();
     /// @notice Thrown when caller is not authorized
     error UnauthorizedCaller();
     /// @notice Thrown when an is zero address
@@ -112,6 +110,8 @@ interface IPoolCycleManager {
     error PoolUtilizationExceeded();
     /// @notice Thrown when the market is closed
     error MarketClosed();
+    /// @notice Thrown when the market is open
+    error MarketOpen();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
@@ -158,8 +158,6 @@ interface IPoolCycleManager {
      * @return _assetBalance Asset token balance of the pool
      * @return _totalDepositRequests Total deposit requests for the cycle
      * @return _totalRedemptionRequests Total redemption requests for the cycle
-     * @return _netAssetDelta Net change in assets after rebalance
-     * @return _rebalanceAmount Total amount to be rebalanced
      */
     function getPoolInfo() external view returns (
         CycleState _cycleState,
@@ -169,9 +167,7 @@ interface IPoolCycleManager {
         uint256 _reserveBalance,
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
-        int256 _netAssetDelta,
-        int256 _rebalanceAmount
+        uint256 _totalRedemptionRequests
     );
 
     // --------------------------------------------------------------------------------
@@ -202,16 +198,6 @@ interface IPoolCycleManager {
      * @notice Returns the asset token balance of the pool
      */
     function poolAssetBalance() external view returns (uint256);
-
-    /**
-     * @notice Returns the net change in assets after rebalance
-     */
-    function netAssetDelta() external view returns (int256);
-
-    /**
-     * @notice Returns the total amount to be rebalanced
-     */
-    function rebalanceAmount() external view returns (int256);
 
     /**
      * @notice Returns the number of LPs that have completed rebalancing
@@ -249,4 +235,15 @@ interface IPoolCycleManager {
      * @notice Returns the timestamp of the last interest accrual
      */
     function lastInterestAccrualTimestamp() external view returns (uint256);
+
+    /**
+     * @notice Asset price high for the current cycle
+     */
+    function assetPriceHigh() external view returns (uint256);
+
+    /**
+     * @notice Asset price low for the current cycle
+     */
+    function assetPriceLow() external view returns (uint256);
+
 }

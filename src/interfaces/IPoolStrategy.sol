@@ -14,6 +14,16 @@ interface IPoolStrategy {
     //                                    EVENTS
     // --------------------------------------------------------------------------------
     
+
+    /**
+     * @notice Emitted when cycle parameters are updated
+     */
+    event CycleParamsUpdated(
+        uint256 cyclePeriod,
+        uint256 rebalancePeriod,
+        uint256 OracleUpdateThreshold
+    );
+
     /**
      * @notice Emitted when interest rate parameters are updated
      */
@@ -64,8 +74,13 @@ interface IPoolStrategy {
      * @notice Sets the cycle parameters
      * @param cyclePeriod Length of each cycle in seconds
      * @param rebalancePeriod Length of rebalancing period in seconds
+     * @param oracleUpdateThreshold Threshold for Oracle update
      */
-    function setCycleParams(uint256 cyclePeriod, uint256 rebalancePeriod) external;
+    function setCycleParams(
+        uint256 cyclePeriod, 
+        uint256 rebalancePeriod,
+        uint256 oracleUpdateThreshold
+    ) external;
     
     /**
      * @notice Sets the interest rate parameters
@@ -135,8 +150,13 @@ interface IPoolStrategy {
      * @notice Returns the cycle parameters
      * @return cycleLength Length of each cycle in seconds
      * @return rebalanceLength Length of rebalancing period in seconds
+     * @return oracleUpdateThreshold Threshold for Oracle update
      */
-    function getCycleParams() external view returns (uint256 cycleLength, uint256 rebalanceLength);
+    function getCycleParams() external view returns (
+        uint256 cycleLength, 
+        uint256 rebalanceLength, 
+        uint256 oracleUpdateThreshold
+    );
     
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS

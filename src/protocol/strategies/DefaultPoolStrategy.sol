@@ -22,8 +22,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     // cycle parameters
-    uint256 public cycleLength;           // Length of each cycle 
-    uint256 public rebalanceLength;      // length of each rebalancing period
+    uint256 public cycleLength;           // Length of each cycle (default 0, not used)
+    uint256 public rebalanceLength;      // length of onchain rebalancing period (default: 3 hours)
+    uint256 public oracleUpdateThreshold; // Threshold for oracle update (15 minutes)
     
     // Asset interest rate parameters
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
@@ -74,11 +75,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the cycle parameters
      * @param _cycleLength Length of each cycle in seconds
      * @param _rebalanceLength Length of rebalancing period in seconds
+     * @param _oracleUpdateThreshold Threshold for oracle update
      */
-    function setCycleParams(uint256 _cycleLength, uint256 _rebalanceLength) external onlyOwner {
+    function setCycleParams(
+        uint256 _cycleLength, 
+        uint256 _rebalanceLength,
+        uint256 _oracleUpdateThreshold
+    ) external onlyOwner {
         require(_rebalanceLength <= _cycleLength, "Rebalance length must be < cycle length");
         cycleLength = _cycleLength;
         rebalanceLength = _rebalanceLength;
+        oracleUpdateThreshold = _oracleUpdateThreshold;
+
+        emit CycleParamsUpdated(_cycleLength, _rebalanceLength, _oracleUpdateThreshold);
     }
     
     /**
@@ -224,9 +233,14 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Returns the cycle parameters
      * @return cyclePeriod Length of each cycle in seconds
      * @return rebalancePeriod Length of rebalancing period in seconds
+     * @return oracleThreshold Threshold for oracle update
      */
-    function getCycleParams() external view returns (uint256 cyclePeriod, uint256 rebalancePeriod) {
-        return (cycleLength, rebalanceLength);
+    function getCycleParams() external view returns (
+        uint256 cyclePeriod, 
+        uint256 rebalancePeriod,
+        uint256 oracleThreshold
+    ) {
+        return (cycleLength, rebalanceLength, oracleThreshold);
     }
     
     // --------------------------------------------------------------------------------

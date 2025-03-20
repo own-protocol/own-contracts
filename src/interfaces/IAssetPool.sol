@@ -316,12 +316,6 @@ interface IAssetPool {
      */
     function getUtilisedLiquidity() external view returns (uint256);
 
-    /**
-     * @notice Calculate pool delta
-     * @return delta Pool delta in reserve tokens
-     */
-    function getPoolDelta() external view returns (int256 delta);
-
      /**
      * @notice Calculate pool value
      * @return value Pool value in reserve tokens
