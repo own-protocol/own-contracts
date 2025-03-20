@@ -10,9 +10,7 @@ contract CreatePoolScript is Script {
     address constant DEPOSIT_TOKEN = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on base sepolia
     string constant ASSET_SYMBOL = "xTSLA";
     address constant PRICE_ORACLE = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
-    address constant INTEREST_RATE_STRATEGY = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
-    uint256 constant CYCLE_LENGTH = 2 hours;
-    uint256 constant REBALANCING_LENGTH = 30 minutes;
+    address constant POOL_STRATEGY = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
 
     // Deployed contract addresses (replace with actual addresses after deployment)
     address constant ASSET_POOL_FACTORY = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c; 
@@ -22,7 +20,7 @@ contract CreatePoolScript is Script {
         require(ASSET_POOL_FACTORY == 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c, "AssetPoolFactory address not set");
         require(DEPOSIT_TOKEN == 0x036CbD53842c5426634e7929541eC2318f3dCF7e, "Deposit token address not set");
         require(PRICE_ORACLE == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Oracle address not set");
-        require(INTEREST_RATE_STRATEGY == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Interest rate strategy address not set");
+        require(POOL_STRATEGY == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Interest rate strategy address not set");
     }
 
     function run() public {
@@ -40,9 +38,7 @@ contract CreatePoolScript is Script {
             DEPOSIT_TOKEN,
             ASSET_SYMBOL,
             PRICE_ORACLE,
-            INTEREST_RATE_STRATEGY,
-            CYCLE_LENGTH,
-            REBALANCING_LENGTH
+            POOL_STRATEGY
         );
 
 
@@ -56,9 +52,7 @@ contract CreatePoolScript is Script {
         console.log("Deposit Token:", DEPOSIT_TOKEN);
         console.log("Asset Token Symbol:", ASSET_SYMBOL);
         console.log("Price Oracle:", PRICE_ORACLE);
-        console.log("Interest Rate Strategy:", INTEREST_RATE_STRATEGY);
-        console.log("Cycle Period:", CYCLE_LENGTH);
-        console.log("Rebalancing Period:", REBALANCING_LENGTH);
+        console.log("Pool Strategy:", POOL_STRATEGY);
         console.log("----------------------------------------------------");
 
         // Verify the pool was created correctly
