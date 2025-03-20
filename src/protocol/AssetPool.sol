@@ -430,7 +430,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         return Math.mulDiv(
             scaledInterest,
             totalInterest,
-            PRECISION * reserveToAssetDecimalFactor
+            PRECISION
         );
     }
 
