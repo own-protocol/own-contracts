@@ -34,16 +34,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     CycleState public cycleState;
 
     /**
-     * @notice Duration of each operational cycle in seconds.
-     */
-    uint256 public cycleLength;
-
-    /**
-     * @notice Duration of the rebalance period in seconds.
-     */
-    uint256 public rebalanceLength;
-
-    /**
      * @notice Timestamp of the last cycle action.
      */
     uint256 public lastCycleActionDateTime;
@@ -130,8 +120,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @param _assetPool Address of the asset pool contract.
      * @param _poolLiquidityManager Address of the LP liquidity manager contract.
      * @param _poolStrategy Address of the pool strategy contract.
-     * @param _cycleLength Duration of each operational cycle.
-     * @param _rebalanceLength Duration of the rebalance period.
      */
     function initialize (
         address _reserveToken,
@@ -139,9 +127,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         address _assetOracle,
         address _assetPool,
         address _poolLiquidityManager,
-        address _poolStrategy,
-        uint256 _cycleLength,
-        uint256 _rebalanceLength
+        address _poolStrategy
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _assetPool == address(0)) 
@@ -154,8 +140,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         poolStrategy = IPoolStrategy(_poolStrategy);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
-        cycleLength = _cycleLength;
-        rebalanceLength = _rebalanceLength;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
 
@@ -183,6 +167,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function initiateOffchainRebalance() external {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        (uint256 cycleLength,) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
 
         // Accrue interest before changing cycle state
@@ -198,6 +183,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function initiateOnchainRebalance() external {
         if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        (, uint256 rebalanceLength) = poolStrategy.getCycleParams();
         uint256 expectedDateTime = lastCycleActionDateTime + rebalanceLength;
         if (block.timestamp < expectedDateTime) revert OffChainRebalanceInProgress();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
@@ -239,6 +225,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (lp != msg.sender) revert UnauthorizedCaller();
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
+        (, uint256 rebalanceLength) = poolStrategy.getCycleParams();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
 
         _validateRebalancingPrice(rebalancePrice);
@@ -297,6 +284,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function settlePool() external onlyLP {
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        (, uint256 rebalanceLength) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
         _startNewCycle();

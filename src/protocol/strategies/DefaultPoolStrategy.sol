@@ -20,6 +20,10 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
+
+    // cycle parameters
+    uint256 public cycleLength;           // Length of each cycle 
+    uint256 public rebalanceLength;      // length of each rebalancing period
     
     // Asset interest rate parameters
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
@@ -64,6 +68,18 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     //                                CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
+
+
+    /**
+     * @notice Sets the cycle parameters
+     * @param _cycleLength Length of each cycle in seconds
+     * @param _rebalanceLength Length of rebalancing period in seconds
+     */
+    function setCycleParams(uint256 _cycleLength, uint256 _rebalanceLength) external onlyOwner {
+        require(_rebalanceLength <= _cycleLength, "Rebalance length must be < cycle length");
+        cycleLength = _cycleLength;
+        rebalanceLength = _rebalanceLength;
+    }
     
     /**
      * @notice Sets the interest rate parameters
@@ -198,6 +214,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             registrationRatio,
             liquidationReward
         );
+    }
+
+    // --------------------------------------------------------------------------------
+    //                             CYCLE FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the cycle parameters
+     * @return cyclePeriod Length of each cycle in seconds
+     * @return rebalancePeriod Length of rebalancing period in seconds
+     */
+    function getCycleParams() external view returns (uint256 cyclePeriod, uint256 rebalancePeriod) {
+        return (cycleLength, rebalanceLength);
     }
     
     // --------------------------------------------------------------------------------

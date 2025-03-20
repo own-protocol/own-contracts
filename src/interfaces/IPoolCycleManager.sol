@@ -192,16 +192,6 @@ interface IPoolCycleManager {
     function lastCycleActionDateTime() external view returns (uint256);
 
     /**
-     * @notice Returns the duration of operational cycles
-     */
-    function cycleLength() external view returns (uint256);
-
-    /**
-     * @notice Returns the duration of rebalance periods
-     */
-    function rebalanceLength() external view returns (uint256);
-
-    /**
      * @notice Returns reserve token balance of the pool (excluding new deposits).
      */
     function poolReserveBalance() external view returns (uint256);

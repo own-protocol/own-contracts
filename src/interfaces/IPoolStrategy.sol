@@ -59,6 +59,13 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
     //                             CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Sets the cycle parameters
+     * @param cyclePeriod Length of each cycle in seconds
+     * @param rebalancePeriod Length of rebalancing period in seconds
+     */
+    function setCycleParams(uint256 cyclePeriod, uint256 rebalancePeriod) external;
     
     /**
      * @notice Sets the interest rate parameters
@@ -119,6 +126,17 @@ interface IPoolStrategy {
         uint256 registrationRatio,
         uint256 liquidationReward
     ) external;
+
+    // --------------------------------------------------------------------------------
+    //                             CYCLE FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the cycle parameters
+     * @return cycleLength Length of each cycle in seconds
+     * @return rebalanceLength Length of rebalancing period in seconds
+     */
+    function getCycleParams() external view returns (uint256 cycleLength, uint256 rebalanceLength);
     
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS

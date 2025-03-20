@@ -46,30 +46,22 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * Only callable by the owner of the contract.
      * Reverts if:
      * - Any address parameter is zero.
-     * - `cycleLength` is zero.
-     * - `rebalancingLength` is greater than or equal to `cycleLength`.
      * 
      * @param depositToken Address of the token used for deposits.
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
      * @param poolStrategy Address of the pool strategy contract.
-     * @param cycleLength Length of each investment cycle in seconds.
-     * @param rebalanceLength Length of the rebalancing period within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
         address depositToken,
         string memory assetSymbol,
         address oracle,
-        address poolStrategy,
-        uint256 cycleLength,
-        uint256 rebalanceLength
+        address poolStrategy
     ) external returns (address) {
         if (
             depositToken == address(0) ||
-            oracle == address(0) ||
-            cycleLength == 0 ||
-            rebalanceLength >= cycleLength
+            oracle == address(0)
         ) revert InvalidParams();
 
         address owner = owner();
@@ -99,9 +91,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             pool,
             liquidityManager,
-            poolStrategy,
-            cycleLength,
-            rebalanceLength
+            poolStrategy
         );
 
         PoolLiquidityManager(liquidityManager).initialize(
@@ -119,9 +109,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             address(pool),
             assetSymbol,
             depositToken,
-            oracle,
-            cycleLength,
-            rebalanceLength
+            oracle
         );
 
         return address(pool);

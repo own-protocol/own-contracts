@@ -15,16 +15,12 @@ interface IAssetPoolFactory {
      * @param assetSymbol Symbol representing the asset.
      * @param depositToken Address of the token used for deposits.
      * @param oracle Address of the oracle used for asset price feeds.
-     * @param cycleLength Duration of a single investment cycle in seconds.
-     * @param rebalanceLength Duration of the rebalancing period within a cycle in seconds.
      */
     event AssetPoolCreated(
         address indexed pool,
         string assetSymbol,
         address depositToken,
-        address oracle,
-        uint256 cycleLength,
-        uint256 rebalanceLength
+        address oracle
     );
 
     /**
@@ -58,17 +54,13 @@ interface IAssetPoolFactory {
      * @param assetSymbol Symbol of the token representing the asset.
      * @param oracle Address of the oracle providing asset price feeds.
      * @param poolStrategy Address of the pool strategy contract.
-     * @param cycleLength Length of each investment cycle in seconds.
-     * @param rebalanceLength Rebalancing period length within a cycle in seconds.
      * @return address The address of the newly created asset pool.
      */
     function createPool(
         address depositToken,
         string memory assetSymbol,
         address oracle,
-        address poolStrategy,
-        uint256 cycleLength,
-        uint256 rebalanceLength
+        address poolStrategy
     ) external returns (address);
 
 }
