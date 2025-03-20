@@ -26,22 +26,11 @@ contract MockAssetOracle is IAssetOracle {
         uint256 high;
         uint256 low;
         uint256 close;
-        uint256 volume;
         uint256 timestamp;
     }
     
     // Current OHLC data for the asset
     OHLCData public ohlcData;
-    
-    // Trading period data structure
-    struct TradingPeriod {
-        uint256 start;
-        uint256 end;
-        uint256 gmtOffset;
-    }
-    
-    // Regular market trading period
-    TradingPeriod public regularMarketPeriod;
 
     constructor(
         string memory _assetSymbol,
@@ -113,20 +102,15 @@ contract MockAssetOracle is IAssetOracle {
         if (response.length > 0) {
             // Decode the ABI encoded response data to match the real contract
             (
-                uint256 currentPrice,
                 uint256 openPrice,
                 uint256 highPrice,
                 uint256 lowPrice,
                 uint256 closePrice,
-                uint256 volume,
-                uint256 dataTimestamp,
-                uint256 periodStart,
-                uint256 periodEnd,
-                uint256 gmtOffset
-            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256));
+                uint256 dataTimestamp
+            ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256));
             
             // Update asset price
-            assetPrice = currentPrice;
+            assetPrice = closePrice;
             
             // Update OHLC data
             ohlcData = OHLCData({
@@ -134,29 +118,13 @@ contract MockAssetOracle is IAssetOracle {
                 high: highPrice,
                 low: lowPrice,
                 close: closePrice,
-                volume: volume,
                 timestamp: dataTimestamp
-            });
-            
-            // Update regular market trading period
-            regularMarketPeriod = TradingPeriod({
-                start: periodStart,
-                end: periodEnd,
-                gmtOffset: gmtOffset
             });
             
             // Update timestamp
             lastUpdated = block.timestamp;
             
             emit AssetPriceUpdated(assetPrice, block.timestamp);
-            emit OHLCDataUpdated(
-                ohlcData.open,
-                ohlcData.high,
-                ohlcData.low,
-                ohlcData.close,
-                ohlcData.volume,
-                ohlcData.timestamp
-            );
         }
     }
 
@@ -184,7 +152,6 @@ contract MockAssetOracle is IAssetOracle {
      * @return high The highest price
      * @return low The lowest price
      * @return close The closing price
-     * @return volume The trading volume
      * @return timestamp The timestamp of the OHLC data
      */
     function getOHLCData() external view override returns (
@@ -192,7 +159,6 @@ contract MockAssetOracle is IAssetOracle {
         uint256 high,
         uint256 low,
         uint256 close,
-        uint256 volume,
         uint256 timestamp
     ) {
         return (
@@ -200,27 +166,18 @@ contract MockAssetOracle is IAssetOracle {
             ohlcData.high,
             ohlcData.low,
             ohlcData.close,
-            ohlcData.volume,
             ohlcData.timestamp
         );
     }
-    
+
     /**
-     * @notice Returns the regular market trading period data
-     * @return start The start time of the regular market
-     * @return end The end time of the regular market
-     * @return gmtOffset The GMT offset in seconds
+     * @notice Checks if the market for the tracked asset is currently open
+     * @dev Determines market status by comparing the data source timestamp with the oracle update time
+     * @dev The market status is at the time of the last update. To get the current status, call this function after a new update
+     * @return bool True if the market is open, false otherwise
      */
-    function getRegularMarketPeriod() external view override returns (
-        uint256 start,
-        uint256 end,
-        uint256 gmtOffset
-    ) {
-        return (
-            regularMarketPeriod.start,
-            regularMarketPeriod.end,
-            regularMarketPeriod.gmtOffset
-        );
+    function isMarketOpen() external view returns (bool) {
+        return (lastUpdated - ohlcData.timestamp) < 60;
     }
     
     /**
@@ -229,7 +186,6 @@ contract MockAssetOracle is IAssetOracle {
      * @param high The highest price
      * @param low The lowest price
      * @param close The closing price
-     * @param volume The trading volume
      * @param timestamp The timestamp of the OHLC data
      */
     function mockSetOHLCData(
@@ -237,7 +193,6 @@ contract MockAssetOracle is IAssetOracle {
         uint256 high,
         uint256 low,
         uint256 close,
-        uint256 volume,
         uint256 timestamp
     ) external onlyOwner {
         ohlcData = OHLCData({
@@ -245,29 +200,10 @@ contract MockAssetOracle is IAssetOracle {
             high: high,
             low: low,
             close: close,
-            volume: volume,
             timestamp: timestamp
         });
         
-        emit OHLCDataUpdated(open, high, low, close, volume, timestamp);
-    }
-    
-    /**
-     * @notice Helper function to directly set market period data for testing
-     * @param start The start time of the regular market
-     * @param end The end time of the regular market
-     * @param gmtOffset The GMT offset in seconds
-     */
-    function mockSetMarketPeriod(
-        uint256 start,
-        uint256 end,
-        uint256 gmtOffset
-    ) external onlyOwner {
-        regularMarketPeriod = TradingPeriod({
-            start: start,
-            end: end,
-            gmtOffset: gmtOffset
-        });
+        emit OHLCDataUpdated(open, high, low, close, timestamp);
     }
     
     /**

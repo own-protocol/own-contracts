@@ -36,6 +36,9 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     
     /// @notice Timestamp of the last price update
     uint256 public lastUpdated;
+
+    /// @notice Maximum time difference (in seconds) to consider market open
+    uint256 private constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
     
     /// @notice OHLC data structure for the asset
     struct OHLCData {
@@ -178,5 +181,24 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
             ohlcData.close,
             ohlcData.timestamp
         );
+    }
+
+    /**
+     * @notice Checks if the market for the tracked asset is currently open
+     * @dev Determines market status by comparing the data source timestamp with the oracle update time
+     * @dev The market status is at the time of the last update. To get the current status, call this function after a new update
+     * @return bool True if the market is open, false otherwise
+     */
+    function isMarketOpen() external view returns (bool) {
+        // If oracle has never been updated, market is considered closed
+        if (lastUpdated == 0) {
+            return false;
+        }
+        
+        uint256 dataTimestamp = ohlcData.timestamp;
+        
+        // Compare lastUpdated timestamp with the oracle's last update time
+        // If the difference is less than threshold, market is considered open
+        return (lastUpdated - dataTimestamp) <= MARKET_OPEN_THRESHOLD;
     }
 }
