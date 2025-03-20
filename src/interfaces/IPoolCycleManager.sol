@@ -138,11 +138,6 @@ interface IPoolCycleManager {
      * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
      */
     function settlePool() external;
-        
-    /**
-     * @notice When there is nothing to rebalance, start the new cycle
-     */
-    function startNewCycle() external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS

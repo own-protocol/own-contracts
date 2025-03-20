@@ -293,17 +293,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _startNewCycle();
     }
 
-    /**
-     * @notice If there is nothing to rebalance, start the next cycle.
-     */
-    function startNewCycle() external {
-        if (cycleState == CycleState.ACTIVE) revert InvalidCycleState();
-        if (assetPool.cycleTotalDepositRequests() > 0) revert InvalidCycleRequest();
-        if (assetPool.cycleTotalRedemptionRequests() > 0) revert InvalidCycleRequest();
-        
-        _startNewCycle();
-    }
-
     // --------------------------------------------------------------------------------
     //                          INTEREST CALCULATION LOGIC
     // --------------------------------------------------------------------------------
