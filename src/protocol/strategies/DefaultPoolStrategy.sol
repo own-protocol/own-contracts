@@ -256,7 +256,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return utilTier2 The second utilization tier (scaled by 10000)
      * @return maxUtil The maximum utilization (scaled by 10000)
      */
-    function getInterestRateParameters() external view returns (
+    function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
@@ -386,7 +386,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
-        uint256 lpAssetValue = manager.getLPAssetHolding(lp);
+        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
 
         return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
     }
@@ -431,7 +431,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
-        uint256 lpAssetValue = manager.getLPAssetHolding(lp);
+        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
         IPoolLiquidityManager.CollateralInfo memory lpInfo = manager.getLPInfo(lp);
         uint256 collateralAmount = lpInfo.collateralAmount;
         

@@ -168,7 +168,7 @@
 //         assetPool.claimRequest(user1);
         
 //         // Now LP has share of asset holdings
-//         uint256 lpAssetHolding = liquidityManager.getLPAssetHolding(liquidityProvider1);
+//         uint256 lpAssetHolding = liquidityManager.getLPAssetHoldingValue(liquidityProvider1);
 //         assertTrue(lpAssetHolding > 0, "LP should have asset holdings");
         
 //         // Get required collateral

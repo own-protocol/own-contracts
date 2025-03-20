@@ -69,17 +69,17 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 private cycleWeightedSum;
 
     /**
-     * @notice Cumulative pool interest accrued over time (in BPS)
+     * @notice Cumulative pool interest accrued over time (in Precision units).
      */
     uint256 public cumulativePoolInterest;
 
     /**
-     * @notice Total cumulative interest amount accrued
+     * @notice Total cumulative interest amount accrued (in reserve token units).
      */
     uint256 public cumulativeInterestAmount;
 
     /**
-     * @notice Total interest accrued in the current cycle
+     * @notice Total interest accrued in the current cycle (in reserve token units).
      */
     uint256 public cycleInterestAmount;
 
@@ -257,7 +257,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
         
-        cycleWeightedSum += rebalancePrice * lpLiquidity;
+        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidity * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
@@ -265,12 +265,12 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            uint256 price = cycleWeightedSum / totalLiquidity;
+            uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
             cycleRebalancePrice[cycleIndex] = price;
             int256 finalRebalanceAmount = calculateRebalanceAmount(price);
             poolReserveBalance = poolReserveBalance 
-                + (assetPool.cycleTotalDepositRequests() * reserveToAssetDecimalFactor)
-                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION);
+                + assetPool.cycleTotalDepositRequests()
+                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION * reserveToAssetDecimalFactor);
 
             if (finalRebalanceAmount > 0) {
                 poolReserveBalance += uint256(finalRebalanceAmount);
@@ -344,8 +344,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @param assetPrice rebalance price of the asset.
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
-        uint256 poolAssetValue = poolAssetBalance * assetPrice;
-        uint256 poolReserveValue = poolReserveBalance * PRECISION;
+        uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        uint256 poolReserveValue = poolReserveBalance;
         return int256(poolAssetValue - poolReserveValue);
     }
 

@@ -196,10 +196,10 @@ interface IPoolLiquidityManager {
     function addToCollateral(address lp, uint256 amount) external;
 
     /**
-     * @notice Get LP asset holdings
+     * @notice Get LP asset holdings value (in reserve token)
      * @param lp Address of the LP
      */
-    function getLPAssetHolding(address lp) external view returns (uint256);
+    function getLPAssetHoldingValue(address lp) external view returns (uint256);
 
     /**
      * @notice Get LP's current liquidity share of the pool

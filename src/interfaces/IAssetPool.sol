@@ -166,6 +166,8 @@ interface IAssetPool {
     error PoolUtilizationExceeded();
     /// @notice Thrown when redemption request is invalid
     error InvalidRedemptionRequest();
+    /// @notice Thrown when pool has insufficient liquidity
+    error InsufficientLiquidity();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS

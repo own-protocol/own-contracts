@@ -252,7 +252,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         if (lpLiquidity == 0) revert NoLiquidityToLiquidate();
         
-        uint256 lpAssetHolding = getLPAssetHolding(lp);
+        uint256 lpAssetHolding = getLPAssetHoldingValue(lp);
 
         (, uint256 warningThreshold, , uint256 liquidationReward) = poolStrategy.getLPCollateralParams();
         
@@ -270,7 +270,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         // Calculate liquidator's new position requirements
         CollateralInfo memory callerInfo = lpInfo[msg.sender];
-        uint256 callerAssetHolding = getLPAssetHolding(msg.sender);
+        uint256 callerAssetHolding = getLPAssetHoldingValue(msg.sender);
         
         // Add target LP's asset holding to caller's
         uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
@@ -333,16 +333,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-     * @notice Calculate Lp's current asset holding
+     * @notice Calculate Lp's current asset holding value (in reserve token)
      * @param lp Address of the LP
      */
-    function getLPAssetHolding(address lp) public view returns (uint256) {
+    function getLPAssetHoldingValue(address lp) public view returns (uint256) {
         if (!registeredLPs[lp]) return 0;
         
         uint256 poolValue = assetPool.getPoolValue();
         uint256 lpShare = getLPLiquidityShare(lp);
 
-        uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue, PRECISION);
+        uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue * reserveToAssetDecimalFactor, PRECISION);
         
         return lpAssetHolding;
     }

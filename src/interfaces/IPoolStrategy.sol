@@ -171,7 +171,7 @@ interface IPoolStrategy {
      * @return utilTier2 The second utilization tier (scaled by 10000)
      * @return maxUtil The maximum utilization (scaled by 10000)
     */
-    function getInterestRateParameters() external view returns (
+    function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
