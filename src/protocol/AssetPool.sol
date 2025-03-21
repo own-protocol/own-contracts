@@ -37,6 +37,11 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     uint256 public cycleTotalRedemptionRequests;
 
     /**
+     * @notice Reserve token balance of the pool (excluding new deposits).
+     */
+    uint256 public poolReserveBalance;
+
+    /**
      * @notice Mapping of user addresses to their positions
      */
     mapping(address => Position) public positions;
@@ -538,11 +543,21 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Reset cycle data at the end of a cycle
+     * @notice Update cycle data at the end of a cycle
      */
-    function resetCycleData() external onlyPoolCycleManager {
+    function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external onlyPoolCycleManager {
         uint256 assetBalance = assetToken.balanceOf(address(this));
         uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
+        poolReserveBalance = poolReserveBalance 
+            + cycleTotalDepositRequests
+            - Math.mulDiv(cycleTotalRedemptionRequests, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+
+        if (rebalanceAmount > 0) {
+            poolReserveBalance += uint256(rebalanceAmount);
+        } else if (rebalanceAmount < 0) {
+            poolReserveBalance -= uint256(-rebalanceAmount);
+        }
+
         if (assetBalance > 0) {
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
         }

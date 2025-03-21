@@ -39,11 +39,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public lastCycleActionDateTime;
 
     /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
-     */
-    uint256 public poolReserveBalance;
-
-    /**
      * @notice Asset token balance of the pool.
      */
     uint256 public poolAssetBalance;
@@ -268,15 +263,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
             cycleRebalancePrice[cycleIndex] = price;
             int256 finalRebalanceAmount = calculateRebalanceAmount(price);
-            poolReserveBalance = poolReserveBalance 
-                + assetPool.cycleTotalDepositRequests()
-                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION * reserveToAssetDecimalFactor);
 
-            if (finalRebalanceAmount > 0) {
-                poolReserveBalance += uint256(finalRebalanceAmount);
-            } else if (finalRebalanceAmount < 0) {
-                poolReserveBalance -= uint256(-finalRebalanceAmount);
-            }
+            assetPool.updateCycleData(price, finalRebalanceAmount);
 
             _startNewCycle();
         }
@@ -290,6 +278,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
+        // assetPool.updateCycleData(price, finalRebalanceAmount);
         _startNewCycle();
     }
 
@@ -345,7 +334,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 poolReserveValue = poolReserveBalance;
+        uint256 poolReserveValue = assetPool.poolReserveBalance();
         return int256(poolAssetValue - poolReserveValue);
     }
 
@@ -371,8 +360,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         lastCycleActionDateTime = block.timestamp;
         poolAssetBalance = assetToken.totalSupply();
         cycleInterestAmount = 0;
-
-        assetPool.resetCycleData();
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -406,7 +393,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _cycleIndex = cycleIndex;
         _assetPrice = assetOracle.assetPrice();
         _lastCycleActionDateTime = lastCycleActionDateTime;
-        _reserveBalance = poolReserveBalance;
+        _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDepositRequests();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();
