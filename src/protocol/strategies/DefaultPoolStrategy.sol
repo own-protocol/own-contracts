@@ -20,6 +20,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
+
+    // cycle parameters
+    uint256 public cycleLength;           // Length of each cycle (default 0, not used)
+    uint256 public rebalanceLength;      // length of onchain rebalancing period (default: 3 hours)
+    uint256 public oracleUpdateThreshold; // Threshold for oracle update (15 minutes)
     
     // Asset interest rate parameters
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
@@ -64,6 +69,26 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     //                                CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
+
+
+    /**
+     * @notice Sets the cycle parameters
+     * @param _cycleLength Length of each cycle in seconds
+     * @param _rebalanceLength Length of rebalancing period in seconds
+     * @param _oracleUpdateThreshold Threshold for oracle update
+     */
+    function setCycleParams(
+        uint256 _cycleLength, 
+        uint256 _rebalanceLength,
+        uint256 _oracleUpdateThreshold
+    ) external onlyOwner {
+        require(_rebalanceLength <= _cycleLength, "Rebalance length must be < cycle length");
+        cycleLength = _cycleLength;
+        rebalanceLength = _rebalanceLength;
+        oracleUpdateThreshold = _oracleUpdateThreshold;
+
+        emit CycleParamsUpdated(_cycleLength, _rebalanceLength, _oracleUpdateThreshold);
+    }
     
     /**
      * @notice Sets the interest rate parameters
@@ -199,6 +224,24 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             liquidationReward
         );
     }
+
+    // --------------------------------------------------------------------------------
+    //                             CYCLE FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the cycle parameters
+     * @return cyclePeriod Length of each cycle in seconds
+     * @return rebalancePeriod Length of rebalancing period in seconds
+     * @return oracleThreshold Threshold for oracle update
+     */
+    function getCycleParams() external view returns (
+        uint256 cyclePeriod, 
+        uint256 rebalancePeriod,
+        uint256 oracleThreshold
+    ) {
+        return (cycleLength, rebalanceLength, oracleThreshold);
+    }
     
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
@@ -213,7 +256,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return utilTier2 The second utilization tier (scaled by 10000)
      * @return maxUtil The maximum utilization (scaled by 10000)
      */
-    function getInterestRateParameters() external view returns (
+    function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
@@ -343,7 +386,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
-        uint256 lpAssetValue = manager.getLPAssetHolding(lp);
+        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
 
         return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
     }
@@ -388,7 +431,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
-        uint256 lpAssetValue = manager.getLPAssetHolding(lp);
+        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
         IPoolLiquidityManager.CollateralInfo memory lpInfo = manager.getLPInfo(lp);
         uint256 collateralAmount = lpInfo.collateralAmount;
         

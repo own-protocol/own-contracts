@@ -126,4 +126,12 @@ interface IAssetOracle {
         uint256 close,
         uint256 timestamp
     );
+
+    /**
+     * @notice Checks if the market for the tracked asset is currently open
+     * @dev Determines market status by comparing the data source timestamp with the oracle update time
+     * @dev The market status is at the time of the last update. To get the current status, call this function after a new update
+     * @return bool True if the market is open, false otherwise
+     */
+    function isMarketOpen() external view returns (bool);
 }

@@ -34,16 +34,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     CycleState public cycleState;
 
     /**
-     * @notice Duration of each operational cycle in seconds.
-     */
-    uint256 public cycleLength;
-
-    /**
-     * @notice Duration of the rebalance period in seconds.
-     */
-    uint256 public rebalanceLength;
-
-    /**
      * @notice Timestamp of the last cycle action.
      */
     uint256 public lastCycleActionDateTime;
@@ -57,16 +47,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Asset token balance of the pool.
      */
     uint256 public poolAssetBalance;
-
-    /**
-     * @notice Net expected change in assets post-rebalance.
-     */
-    int256 public netAssetDelta;
-
-    /**
-     * @notice Total amount to rebalance (PnL from reserves).
-     */
-    int256 public rebalanceAmount;
 
     /**
      * @notice Count of LPs who have completed rebalancing in the current cycle.
@@ -89,24 +69,29 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 private cycleWeightedSum;
 
     /**
-     * @notice Maximum deviation allowed in the rebalance price.
-     */
-    uint256 private constant MAX_PRICE_DEVIATION = 3_00;
-
-    /**
-     * @notice Cumulative pool interest accrued over time (in BPS)
+     * @notice Cumulative pool interest accrued over time (in Precision units).
      */
     uint256 public cumulativePoolInterest;
 
     /**
-     * @notice Total cumulative interest amount accrued
+     * @notice Total cumulative interest amount accrued (in reserve token units).
      */
     uint256 public cumulativeInterestAmount;
 
     /**
-     * @notice Total interest accrued in the current cycle
+     * @notice Total interest accrued in the current cycle (in reserve token units).
      */
     uint256 public cycleInterestAmount;
+
+    /**
+     * @notice Asset price high for the current cycle
+     */
+    uint256 public assetPriceHigh;
+
+    /**
+     * @notice Asset price low for the current cycle
+     */
+    uint256 public assetPriceLow;
 
     /**
      * @notice Timestamp of the last interest accrual
@@ -130,8 +115,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @param _assetPool Address of the asset pool contract.
      * @param _poolLiquidityManager Address of the LP liquidity manager contract.
      * @param _poolStrategy Address of the pool strategy contract.
-     * @param _cycleLength Duration of each operational cycle.
-     * @param _rebalanceLength Duration of the rebalance period.
      */
     function initialize (
         address _reserveToken,
@@ -139,9 +122,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         address _assetOracle,
         address _assetPool,
         address _poolLiquidityManager,
-        address _poolStrategy,
-        uint256 _cycleLength,
-        uint256 _rebalanceLength
+        address _poolStrategy
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _assetPool == address(0)) 
@@ -154,8 +135,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         poolStrategy = IPoolStrategy(_poolStrategy);
         assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.ACTIVE;
-        cycleLength = _cycleLength;
-        rebalanceLength = _rebalanceLength;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
 
@@ -183,7 +162,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function initiateOffchainRebalance() external {
         if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        if (block.timestamp < lastCycleActionDateTime + cycleLength) revert CycleInProgress();
+        (uint256 cycleLength, , uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
+        uint256 oracleLastUpdated = assetOracle.lastUpdated();
+        if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
+        bool isMarketOpen = assetOracle.isMarketOpen();
+        if (!isMarketOpen) revert MarketClosed();
+
+        if (cycleLength > 0) {
+            uint256 expectedDateTime = lastCycleActionDateTime + cycleLength;
+            if (block.timestamp < expectedDateTime) revert CycleInProgress();
+        }
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -198,22 +186,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function initiateOnchainRebalance() external {
         if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
-        uint256 expectedDateTime = lastCycleActionDateTime + rebalanceLength;
-        if (block.timestamp < expectedDateTime) revert OffChainRebalanceInProgress();
+        (, , uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
-        if (oracleLastUpdated < expectedDateTime) revert OracleNotUpdated();
+        if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
+        bool isMarketOpen = assetOracle.isMarketOpen();
+        if (isMarketOpen) revert MarketOpen();
 
-        uint256 assetPrice = assetOracle.assetPrice();
-        uint256 depositRequests = assetPool.cycleTotalDepositRequests();
-        uint256 redemptionRequests = assetPool.cycleTotalRedemptionRequests();
-
-        // Expected new asset mints
-        uint256 expectedNewAssetMints = Math.mulDiv(depositRequests, PRECISION * reserveToAssetDecimalFactor, assetPrice);
-
-        // Calculate the net change in assets post-rebalance
-        netAssetDelta = int256(expectedNewAssetMints) - int256(redemptionRequests);
-        // Calculate the total amount to rebalance
-        rebalanceAmount = assetPool.getPoolDelta();
+        (,assetPriceHigh, assetPriceLow, ,) = assetOracle.getOHLCData();
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -223,9 +202,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         emit RebalanceInitiated(
             cycleIndex,
-            assetPrice,
-            netAssetDelta,
-            rebalanceAmount
+            assetPriceHigh,
+            assetPriceLow
         );
     }
 
@@ -239,6 +217,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (lp != msg.sender) revert UnauthorizedCaller();
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
+        (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
 
         _validateRebalancingPrice(rebalancePrice);
@@ -251,7 +230,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;
         bool isDeposit = false;
-
+        int256 rebalanceAmount = calculateRebalanceAmount(rebalancePrice);
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
@@ -278,7 +257,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
         
-        cycleWeightedSum += rebalancePrice * lpLiquidity;
+        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidity * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
@@ -286,8 +265,19 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            cycleRebalancePrice[cycleIndex] = cycleWeightedSum / totalLiquidity;
-            
+            uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
+            cycleRebalancePrice[cycleIndex] = price;
+            int256 finalRebalanceAmount = calculateRebalanceAmount(price);
+            poolReserveBalance = poolReserveBalance 
+                + assetPool.cycleTotalDepositRequests()
+                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION * reserveToAssetDecimalFactor);
+
+            if (finalRebalanceAmount > 0) {
+                poolReserveBalance += uint256(finalRebalanceAmount);
+            } else if (finalRebalanceAmount < 0) {
+                poolReserveBalance -= uint256(-finalRebalanceAmount);
+            }
+
             _startNewCycle();
         }
     }
@@ -297,18 +287,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function settlePool() external onlyLP {
         if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
-        
-        _startNewCycle();
-    }
-
-    /**
-     * @notice If there is nothing to rebalance, start the next cycle.
-     */
-    function startNewCycle() external {
-        if (cycleState == CycleState.ACTIVE) revert InvalidCycleState();
-        if (assetPool.cycleTotalDepositRequests() > 0) revert InvalidCycleRequest();
-        if (assetPool.cycleTotalRedemptionRequests() > 0) revert InvalidCycleRequest();
         
         _startNewCycle();
     }
@@ -360,20 +340,22 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     // --------------------------------------------------------------------------------
 
     /**
+     * @notice Calculates the rebalance amount based on the asset price.
+     * @param assetPrice rebalance price of the asset.
+     */
+    function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
+        uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        uint256 poolReserveValue = poolReserveBalance;
+        return int256(poolAssetValue - poolReserveValue);
+    }
+
+    /**
      * @notice Validates the rebalancing price against the asset oracle.
      * @param rebalancePrice Price at which the LP is rebalancing.
      */
     function _validateRebalancingPrice(uint256 rebalancePrice) internal view {
-        uint256 oraclePrice = assetOracle.assetPrice();
-        
-        // Calculate the allowed deviation range
-        uint256 maxDeviation = (oraclePrice * MAX_PRICE_DEVIATION) / 100_00;
-        uint256 minAllowedPrice = oraclePrice > maxDeviation ? oraclePrice - maxDeviation : 0;
-        uint256 maxAllowedPrice = oraclePrice + maxDeviation;
-        
-        // Check if the rebalance price is within the allowed range
-        if (rebalancePrice < minAllowedPrice || rebalancePrice > maxAllowedPrice) {
-            revert PriceDeviationTooHigh();
+        if (rebalancePrice < assetPriceLow || rebalancePrice > assetPriceHigh) {
+            revert InvalidRebalancePrice();
         }
     }
 
@@ -387,10 +369,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
-        poolReserveBalance = reserveToken.balanceOf(address(assetPool));
         poolAssetBalance = assetToken.totalSupply();
-        netAssetDelta = 0;
-        rebalanceAmount = 0;
         cycleInterestAmount = 0;
 
         assetPool.resetCycleData();
@@ -412,8 +391,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @return _assetBalance Asset token balance of the pool.
      * @return _totalDepositRequests Total deposit requests in the current cycle.
      * @return _totalRedemptionRequests Total redemption requests in the current cycle.
-     * @return _netAssetDelta Net expected change in assets post-rebalance.
-     * @return _rebalanceAmount Total amount to rebalance (PnL from reserves).
      */
     function getPoolInfo() external view returns (
         CycleState _cycleState,
@@ -423,9 +400,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         uint256 _reserveBalance,
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
-        uint256 _totalRedemptionRequests,
-        int256 _netAssetDelta,
-        int256 _rebalanceAmount
+        uint256 _totalRedemptionRequests
     ) {
         _cycleState = cycleState;
         _cycleIndex = cycleIndex;
@@ -435,7 +410,5 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDepositRequests();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();
-        _netAssetDelta = netAssetDelta;
-        _rebalanceAmount = rebalanceAmount;
     }
 }

@@ -14,6 +14,16 @@ interface IPoolStrategy {
     //                                    EVENTS
     // --------------------------------------------------------------------------------
     
+
+    /**
+     * @notice Emitted when cycle parameters are updated
+     */
+    event CycleParamsUpdated(
+        uint256 cyclePeriod,
+        uint256 rebalancePeriod,
+        uint256 OracleUpdateThreshold
+    );
+
     /**
      * @notice Emitted when interest rate parameters are updated
      */
@@ -59,6 +69,18 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
     //                             CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Sets the cycle parameters
+     * @param cyclePeriod Length of each cycle in seconds
+     * @param rebalancePeriod Length of rebalancing period in seconds
+     * @param oracleUpdateThreshold Threshold for Oracle update
+     */
+    function setCycleParams(
+        uint256 cyclePeriod, 
+        uint256 rebalancePeriod,
+        uint256 oracleUpdateThreshold
+    ) external;
     
     /**
      * @notice Sets the interest rate parameters
@@ -119,6 +141,22 @@ interface IPoolStrategy {
         uint256 registrationRatio,
         uint256 liquidationReward
     ) external;
+
+    // --------------------------------------------------------------------------------
+    //                             CYCLE FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the cycle parameters
+     * @return cycleLength Length of each cycle in seconds
+     * @return rebalanceLength Length of rebalancing period in seconds
+     * @return oracleUpdateThreshold Threshold for Oracle update
+     */
+    function getCycleParams() external view returns (
+        uint256 cycleLength, 
+        uint256 rebalanceLength, 
+        uint256 oracleUpdateThreshold
+    );
     
     // --------------------------------------------------------------------------------
     //                             ASSET INTEREST FUNCTIONS
@@ -133,7 +171,7 @@ interface IPoolStrategy {
      * @return utilTier2 The second utilization tier (scaled by 10000)
      * @return maxUtil The maximum utilization (scaled by 10000)
     */
-    function getInterestRateParameters() external view returns (
+    function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,

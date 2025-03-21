@@ -166,6 +166,8 @@ interface IAssetPool {
     error PoolUtilizationExceeded();
     /// @notice Thrown when redemption request is invalid
     error InvalidRedemptionRequest();
+    /// @notice Thrown when pool has insufficient liquidity
+    error InsufficientLiquidity();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -315,12 +317,6 @@ interface IAssetPool {
      * @return utilisedLiquidity Total utilised liquidity in reserve tokens
      */
     function getUtilisedLiquidity() external view returns (uint256);
-
-    /**
-     * @notice Calculate pool delta
-     * @return delta Pool delta in reserve tokens
-     */
-    function getPoolDelta() external view returns (int256 delta);
 
      /**
      * @notice Calculate pool value
