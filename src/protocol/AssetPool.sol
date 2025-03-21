@@ -362,7 +362,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             
             if (totalInterest > 0) {
                 // Calculate scaled interest based on asset amount
-                position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest);
+                position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest * reserveToAssetDecimalFactor);
             }
 
             // Update user's position
