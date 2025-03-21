@@ -217,9 +217,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = poolStrategy.getLPCollateralHealth(address(poolLiquidityManager), lp);
-        if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
-        uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
+        uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
+        if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
         uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
 
         // Calculate the LP's share of the rebalance amount
@@ -229,30 +229,30 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
-            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidity, totalLiquidity);
+            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Deduct from LP's collateral and transfer to pool
+            // Deduct from LP's liquidity and transfer to pool
             poolLiquidityManager.deductRebalanceAmount(lp, amount);
         } else if (rebalanceAmount < 0) {
-            // Negative rebalance amount means Pool needs to add to LP collateral
-            // The LP gets back funds which are added to their collateral
-            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidity, totalLiquidity);
+            // Negative rebalance amount means Pool needs to add to LP liquidity
+            // The LP gets back funds which are added to their liquidity
+            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Transfer from pool to LP's collateral
+            // Transfer from pool to LP's liquidity
             reserveToken.transfer(address(poolLiquidityManager), amount);
             
-            // Add to LP's collateral
-            poolLiquidityManager.addToCollateral(lp, amount);
+            // Add to LP's liquidity
+            poolLiquidityManager.addToLiquidity(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
         // Deduct interest from the pool and add to LP's collateral
-        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidity, totalLiquidity);
+        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidityCommitment, totalLiquidity);
         if (lpCycleInterest > 0) {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
         
-        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidity * reserveToAssetDecimalFactor, PRECISION);
+        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 

@@ -44,7 +44,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     /**
      * @notice Mapping of user addresses to their positions
      */
-    mapping(address => Position) public positions;
+    mapping(address => UserPosition) public userPositions;
 
     /**
      * @notice Mapping of user addresses to their pending requests
@@ -134,7 +134,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function addCollateral(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
-        Position storage position = positions[msg.sender];
+        UserPosition storage position = userPositions[msg.sender];
         
         // Transfer collateral from user to this contract
         reserveToken.transferFrom(msg.sender, address(this), amount);
@@ -152,7 +152,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function withdrawCollateral(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         
-        Position storage position = positions[msg.sender];
+        UserPosition storage position = userPositions[msg.sender];
         if (position.collateralAmount < amount) revert InsufficientBalance();
         
         // Calculate required collateral
@@ -182,7 +182,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function liquidatePosition(address user) external nonReentrant {
         if (user == address(0) || user == msg.sender) revert Unauthorized();
         
-        Position storage position = positions[user];
+        UserPosition storage position = userPositions[user];
         
         // Check if position is liquidatable
         uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
@@ -265,7 +265,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function redemptionRequest(uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
 
-        Position memory position = positions[msg.sender];
+        UserPosition memory position = userPositions[msg.sender];
         if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
@@ -344,7 +344,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         // Clear request
         delete userRequests[user];
 
-        Position storage position = positions[user];
+        UserPosition storage position = userPositions[user];
         
         if (isDeposit) {
             // Mint case - convert reserve to asset using rebalance price
@@ -424,7 +424,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function getInterestDebt(address user) public view returns (uint256 interestDebt) {
-        Position storage position = positions[user];
+        UserPosition storage position = userPositions[user];
         uint256 scaledInterest = position.scaledInterest;
         if (scaledInterest == 0) return 0;
         
@@ -486,7 +486,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function getUtilisedLiquidity() public view returns (uint256) {      
 
         uint256 poolValue = getPoolValue();
-        (uint256 healthyRatio, , , ) = poolStrategy.getLPCollateralParams();
+        (uint256 healthyRatio, , , ) = poolStrategy.getLPLiquidityParams();
         uint256 totalRatio = BPS + healthyRatio;
 
         uint256 utilisedLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
@@ -537,7 +537,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         // Transfer interest to liquidity manager
         reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
 
-        poolLiquidityManager.addToCollateral(lp, lpCycleInterest);
+        poolLiquidityManager.addToLiquidity(lp, lpCycleInterest);
             
         emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
     }
@@ -576,7 +576,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return amount User's collateral amount
      */
     function userCollateral(address user) external view returns (uint256 amount) {
-        return positions[user].collateralAmount;
+        return userPositions[user].collateralAmount;
     }
 
     /**
@@ -591,7 +591,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         uint256 collateralAmount,
         uint256 interestDebt
     ) {
-        Position storage position = positions[user];
+        UserPosition storage position = userPositions[user];
         assetAmount = position.assetAmount;
         collateralAmount = position.collateralAmount;
         interestDebt = getInterestDebt(user);

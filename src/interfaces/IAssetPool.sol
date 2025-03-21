@@ -36,7 +36,7 @@ interface IAssetPool {
      * @param collateralAmount Amount of collateral provided
      * @param scaledInterest User's scaled interest value for debt calculation
      */
-    struct Position {
+    struct UserPosition {
         uint256 assetAmount;
         uint256 collateralAmount;
         uint256 scaledInterest;

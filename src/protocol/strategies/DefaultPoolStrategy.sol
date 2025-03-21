@@ -13,8 +13,7 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
  * @title DefaultPoolStrategy
- * @notice Default implementation of pool strategy with standard interest and collateral models
- * @dev Uses variable LP collateral based on asset holdings and fixed user collateral based on deposits
+ * @notice Default implementation of pool strategy with standard interest, collateral & liquidity models
  */
 contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
@@ -41,14 +40,14 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public yieldFeePercentage;    // Fee on reserve token yield (e.g., 0.0%)
     address public feeRecipient;          // Address to receive fees
     
-    // User collateral parameters (fixed deposit based)
+    // User collateral parameters 
     uint256 public userHealthyCollateralRatio;    // Healthy ratio (e.g., 20%)
     uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 10%)
     uint256 public userLiquidationReward;         // Liquidation reward (e.g., 5%)
     
-    // LP collateral parameters (variable asset based)
-    uint256 public lpHealthyCollateralRatio;      // Healthy ratio (e.g., 50%)
-    uint256 public lpWarningThreshold;            // Warning threshold (e.g., 30%) 
+    // LP liquidity parameters 
+    uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 50%)
+    uint256 public lpLiquidationThreshold;            // Liquidatiom threshold (e.g., 30%) 
     uint256 public lpRegistrationRatio;           // Registration minimum (e.g., 20%)
     uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
     
@@ -196,30 +195,30 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Sets the LP collateral parameters
-     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @param warningThreshold Warning threshold (scaled by 10000)
+     * @notice Sets the LP liquidity parameters
+     * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @param liquidationThreshold Warning threshold (scaled by 10000)
      * @param registrationRatio Registration minimum ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
-    function setLPCollateralParams(
+    function setLPLiquidityParams(
         uint256 healthyRatio,
-        uint256 warningThreshold,
+        uint256 liquidationThreshold,
         uint256 registrationRatio,
         uint256 liquidationReward
     ) external onlyOwner {
-        require(warningThreshold < healthyRatio, "Warning threshold must be < healthy ratio");
-        require(registrationRatio <= warningThreshold, "Registration ratio must be <= warning threshold");
+        require(liquidationThreshold < healthyRatio, "liquidation threshold must be < healthy ratio");
+        require(registrationRatio <= liquidationThreshold, "Registration ratio must be <= liquidation threshold");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
-        lpHealthyCollateralRatio = healthyRatio;
-        lpWarningThreshold = warningThreshold;
+        lpHealthyLiquidityRatio = healthyRatio;
+        lpLiquidationThreshold = liquidationThreshold;
         lpRegistrationRatio = registrationRatio;
         lpLiquidationReward = liquidationReward;
         
-        emit LPCollateralParamsUpdated(
+        emit LPLiquidityParamsUpdated(
             healthyRatio,
-            warningThreshold,
+            liquidationThreshold,
             registrationRatio,
             liquidationReward
         );
@@ -326,7 +325,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     // --------------------------------------------------------------------------------
-    //                             COLLATERAL FUNCTIONS
+    //                             COLLATERAL & LIQUIDITY FUNCTIONS
     // --------------------------------------------------------------------------------
     
     /**
@@ -345,17 +344,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Returns LP collateral parameters
+     * @notice Returns LP liquidity parameters
      */
-    function getLPCollateralParams() external view returns (
+    function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
-        uint256 warningThreshold,
+        uint256 liquidationThreshold,
         uint256 registrationRatio,
         uint256 liquidationReward
     ) {
         return (
-            lpHealthyCollateralRatio,
-            lpWarningThreshold,
+            lpHealthyLiquidityRatio,
+            lpLiquidationThreshold,
             lpRegistrationRatio,
             lpLiquidationReward
         );
@@ -379,16 +378,16 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Calculates required LP collateral
+     * @notice Calculates required LP liquidity
      * @param liquidityManager Address of the pool liquidity manager
      * @param lp Address of the LP
      */
-    function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
+    function calculateLPRequiredLiquidity(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
 
-        return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
+        return Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
     }
 
     /**
@@ -424,23 +423,23 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
 
     /**
-     * @notice Check collateral health status of an LP
+     * @notice Check liquidity health status of an LP
      * @param lp Address of the LP
      * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
      */
-    function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health) {
+    function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
-        IPoolLiquidityManager.CollateralInfo memory lpInfo = manager.getLPInfo(lp);
-        uint256 collateralAmount = lpInfo.collateralAmount;
+        IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
+        uint256 liquidityOnchain = position.liquidityOnchain;
         
-        uint256 healthyCollateral = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
-        uint256 reqCollateral = Math.mulDiv(lpAssetValue, lpWarningThreshold, BPS);
+        uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
+        uint256 reqLiquidity = Math.mulDiv(lpAssetValue, lpLiquidationThreshold, BPS);
         
-        if (collateralAmount >= healthyCollateral) {
+        if (liquidityOnchain >= healthyLiquidity) {
             return 3; // Healthy
-        } else if (collateralAmount >= reqCollateral) {
+        } else if (liquidityOnchain >= reqLiquidity) {
             return 2; // Warning
         } else {
             return 1; // Liquidatable
