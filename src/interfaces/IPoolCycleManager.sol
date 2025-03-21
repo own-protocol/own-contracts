@@ -185,11 +185,6 @@ interface IPoolCycleManager {
     function lastCycleActionDateTime() external view returns (uint256);
 
     /**
-     * @notice Returns reserve token balance of the pool (excluding new deposits).
-     */
-    function poolReserveBalance() external view returns (uint256);
-
-    /**
      * @notice Returns the asset token balance of the pool
      */
     function poolAssetBalance() external view returns (uint256);

@@ -39,11 +39,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public lastCycleActionDateTime;
 
     /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
-     */
-    uint256 public poolReserveBalance;
-
-    /**
      * @notice Asset token balance of the pool.
      */
     uint256 public poolAssetBalance;
@@ -222,10 +217,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = poolStrategy.getLPCollateralHealth(address(poolLiquidityManager), lp);
-        if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
-        uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
+        if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
 
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;
@@ -234,30 +229,30 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
-            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidity, totalLiquidity);
+            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Deduct from LP's collateral and transfer to pool
+            // Deduct from LP's liquidity and transfer to pool
             poolLiquidityManager.deductRebalanceAmount(lp, amount);
         } else if (rebalanceAmount < 0) {
-            // Negative rebalance amount means Pool needs to add to LP collateral
-            // The LP gets back funds which are added to their collateral
-            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidity, totalLiquidity);
+            // Negative rebalance amount means Pool needs to add to LP liquidity
+            // The LP gets back funds which are added to their liquidity
+            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Transfer from pool to LP's collateral
+            // Transfer from pool to LP's liquidity
             reserveToken.transfer(address(poolLiquidityManager), amount);
             
-            // Add to LP's collateral
-            poolLiquidityManager.addToCollateral(lp, amount);
+            // Add to LP's liquidity
+            poolLiquidityManager.addToLiquidity(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
         // Deduct interest from the pool and add to LP's collateral
-        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidity, totalLiquidity);
+        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidityCommitment, totalLiquidity);
         if (lpCycleInterest > 0) {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
         
-        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidity * reserveToAssetDecimalFactor, PRECISION);
+        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
@@ -268,15 +263,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
             cycleRebalancePrice[cycleIndex] = price;
             int256 finalRebalanceAmount = calculateRebalanceAmount(price);
-            poolReserveBalance = poolReserveBalance 
-                + assetPool.cycleTotalDepositRequests()
-                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION * reserveToAssetDecimalFactor);
 
-            if (finalRebalanceAmount > 0) {
-                poolReserveBalance += uint256(finalRebalanceAmount);
-            } else if (finalRebalanceAmount < 0) {
-                poolReserveBalance -= uint256(-finalRebalanceAmount);
-            }
+            assetPool.updateCycleData(price, finalRebalanceAmount);
 
             _startNewCycle();
         }
@@ -290,6 +278,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
+        // assetPool.updateCycleData(price, finalRebalanceAmount);
         _startNewCycle();
     }
 
@@ -345,7 +334,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 poolReserveValue = poolReserveBalance;
+        uint256 poolReserveValue = assetPool.poolReserveBalance();
         return int256(poolAssetValue - poolReserveValue);
     }
 
@@ -371,8 +360,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         lastCycleActionDateTime = block.timestamp;
         poolAssetBalance = assetToken.totalSupply();
         cycleInterestAmount = 0;
-
-        assetPool.resetCycleData();
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -406,7 +393,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _cycleIndex = cycleIndex;
         _assetPrice = assetOracle.assetPrice();
         _lastCycleActionDateTime = lastCycleActionDateTime;
-        _reserveBalance = poolReserveBalance;
+        _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDepositRequests();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();
