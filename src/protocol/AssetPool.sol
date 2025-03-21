@@ -453,7 +453,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
         if (totalLiquidity == 0) return 0;
         uint256 utilisedLiquidity = getUtilisedLiquidity();
         
@@ -466,7 +466,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilizationWithDeposit(uint256 depositAmount) public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
         if (totalLiquidity == 0) return 0;
 
         uint256 assetPrice = assetOracle.assetPrice();

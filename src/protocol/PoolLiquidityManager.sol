@@ -19,8 +19,11 @@ import {PoolStorage} from "./PoolStorage.sol";
  */
 contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
     
-    // Total liquidity in the pool
-    uint256 public totalLPLiquidity;
+    // Total liquidity committed by LPs
+    uint256 public totalLPLiquidityCommited;
+
+    // Total liquidity onchain
+    uint256 public totalLPLiquidityOnchain;
     
     // Number of registered LPs
     uint256 public lpCount;
@@ -118,7 +121,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         });
         
         // Update pool stats
-        totalLPLiquidity += amount;
+        totalLPLiquidityCommited += amount;
+        totalLPLiquidityOnchain += requiredLiquidity;
         lpCount++;
         
         emit LPRegistered(msg.sender, amount, requiredLiquidity);
@@ -149,10 +153,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-     * @notice Increase your liquidity amount
+     * @notice Increase your liquidity commitment
      * @param amount The amount of liquidity to add
      */
-    function increaseLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function increaseLiquidityCommitment(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
         
         LPPosition storage position = lpPositions[msg.sender];
@@ -170,16 +174,17 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         position.liquidityOnchain += additionalLiquidity;
         
         // Update total liquidity
-        totalLPLiquidity += amount;
+        totalLPLiquidityCommited += amount;
+        totalLPLiquidityOnchain += additionalLiquidity;
         
         emit LiquidityIncreased(msg.sender, amount);
     }
 
     /**
-     * @notice Decrease your liquidity amount
+     * @notice Decrease your liquidity commitment
      * @param amount The amount of liquidity to remove
      */
-    function decreaseLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function decreaseLiquidityCommitment(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
         
         LPPosition storage position = lpPositions[msg.sender];
@@ -203,7 +208,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
         
         // Update total liquidity
-        totalLPLiquidity -= amount;
+        totalLPLiquidityCommited -= amount;
+        totalLPLiquidityOnchain -= releasableLiquidity;
         
         emit LiquidityDecreased(msg.sender, amount);
     }
@@ -212,11 +218,13 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Deposit additional liquidity beyond the minimum
      * @param amount Amount of liquidity to deposit
      */
-    function deposit(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function depositLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert ZeroAmount();
         
         reserveToken.transferFrom(msg.sender, address(this), amount);
         lpPositions[msg.sender].liquidityOnchain += amount;
+
+        totalLPLiquidityOnchain += amount;
         
         emit LiquidityDeposited(msg.sender, amount);
     }
@@ -225,7 +233,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Withdraw excess liquidity if above minimum requirements
      * @param amount Amount of liquidity to withdraw
      */
-    function withdraw(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function withdrawLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         LPPosition storage position = lpPositions[msg.sender];
         if (amount == 0 || amount > position.liquidityOnchain) revert InvalidWithdrawalAmount();
         
@@ -235,6 +243,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
         
         position.liquidityOnchain -= amount;
+        totalLPLiquidityOnchain -= amount;
         reserveToken.transfer(msg.sender, amount);
         
         emit LiquidityWithdrawn(msg.sender, amount);
@@ -264,6 +273,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (liquidityHealth == 1) revert InsufficientLiquidity();
             
         position.liquidityOnchain -= amount;
+        totalLPLiquidityOnchain -= amount;
         reserveToken.transfer(address(assetPool), amount);
         
         emit RebalanceDeducted(lp, amount);
@@ -278,6 +288,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpPositions[lp].liquidityOnchain += amount;
+        totalLPLiquidityOnchain += amount;
         
         emit RebalanceAdded(lp, amount);
     }
@@ -304,8 +315,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getLPLiquidityShare(address lp) public view returns (uint256) {
         if (!registeredLPs[lp]) return 0;
         // If no total liquidity, return 0
-        if (totalLPLiquidity == 0) return 0;
-        return Math.mulDiv(lpPositions[lp].liquidityCommitment, PRECISION, totalLPLiquidity);
+        if (totalLPLiquidityCommited == 0) return 0;
+        return Math.mulDiv(lpPositions[lp].liquidityCommitment, PRECISION, totalLPLiquidityCommited);
     }
     
     /**
@@ -346,8 +357,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Returns the total liquidity amount
      * @return uint256 The total liquidity amount
      */
-    function getTotalLPLiquidity() external view returns (uint256) {
-        return totalLPLiquidity;
+    function getTotalLPLiquidityCommited() external view returns (uint256) {
+        return totalLPLiquidityCommited;
+    }
+
+    /**
+     * @notice Returns the total liquidity onchain
+     * @return uint256 The total liquidity onchain
+     */
+    function getTotalLPLiquidityOnchain() external view returns (uint256) {
+        return totalLPLiquidityOnchain;
     }
 
     /**

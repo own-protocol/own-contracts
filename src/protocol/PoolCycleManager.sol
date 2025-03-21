@@ -220,7 +220,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
         if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
 
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;

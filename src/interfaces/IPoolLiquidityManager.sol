@@ -130,9 +130,14 @@ interface IPoolLiquidityManager {
     error Unauthorized();
 
     /**
-     * @notice Total liquidity in the pool
+     * @notice Total liquidity committed by LPs
      */
-    function totalLPLiquidity() external view returns (uint256);
+    function totalLPLiquidityCommited() external view returns (uint256);
+
+    /**
+     * @notice Total liquidity onchain
+     */
+    function totalLPLiquidityOnchain() external view returns (uint256);
     
     /**
      * @notice Number of registered LPs
@@ -152,28 +157,28 @@ interface IPoolLiquidityManager {
     function unregisterLP(address lp) external;
 
     /**
-     * @notice Increase your liquidity amount
+     * @notice Increase your liquidity commitment
      * @param amount The amount of liquidity to add
      */
-    function increaseLiquidity(uint256 amount) external;
+    function increaseLiquidityCommitment(uint256 amount) external;
 
     /**
-     * @notice Decrease your liquidity amount
+     * @notice Decrease your liquidity commitment
      * @param amount The amount of liquidity to remove
      */
-    function decreaseLiquidity(uint256 amount) external;
+    function decreaseLiquidityCommitment(uint256 amount) external;
 
     /**
      * @notice Deposit additional liquidity beyond the minimum
      * @param amount Amount of liquidity to deposit
      */
-    function deposit(uint256 amount) external;
+    function depositLiquidity(uint256 amount) external;
 
     /**
      * @notice Withdraw excess liquidity if above minimum requirements
      * @param amount Amount of liquidity to withdraw
      */
-    function withdraw(uint256 amount) external;
+    function withdrawLiquidity(uint256 amount) external;
 
     /**
      * @notice Liquidate an LP below threshold
@@ -234,10 +239,14 @@ interface IPoolLiquidityManager {
     function getLPLiquidityCommitment(address lp) external view returns (uint256);
     
     /**
-     * @notice Returns the total liquidity amount
-     * @return uint256 The total liquidity amount
+     * @notice Returns the total liquidity committed by LPs
      */
-    function getTotalLPLiquidity() external view returns (uint256);
+    function getTotalLPLiquidityCommited() external view returns (uint256);
+
+    /**
+     * @notice Returns the total liquidity onchain
+     */
+    function getTotalLPLiquidityOnchain() external view returns (uint256);
 
     /**
      * @notice Returns the reserve to asset decimal factor
