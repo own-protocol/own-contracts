@@ -239,11 +239,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         // Ensure provided collateral meets minimum requirement
         if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
 
-        // Calculate deposit fee
-        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
-        uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
-
-        uint256 totalDeposit = amount + collateralAmount + depositFee;
+        uint256 totalDeposit = amount + collateralAmount;
 
         // Transfer tokens from user to poolCycleManager
         reserveToken.transferFrom(msg.sender, address(this), totalDeposit);
@@ -300,11 +296,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
         if (amount == 0) revert NothingToCancel();
 
-        // Calculate deposit fee
-        (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
-        uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
-
-        uint256 totalDeposit = amount + collateralAmount + depositFee;
+        uint256 totalDeposit = amount + collateralAmount;
         
         // Clear request
         delete userRequests[msg.sender];
@@ -354,14 +346,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
                 rebalancePrice
             );
 
-            // Calculate and deduct deposit fee
-            (uint256 depositFeePercentage, , ,) = poolStrategy.getFeePercentages();
-            uint256 depositFee = (depositFeePercentage > 0) ? Math.mulDiv(amount, depositFeePercentage, BPS) : 0;
-            if (depositFee > 0) {
-                reserveToken.transfer(poolStrategy.getFeeRecipient(), depositFee);
-                emit FeeDeducted(user, depositFee, 0);
-            }
-
             // Get total cumulative interest in reserve from cycle manager
             uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
             
@@ -397,16 +381,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             } else {
                 position.assetAmount -= amount;
             }         
-
-            // Calculate and deduct redemption fee
-            (, uint256 redemptionFeePercentage , ,) = poolStrategy.getFeePercentages();
-            uint256 redemptionFee = (redemptionFeePercentage > 0) ? Math.mulDiv(amount, redemptionFeePercentage, BPS) : 0;
-            if (redemptionFee > 0) {
-                reserveToken.transfer(poolStrategy.getFeeRecipient(), redemptionFee);
-                emit FeeDeducted(user, redemptionFee, 1);
-            }
         
-            uint256 totalAmount = reserveAmount + balanceCollateral - redemptionFee;
+            uint256 totalAmount = reserveAmount + balanceCollateral;
             // Transfer reserve tokens from poolCycleManager to user
             reserveToken.transfer(user, totalAmount);
             
@@ -522,15 +498,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
         if(reserveBalance < amount) revert InsufficientBalance();
 
-        // Calculate and deduct protocol interest fee
-        (, uint256 interestFeePercentage , ,) = poolStrategy.getFeePercentages();
-        uint256 interestFee = (interestFeePercentage > 0) ? Math.mulDiv(amount, interestFeePercentage, BPS) : 0;
-        if (interestFee > 0) {
-            reserveToken.transfer(poolStrategy.getFeeRecipient(), interestFee);
-            emit FeeDeducted(lp, interestFee, 2);
+        // Calculate and deduct protocol fee
+        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
+        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        if (protocolFee > 0) {
+            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
+            emit FeeDeducted(lp, protocolFee);
         }
         
-        uint256 lpCycleInterest = amount - interestFee;
+        uint256 lpCycleInterest = amount - protocolFee;
 
         uint256 cycleIndex = poolCycleManager.cycleIndex();
 
