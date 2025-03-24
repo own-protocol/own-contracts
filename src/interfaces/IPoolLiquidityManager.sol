@@ -27,22 +27,17 @@ interface IPoolLiquidityManager {
     /**
      * @notice Emitted when an LP deposits collateral
      */
-    event CollateralDeposited(address indexed lp, uint256 amount);
+    event CollateralAdded(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when an LP withdraws collateral
      */
-    event CollateralWithdrawn(address indexed lp, uint256 amount);
+    event CollateralRemoved(address indexed lp, uint256 amount);
 
     /**
-     * @notice Emitted when rebalance amount is added to LP's liquidity
+     * @notice Emitted when interest is claimed by an LP
      */
-    event RebalanceAdded(address indexed lp, uint256 amount);
-
-    /**
-     * @notice Emitted when rebalance amount is deducted from LP's liquidity
-     */
-    event RebalanceDeducted(address indexed lp, uint256 amount);
+    event InterestClaimed(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when LP's liquidity is liquidated
@@ -50,24 +45,24 @@ interface IPoolLiquidityManager {
     event LPLiquidated(address indexed lp, address indexed liquidator, uint256 reward);
 
     /**
-     * @notice Emitted when a new LP is registered
+     * @notice Emitted when an LP adds liquidity
      */
-    event LPRegistered(address indexed lp, uint256 liquidityCommited, uint256 collateralAmount);
+    event LiquidityAdded(address indexed lp, uint256 amount, uint256 collateral);
+
+    /**
+     * @notice Emitted when an LP removes liquidity
+     */
+    event LiquidityRemoved(address indexed lp, uint256 amount, uint256 collateral);
+
+    /**
+     * @notice Emitted when an LP is added
+     */
+    event LPAdded(address indexed lp, uint256 amount, uint256 collateral);
 
     /**
      * @notice Emitted when an LP is removed
      */
     event LPRemoved(address indexed lp);
-
-    /**
-     * @notice Emitted when an LP increases their liquidity
-     */
-    event LiquidityIncreased(address indexed lp, uint256 amount);
-
-    /**
-     * @notice Emitted when an LP decreases their liquidity
-     */
-    event LiquidityDecreased(address indexed lp, uint256 amount);
 
     /**
      * @notice Error when zero amount is provided
@@ -93,16 +88,16 @@ interface IPoolLiquidityManager {
      * @notice Error when LP is not eligible for liquidation
      */
     error NotEligibleForLiquidation();
-    
-    /**
-     * @notice Error when LP is already registered
-     */
-    error AlreadyRegistered();
 
     /**
      * @notice Error when liquidation is invalid
      */
     error InvalidLiquidation();
+
+    /**
+     * @notice Error when LP has no interest accrued
+     */
+    error NoInterestAccrued();
 
     /**
      * @notice Error when LP has no liquidity to liquidate
@@ -145,53 +140,39 @@ interface IPoolLiquidityManager {
     function lpCount() external view returns (uint256);
 
     /**
-     * @notice Register as a liquidity provider
-     * @param amount The amount of liquidity commitment to provide
-     */
-    function registerLP(uint256 amount) external;
-
-    /**
-     * @notice Unregister LP from registry
-     * @param lp The address of the LP
-     */
-    function unregisterLP(address lp) external;
-
-    /**
-     * @notice Increase your liquidity commitment
+     * @notice Add lp liquidity
      * @param amount The amount of liquidity to add
      */
-    function increaseLiquidityCommitment(uint256 amount) external;
+    function addLiquidity(uint256 amount) external;
 
     /**
-     * @notice Decrease your liquidity commitment
+     * @notice remove lp liquidity
      * @param amount The amount of liquidity to remove
      */
-    function decreaseLiquidityCommitment(uint256 amount) external;
+    function removeLiquidity(uint256 amount) external;
 
     /**
      * @notice Deposit additional collateral beyond the minimum
-     * @param amount Amount of collateral to deposit
+     * @param amount Amount of collateral to add
      */
-    function depositCollateral(uint256 amount) external;
+    function addCollateral(uint256 amount) external;
 
     /**
      * @notice Withdraw excess collateral if above minimum requirements
-     * @param amount Amount of collateral to withdraw
+     * @param amount Amount of collateral to remove
      */
-    function withdrawCollateral(uint256 amount) external;
+    function removeCollateral(uint256 amount) external;
+
+    /**
+     * @notice Claim interest accrued on LP position
+     */
+    function claimInterest() external;
 
     /**
      * @notice Liquidate an LP below threshold
      * @param lp Address of the LP to liquidate
      */
     function liquidateLP(address lp) external;
-
-    /**
-     * @notice Deduct rebalance amount from LP's liquidity
-     * @param lp Address of the LP
-     * @param amount Amount to deduct
-     */
-    function deductRebalanceAmount(address lp, uint256 amount) external;
 
     /**
      * @notice Add interest amount to LP's position
