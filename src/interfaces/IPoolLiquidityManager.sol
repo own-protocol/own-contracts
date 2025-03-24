@@ -194,11 +194,18 @@ interface IPoolLiquidityManager {
     function deductRebalanceAmount(address lp, uint256 amount) external;
 
     /**
-     * @notice Add rebalance amount to LP's Liquidity
+     * @notice Add rebalance amount to LP's position
      * @param lp Address of the LP
      * @param amount Amount to add
      */
     function addToLiquidity(address lp, uint256 amount) external;
+
+    /**
+     * @notice Add interest amount to LP's position
+     * @param lp Address of the LP
+     * @param amount Amount to add
+     */
+    function addToInterest(address lp, uint256 amount) external;
 
     /**
      * @notice Get LP asset holdings value (in reserve token)

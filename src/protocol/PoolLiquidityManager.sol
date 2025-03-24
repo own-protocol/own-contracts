@@ -280,7 +280,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-     * @notice Add rebalance amount or interest to LP's liquidity
+     * @notice Add rebalance amount to LP's position 
      * @param lp Address of the LP
      * @param amount Amount to add
      */
@@ -291,6 +291,17 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         totalLPLiquidityOnchain += amount;
         
         emit RebalanceAdded(lp, amount);
+    }
+
+    /**
+     * @notice Add interest amount to LP's position
+     * @param lp Address of the LP
+     * @param amount Amount to add
+     */
+    function addToInterest(address lp, uint256 amount) external onlyPoolCycleManager {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
+        lpPositions[lp].interestAccrued += amount;
     }
 
     /**

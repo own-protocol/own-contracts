@@ -537,7 +537,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         // Transfer interest to liquidity manager
         reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
 
-        poolLiquidityManager.addToLiquidity(lp, lpCycleInterest);
+        poolLiquidityManager.addToInterest(lp, lpCycleInterest);
             
         emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
     }

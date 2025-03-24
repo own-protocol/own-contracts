@@ -29,7 +29,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
     uint256 public interestRate1;         // Tier 1 interest rate (e.g., 18%)
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
-    uint256 public utilizationTier1;      // First utilization tier (e.g., 60%)
+    uint256 public utilizationTier1;      // First utilization tier (e.g., 65%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
     uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
