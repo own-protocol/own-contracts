@@ -21,7 +21,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     // cycle parameters
-    uint256 public cycleLength;           // Length of each cycle (default 0, not used)
     uint256 public rebalanceLength;      // length of onchain rebalancing period (default: 3 hours)
     uint256 public oracleUpdateThreshold; // Threshold for oracle update (15 minutes)
     
@@ -34,20 +33,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
     // Fee parameters
-    uint256 public depositFeePercentage;  // Fee for deposits (e.g., 0.0%)
-    uint256 public redemptionFeePercentage; // Fee for redemptions (e.g., 0.0%)
-    uint256 public interestFeePercentage; // Fee on interest (e.g., 0.0%)
-    uint256 public yieldFeePercentage;    // Fee on reserve token yield (e.g., 0.0%)
+    uint256 public protocolFeePercentage; // Fee on interest (e.g., 10.0%)
     address public feeRecipient;          // Address to receive fees
     
     // User collateral parameters 
     uint256 public userHealthyCollateralRatio;    // Healthy ratio (e.g., 20%)
-    uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 10%)
-    uint256 public userLiquidationReward;         // Liquidation reward (e.g., 5%)
+    uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 12.5%)
+    uint256 public userLiquidationReward;         // Liquidation reward (e.g., 10%)
     
     // LP liquidity parameters 
-    uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 50%)
-    uint256 public lpLiquidationThreshold;            // Liquidatiom threshold (e.g., 30%) 
+    uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
+    uint256 public lpLiquidationThreshold;        // Liquidatiom threshold (e.g., 20%) 
     uint256 public lpRegistrationRatio;           // Registration minimum (e.g., 20%)
     uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
     
@@ -72,21 +68,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
     /**
      * @notice Sets the cycle parameters
-     * @param _cycleLength Length of each cycle in seconds
      * @param _rebalanceLength Length of rebalancing period in seconds
      * @param _oracleUpdateThreshold Threshold for oracle update
      */
     function setCycleParams(
-        uint256 _cycleLength, 
         uint256 _rebalanceLength,
         uint256 _oracleUpdateThreshold
     ) external onlyOwner {
-        require(_rebalanceLength <= _cycleLength, "Rebalance length must be < cycle length");
-        cycleLength = _cycleLength;
         rebalanceLength = _rebalanceLength;
         oracleUpdateThreshold = _oracleUpdateThreshold;
 
-        emit CycleParamsUpdated(_cycleLength, _rebalanceLength, _oracleUpdateThreshold);
+        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold);
     }
     
     /**
@@ -132,39 +124,24 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     /**
      * @notice Sets the fee parameters
-     * @param depositFee Fee for deposits (scaled by 10000)
-     * @param redemptionFee Fee for redemptions (scaled by 10000)
-     * @param interestFee Fee on interest (scaled by 10000)
-     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param protocolFee fee on interest (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
-    function setFeeParams(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+    function setProtocolFeeParams(
+        uint256 protocolFee,
         address _feeRecipient
     ) external onlyOwner {
         require(
-            depositFee <= BPS && 
-            redemptionFee <= BPS && 
-            interestFee <= BPS && 
-            yieldFee <= BPS, 
+            protocolFee <= BPS, 
             "Fees cannot exceed 100%"
         );
         require(_feeRecipient != address(0), "Invalid fee recipient");
         
-        depositFeePercentage = depositFee;
-        redemptionFeePercentage = redemptionFee;
-        interestFeePercentage = interestFee;
-        yieldFeePercentage = yieldFee;
+        protocolFeePercentage = protocolFee;
         feeRecipient = _feeRecipient;
         
         emit FeeParamsUpdated(
-            depositFee,
-            redemptionFee,
-            interestFee,
-            yieldFee,
+            protocolFee,
             _feeRecipient
         );
     }
@@ -230,16 +207,14 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
     /**
      * @notice Returns the cycle parameters
-     * @return cyclePeriod Length of each cycle in seconds
      * @return rebalancePeriod Length of rebalancing period in seconds
      * @return oracleThreshold Threshold for oracle update
      */
     function getCycleParams() external view returns (
-        uint256 cyclePeriod, 
         uint256 rebalancePeriod,
         uint256 oracleThreshold
     ) {
-        return (cycleLength, rebalanceLength, oracleThreshold);
+        return (rebalanceLength, oracleThreshold);
     }
     
     // --------------------------------------------------------------------------------
@@ -306,15 +281,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     
     /**
-     * @notice Returns fee percentages for different operations
+     * @notice Returns protocol fee percentage
      */
-    function getFeePercentages() external view returns (
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee
+    function getProtocolFee() external view returns (
+        uint256 protocolFee
     ) {
-        return (depositFeePercentage, redemptionFeePercentage, interestFeePercentage, yieldFeePercentage);
+        return protocolFeePercentage;
     }
     
     /**

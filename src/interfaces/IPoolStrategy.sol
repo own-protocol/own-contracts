@@ -19,7 +19,6 @@ interface IPoolStrategy {
      * @notice Emitted when cycle parameters are updated
      */
     event CycleParamsUpdated(
-        uint256 cyclePeriod,
         uint256 rebalancePeriod,
         uint256 OracleUpdateThreshold
     );
@@ -40,10 +39,7 @@ interface IPoolStrategy {
      * @notice Emitted when fee parameters are updated
      */
     event FeeParamsUpdated(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+        uint256 protocolFee,
         address feeRecipient
     );
     
@@ -72,12 +68,10 @@ interface IPoolStrategy {
 
     /**
      * @notice Sets the cycle parameters
-     * @param cyclePeriod Length of each cycle in seconds
      * @param rebalancePeriod Length of rebalancing period in seconds
      * @param oracleUpdateThreshold Threshold for Oracle update
      */
     function setCycleParams(
-        uint256 cyclePeriod, 
         uint256 rebalancePeriod,
         uint256 oracleUpdateThreshold
     ) external;
@@ -102,17 +96,11 @@ interface IPoolStrategy {
     
     /**
      * @notice Sets the fee parameters
-     * @param depositFee Fee for deposits (scaled by 10000)
-     * @param redemptionFee Fee for redemptions (scaled by 10000)
-     * @param interestFee Fee on interest (scaled by 10000)
-     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param protocolFee Protocol fee (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
-    function setFeeParams(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+    function setProtocolFeeParams(
+        uint256 protocolFee,
         address _feeRecipient
     ) external;
     
@@ -148,12 +136,10 @@ interface IPoolStrategy {
 
     /**
      * @notice Returns the cycle parameters
-     * @return cycleLength Length of each cycle in seconds
      * @return rebalanceLength Length of rebalancing period in seconds
      * @return oracleUpdateThreshold Threshold for Oracle update
      */
     function getCycleParams() external view returns (
-        uint256 cycleLength, 
         uint256 rebalanceLength, 
         uint256 oracleUpdateThreshold
     );
@@ -192,18 +178,10 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
     
     /**
-     * @notice Returns fee percentages for different operations
-     * @return depositFee Fee percentage for deposits (scaled by 10000)
-     * @return redemptionFee Fee percentage for redemptions (scaled by 10000)
-     * @return interestFee Fee percentage taken by protocol from interest (scaled by 10000)
-     * @return yieldFee Fee percentage taken by protocol from yield generated on reserve tokens (scaled by 10000)
+     * @notice Returns Protocol fee percentage
+     * @return protocolFee Fee percentage (scaled by 10000)
      */
-    function getFeePercentages() external view returns (
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee
-    );
+    function getProtocolFee() external view returns (uint256 protocolFee);
     
     /**
      * @notice Returns the fee recipient address
