@@ -84,8 +84,6 @@ interface IPoolCycleManager {
     error AlreadyRebalanced();
     /// @notice Thrown when a rebalance action is attempted after the window has closed
     error RebalancingExpired();
-    /// @notice Thrown when attempting operations during an active cycle
-    error CycleInProgress();
     /// @notice Thrown when an LP has insufficient liquidity for an operation
     error InsufficientLPLiquidity();
     /// @notice Thrown when an LP has insufficient collateral for an operation
