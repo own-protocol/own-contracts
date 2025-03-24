@@ -44,7 +44,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // LP liquidity parameters 
     uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
     uint256 public lpLiquidationThreshold;        // Liquidatiom threshold (e.g., 20%) 
-    uint256 public lpRegistrationRatio;           // Registration minimum (e.g., 20%)
     uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
     
     // Constants
@@ -175,28 +174,23 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the LP liquidity parameters
      * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
      * @param liquidationThreshold Warning threshold (scaled by 10000)
-     * @param registrationRatio Registration minimum ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 registrationRatio,
         uint256 liquidationReward
     ) external onlyOwner {
         require(liquidationThreshold < healthyRatio, "liquidation threshold must be < healthy ratio");
-        require(registrationRatio <= liquidationThreshold, "Registration ratio must be <= liquidation threshold");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
         lpHealthyLiquidityRatio = healthyRatio;
         lpLiquidationThreshold = liquidationThreshold;
-        lpRegistrationRatio = registrationRatio;
         lpLiquidationReward = liquidationReward;
         
         emit LPLiquidityParamsUpdated(
             healthyRatio,
             liquidationThreshold,
-            registrationRatio,
             liquidationReward
         );
     }
@@ -321,13 +315,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 registrationRatio,
         uint256 liquidationReward
     ) {
         return (
             lpHealthyLiquidityRatio,
             lpLiquidationThreshold,
-            lpRegistrationRatio,
             lpLiquidationReward
         );
     }

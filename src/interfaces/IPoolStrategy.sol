@@ -58,7 +58,6 @@ interface IPoolStrategy {
     event LPLiquidityParamsUpdated(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 registrationRatio,
         uint256 liquidationReward
     );
 
@@ -120,13 +119,11 @@ interface IPoolStrategy {
      * @notice Sets the LP liquidity parameters
      * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
      * @param liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @param registrationRatio Registration minimum ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 registrationRatio,
         uint256 liquidationReward
     ) external;
 
@@ -209,13 +206,11 @@ interface IPoolStrategy {
      * @notice Returns LP liquidity parameters
      * @return healthyRatio Healthy liquidity ratio (scaled by 10000)
      * @return liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return registrationRatio Registration minimum ratio (scaled by 10000)
      * @return liquidationReward Liquidation reward percentage (scaled by 10000)
      */
     function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 registrationRatio,
         uint256 liquidationReward
     );
     

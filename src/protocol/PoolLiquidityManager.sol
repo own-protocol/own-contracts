@@ -104,10 +104,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (registeredLPs[msg.sender]) revert AlreadyRegistered();
         if (amount == 0) revert InvalidAmount();
 
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPLiquidityParams();
+        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         
         // Calculate required collateral (20% of liquidity)
-        uint256 requiredCollateral = Math.mulDiv(amount, registrationRatio, BPS);
+        uint256 requiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         
         // Transfer liquidity from LP to contract
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
@@ -161,10 +161,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         LPPosition storage position = lpPositions[msg.sender];
 
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPLiquidityParams();
+        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         
         // Calculate additional required collateral (20% of new liquidity)
-        uint256 additionalCollateral = Math.mulDiv(amount, registrationRatio, BPS);
+        uint256 additionalCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         
         // Transfer additional collateral
         reserveToken.transferFrom(msg.sender, address(this), additionalCollateral);
@@ -190,10 +190,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[msg.sender];
         if (amount > position.liquidityCommitment) revert InsufficientLiquidity();
 
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPLiquidityParams();
+        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         
         // Calculate releasable collateral (20% of removed liquidity)
-        uint256 releasableCollateral = Math.mulDiv(amount, registrationRatio, BPS);
+        uint256 releasableCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         
         // Update LP position
         position.liquidityCommitment -= amount;

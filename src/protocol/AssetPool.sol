@@ -462,7 +462,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     function getUtilisedLiquidity() public view returns (uint256) {      
 
         uint256 poolValue = getPoolValue();
-        (uint256 healthyRatio, , , ) = poolStrategy.getLPLiquidityParams();
+        (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
         uint256 totalRatio = BPS + healthyRatio;
 
         uint256 utilisedLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
