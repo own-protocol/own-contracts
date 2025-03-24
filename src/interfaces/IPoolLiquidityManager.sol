@@ -15,24 +15,24 @@ interface IPoolLiquidityManager {
     /**
      * @notice LP position in the protocol
      * @param liquidityCommitment Amount of liquidity committed
-     * @param liquidityOnchain Amount of liquidity onchain
+     * @param collateralAmount Amount of collateral
      * @param interestAccrued Interest accrued on the position
      */
     struct LPPosition {
         uint256 liquidityCommitment;
-        uint256 liquidityOnchain;
+        uint256 collateralAmount;
         uint256 interestAccrued;
     }
 
     /**
-     * @notice Emitted when an LP deposits liquidity
+     * @notice Emitted when an LP deposits collateral
      */
-    event LiquidityDeposited(address indexed lp, uint256 amount);
+    event CollateralDeposited(address indexed lp, uint256 amount);
 
     /**
-     * @notice Emitted when an LP withdraws liquidity
+     * @notice Emitted when an LP withdraws collateral
      */
-    event LiquidityWithdrawn(address indexed lp, uint256 amount);
+    event CollateralWithdrawn(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when rebalance amount is added to LP's liquidity
@@ -52,7 +52,7 @@ interface IPoolLiquidityManager {
     /**
      * @notice Emitted when a new LP is registered
      */
-    event LPRegistered(address indexed lp, uint256 liquidityCommited, uint256 liquidityOnchain);
+    event LPRegistered(address indexed lp, uint256 liquidityCommited, uint256 collateralAmount);
 
     /**
      * @notice Emitted when an LP is removed
@@ -135,9 +135,9 @@ interface IPoolLiquidityManager {
     function totalLPLiquidityCommited() external view returns (uint256);
 
     /**
-     * @notice Total liquidity onchain
+     * @notice Total lp collateral
      */
-    function totalLPLiquidityOnchain() external view returns (uint256);
+    function totalLPCollateral() external view returns (uint256);
     
     /**
      * @notice Number of registered LPs
@@ -169,16 +169,16 @@ interface IPoolLiquidityManager {
     function decreaseLiquidityCommitment(uint256 amount) external;
 
     /**
-     * @notice Deposit additional liquidity beyond the minimum
-     * @param amount Amount of liquidity to deposit
+     * @notice Deposit additional collateral beyond the minimum
+     * @param amount Amount of collateral to deposit
      */
-    function depositLiquidity(uint256 amount) external;
+    function depositCollateral(uint256 amount) external;
 
     /**
-     * @notice Withdraw excess liquidity if above minimum requirements
-     * @param amount Amount of liquidity to withdraw
+     * @notice Withdraw excess collateral if above minimum requirements
+     * @param amount Amount of collateral to withdraw
      */
-    function withdrawLiquidity(uint256 amount) external;
+    function withdrawCollateral(uint256 amount) external;
 
     /**
      * @notice Liquidate an LP below threshold
@@ -192,13 +192,6 @@ interface IPoolLiquidityManager {
      * @param amount Amount to deduct
      */
     function deductRebalanceAmount(address lp, uint256 amount) external;
-
-    /**
-     * @notice Add rebalance amount to LP's position
-     * @param lp Address of the LP
-     * @param amount Amount to add
-     */
-    function addToLiquidity(address lp, uint256 amount) external;
 
     /**
      * @notice Add interest amount to LP's position
@@ -251,9 +244,9 @@ interface IPoolLiquidityManager {
     function getTotalLPLiquidityCommited() external view returns (uint256);
 
     /**
-     * @notice Returns the total liquidity onchain
+     * @notice Returns the total lp collateral
      */
-    function getTotalLPLiquidityOnchain() external view returns (uint256);
+    function getTotalLPCollateral() external view returns (uint256);
 
     /**
      * @notice Returns the reserve to asset decimal factor

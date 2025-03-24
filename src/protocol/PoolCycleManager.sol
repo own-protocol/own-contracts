@@ -231,8 +231,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             // The LP needs to cover the difference with their collateral
             amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Deduct from LP's liquidity and transfer to pool
-            poolLiquidityManager.deductRebalanceAmount(lp, amount);
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP liquidity
             // The LP gets back funds which are added to their liquidity
@@ -240,9 +238,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             
             // Transfer from pool to LP's liquidity
             reserveToken.transfer(address(poolLiquidityManager), amount);
-            
-            // Add to LP's liquidity
-            poolLiquidityManager.addToLiquidity(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
