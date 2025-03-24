@@ -17,14 +17,18 @@ import {IAssetPool} from "./IAssetPool.sol";
 interface IPoolCycleManager {
     /**
      * @notice Enum representing the current state of the pool's operational cycle
-     * @param ACTIVE Normal operation state where users can deposit and redeem
-     * @param REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
-     * @param REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
+     * @param POOL_ACTIVE Normal operation state where users can deposit and redeem
+     * @param POOL_REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
+     * @param POOL_REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
+     * @param POOL_ACTIVE_WITH_DEVIATION State when the pool is active but has a deviation from the asset price
+     * @param POOL_HALTED State when the pool is halted due to rebalance failure or other issues
      */
     enum CycleState {
-        ACTIVE,
-        REBALANCING_OFFCHAIN,
-        REBALANCING_ONCHAIN
+        POOL_ACTIVE,
+        POOL_REBALANCING_OFFCHAIN,
+        POOL_REBALANCING_ONCHAIN,
+        POOL_ACTIVE_WITH_DEVIATION,
+        POOL_HALTED
     }
 
     // --------------------------------------------------------------------------------

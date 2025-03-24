@@ -29,7 +29,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public cycleIndex;
 
     /**
-     * @notice Current state of the pool (ACTIVE or REBALANCING).
+     * @notice Current state of the pool (ACTIVE or REBALANCING etc).
      */
     CycleState public cycleState;
 
@@ -129,7 +129,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
         assetOracle = IAssetOracle(_assetOracle);
-        cycleState = CycleState.ACTIVE;
+        cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
 
@@ -156,7 +156,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Initiates the off-chain rebalance process.
      */
     function initiateOffchainRebalance() external {
-        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
+        if (cycleState != CycleState.POOL_ACTIVE) revert InvalidCycleState();
         (, uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
@@ -166,7 +166,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Accrue interest before changing cycle state
         _accrueInterest();
 
-        cycleState = CycleState.REBALANCING_OFFCHAIN;
+        cycleState = CycleState.POOL_REBALANCING_OFFCHAIN;
         lastCycleActionDateTime = block.timestamp;
     }
 
@@ -175,7 +175,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
     function initiateOnchainRebalance() external {
-        if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        if (cycleState != CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidCycleState();
         (, uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
@@ -188,7 +188,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _accrueInterest();
 
         lastCycleActionDateTime = block.timestamp;
-        cycleState = CycleState.REBALANCING_ONCHAIN;
+        cycleState = CycleState.POOL_REBALANCING_ONCHAIN;
 
         emit RebalanceInitiated(
             cycleIndex,
@@ -205,7 +205,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
@@ -264,7 +264,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
      */
     function settlePool() external onlyLP {
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
@@ -344,7 +344,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     function _startNewCycle() internal {
 
         cycleIndex++;
-        cycleState = CycleState.ACTIVE;
+        cycleState = CycleState.POOL_ACTIVE;
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;

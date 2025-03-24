@@ -80,7 +80,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @dev Ensures the cycle state is active
      */
     modifier onlyActiveCycle() {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.ACTIVE) revert("Cycle not active");
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Cycle not active");
         _;
     }
 
