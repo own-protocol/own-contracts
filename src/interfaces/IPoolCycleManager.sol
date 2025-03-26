@@ -146,6 +146,16 @@ interface IPoolCycleManager {
     // --------------------------------------------------------------------------------
 
     /**
+     * @notice Calculates the expected rebalance amount for a specific LP at a given price
+     * @dev This helper function allows LPs to determine how much they need to approve/have available
+     * @param lp Address of the LP
+     * @param rebalancePrice Price at which to calculate the rebalance
+     * @return rebalanceAmount The amount the LP needs to contribute (positive) or will receive (negative)
+     * @return isDeposit True if LP needs to deposit funds, false if LP will receive funds
+     */
+    function calculateLPRebalanceAmount(address lp, uint256 rebalancePrice) external view returns (uint256 rebalanceAmount, bool isDeposit);
+
+    /**
      * @notice Returns information about the pool
      * @return _cycleState Current state of the pool
      * @return _cycleIndex Current operational cycle index

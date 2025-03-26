@@ -226,14 +226,14 @@ interface IPoolStrategy {
     ) external view returns (uint256 requiredCollateral);
     
     /**
-     * @notice Calculates required LP liquidity
+     * @notice Calculates required LP collateral
      * @param liquidityManager Address of the LP Registry contract
      * @param lp Address of the LP
      */
-    function calculateLPRequiredLiquidity(
+    function calculateLPRequiredCollateral(
         address liquidityManager, 
         address lp
-    ) external view returns (uint256 requiredLiquidity);
+    ) external view returns (uint256 requiredCollateral);
 
     /**
      * @notice Check collateral health status of a user

@@ -486,10 +486,28 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-    * @notice Deducts interest from the pool and transfers it to the liquidity manager
-    * @param lp Address of the LP to whom interest is owed
-    * @param amount Amount of interest to deduct
-    */
+     * @notice Transfers rebalance amount from the pool to the LP during negative rebalance
+     * @param lp Address of the LP to whom rebalance amount is owed
+     * @param amount Amount of reserve tokens to transfer to the LP
+     */
+    function transferRebalanceAmount(address lp, uint256 amount) external onlyPoolCycleManager {
+        if (amount == 0) revert InvalidAmount();
+
+        // Check if we have enough reserve tokens for the transfer
+        uint256 reserveBalance = reserveToken.balanceOf(address(this));
+        if (reserveBalance < amount) revert InsufficientBalance();
+
+        // Transfer the rebalance amount to the LP
+        reserveToken.transfer(lp, amount);
+        
+        emit RebalanceAmountTransferred(lp, amount, poolCycleManager.cycleIndex());
+    }
+
+    /**
+     * @notice Deducts interest from the pool and transfers it to the liquidity manager
+     * @param lp Address of the LP to whom interest is owed
+     * @param amount Amount of interest to deduct
+     */
     function deductInterest(address lp, uint256 amount) external onlyPoolCycleManager {
         if (amount == 0) revert InvalidAmount();
 
