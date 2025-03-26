@@ -28,7 +28,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Number of registered LPs
     uint256 public lpCount;
 
-    // Mapping of LP addresses to their liquidity info
+    // Mapping to track LP requests
+    mapping(address => LPRequest) private lpRequests;
+
+    // Mapping of LP addresses to their liquidity positions
     mapping(address => LPPosition) private lpPositions;
     
     // Mapping to check if an address is a registered LP
@@ -102,39 +105,37 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function addLiquidity(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
+
+        if (!_isCycleActive()) revert InvalidCycleState();
+
         (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         // Calculate additional required collateral
         uint256 requiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         // Transfer required collateral
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
+
+        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        if (collateralHealth < 3) revert InsufficientCollateralHealth(collateralHealth);
+
+        LPPosition storage position = lpPositions[msg.sender]; 
         
         if (registeredLPs[msg.sender]) {
-
-            LPPosition storage position = lpPositions[msg.sender];            
-            // Update LP position
-            position.liquidityCommitment += amount;
-            position.collateralAmount += requiredCollateral;
-            
-            // Update total liquidity
-            totalLPLiquidityCommited += amount;
-            totalLPCollateral += requiredCollateral;
-            
-            emit LiquidityAdded(msg.sender, amount, requiredCollateral);
+            LPRequest storage request = lpRequests[msg.sender];
+            if (request.requestType != RequestType.NONE) revert RequestPending();              
         } else {
             registeredLPs[msg.sender] = true;
-            lpPositions[msg.sender] = LPPosition({
-                liquidityCommitment: amount,
-                collateralAmount: requiredCollateral,
-                interestAccrued: 0
-            });
-            
-            // Update pool stats
-            totalLPLiquidityCommited += amount;
-            totalLPCollateral += requiredCollateral;
             lpCount++;
-            
+
             emit LPAdded(msg.sender, amount, requiredCollateral);
         }
+
+        position.collateralAmount += requiredCollateral; 
+        totalLPLiquidityCommited += amount;
+        totalLPCollateral += requiredCollateral;
+
+        _createRequest(msg.sender, RequestType.ADD_LIQUIDITY, amount);
+
+        emit LiquidityAdditionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
 
     /**
@@ -143,43 +144,45 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function reduceLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
+
+        if (!_isCycleActive()) revert InvalidCycleState();
+
+        LPRequest storage request = lpRequests[msg.sender];
+        if (request.requestType != RequestType.NONE) revert RequestPending();
         
         LPPosition storage position = lpPositions[msg.sender];
         if (amount > position.liquidityCommitment) revert InsufficientLiquidity();
 
-        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
-        
-        // Calculate releasable collateral
-        uint256 releasableCollateral = Math.mulDiv(amount, healthyRatio, BPS);
-        
-        // Update LP position
-        position.liquidityCommitment -= amount;
-        
-        // Ensure remaining collateral meets minimum requirements
-        uint256 requiredCollateral = poolStrategy.calculateLPRequiredLiquidity(address(this), msg.sender);
-        
-        // Can only release excess liquidity if remaining above minimum required
-        if (position.collateralAmount - releasableCollateral >= requiredCollateral) {
-            position.collateralAmount -= releasableCollateral;
-            reserveToken.transfer(msg.sender, releasableCollateral);
+        // Calculate available liquidity for reduction based on utilization
+        uint256 availableLiquidity = calculateAvailableLiquidity();
+
+        if (availableLiquidity == 0) revert UtilizationTooHighForOperation();
+
+        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        if (collateralHealth < 2) revert InsufficientCollateralHealth(collateralHealth);
+
+        // Determine allowed reduction amount
+        uint256 allowedReduction;
+        if (availableLiquidity >= amount * 2) {
+            // If available liquidity is >= 2x requested amount, can reduce full amount
+            allowedReduction = amount;
+        } else {
+            // Otherwise, can only reduce up to half of available liquidity
+            allowedReduction = availableLiquidity / 2;
+            
+            // If requesting more than allowed, revert with explanation
+            if (amount > allowedReduction) {
+                revert OperationExceedsAvailableLiquidity(amount, allowedReduction);
+            }
         }
+
+        // Create the reduction request
+        _createRequest(msg.sender, RequestType.REDUCE_LIQUIDITY, allowedReduction);
         
         // Update total liquidity
         totalLPLiquidityCommited -= amount;
-        totalLPCollateral -= releasableCollateral;
         
-        emit LiquidityReduced(msg.sender, amount, releasableCollateral);
-
-        if (position.liquidityCommitment == 0) {
-            if (position.interestAccrued > 0) {
-                reserveToken.transfer(msg.sender, position.interestAccrued);
-                position.interestAccrued = 0;
-            }
-            registeredLPs[msg.sender] = false;
-            lpCount--;
-            delete lpPositions[msg.sender];
-            emit LPRemoved(msg.sender);
-        }
+        emit LiquidityReductionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
 
     /**
@@ -249,6 +252,37 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpPositions[lp].interestAccrued += amount;
+    }
+
+    /**
+     * @notice Resolves an LP request after a rebalance cycle
+     * @dev This should be called after a rebalance to clear pending request flags
+     * @param lp Address of the LP
+     */
+    function resolveRequest(address lp) external onlyPoolCycleManager {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
+        LPRequest storage request = lpRequests[lp];
+        LPPosition storage position = lpPositions[lp];
+
+        if (request.requestType == RequestType.ADD_LIQUIDITY) {
+            // Update LP position
+            position.liquidityCommitment += request.requestAmount;
+            
+            emit LiquidityAdded(lp, request.requestAmount);
+        } else if (request.requestType == RequestType.REDUCE_LIQUIDITY) {
+            // Update LP position
+            position.liquidityCommitment -= request.requestAmount;
+
+            emit LiquidityReduced(lp, request.requestAmount);
+
+            if(position.liquidityCommitment == 0) {
+                _removeLP(lp);
+            }
+        }
+        
+        // Mark request as resolved
+        request.requestType = RequestType.NONE;
     }
 
     /**
@@ -333,4 +367,80 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getReserveToAssetDecimalFactor() external view returns (uint256) {
         return reserveToAssetDecimalFactor;
     }
+
+    /**
+     * @notice Check if the current cycle is active
+     * @return True if the cycle is active, false otherwise
+    */
+    function _isCycleActive() internal view returns (bool) {
+        return poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE;
+    }
+
+    /**
+     * @notice Internal function to finalize LP removal
+     * @param lp Address of the LP to remove
+     */
+    function _removeLP(address lp) internal {
+        LPPosition storage position = lpPositions[lp];
+        
+        // Transfer any remaining interest
+        if (position.interestAccrued > 0) {
+            uint256 interestAmount = position.interestAccrued;
+            position.interestAccrued = 0;
+            reserveToken.transfer(lp, interestAmount);
+
+            emit InterestClaimed(lp, interestAmount);
+        }
+        
+        // Mark LP as removed
+        registeredLPs[lp] = false;
+        lpCount--;
+        
+        // Clean up storage
+        delete lpPositions[lp];
+        // We keep lpRequests for historical reference
+        
+        emit LPRemoved(lp);
+    }
+
+    /**
+     * @notice Calculate available liquidity for operations based on current utilization
+     * @return availableLiquidity Maximum amount of liquidity available for operations
+    */
+    function calculateAvailableLiquidity() public view returns (uint256 availableLiquidity) {
+        // Get current and maximum utilization
+        uint256 currentUtilization = assetPool.getPoolUtilization();
+        (,,,,, uint256 maxUtilization) = poolStrategy.getInterestRateParams();
+        
+        // If utilization is already at or above max, nothing is available
+        if (currentUtilization >= maxUtilization) {
+            return 0;
+        }
+        
+        // Calculate available utilization
+        uint256 availableUtilization = maxUtilization - currentUtilization;
+        
+        // Calculate total liquidity committed
+        uint256 totalLiquidity = totalLPLiquidityCommited;
+        
+        // Calculate available liquidity based on available utilization
+        availableLiquidity = Math.mulDiv(availableUtilization, totalLiquidity, BPS);
+        
+        return availableLiquidity;
+    }
+
+    /**
+     * @notice Create a new LP request
+     * @param lp Address of the LP
+     * @param requestType Type of request
+     * @param amount Amount involved in the request
+    */
+    function _createRequest(address lp, RequestType requestType, uint256 amount) internal {
+        LPRequest storage request = lpRequests[lp];
+        
+        request.requestType = requestType;
+        request.requestAmount = amount;
+        request.requestCycle = poolCycleManager.cycleIndex();
+    }
+
 }

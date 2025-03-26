@@ -227,16 +227,20 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             isDeposit = true;
             
-            // Transfer funds from LP's wallet to the pool
-            reserveToken.transferFrom(lp, address(assetPool), amount);
+            if (amount > 0) {
+                // Transfer funds from LP's wallet to the pool
+                reserveToken.transferFrom(lp, address(assetPool), amount);
+            }
             
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP liquidity
             // The LP gets back funds which are added to their liquidity
             amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Request the asset pool to transfer funds to the LP
-            assetPool.transferRebalanceAmount(lp, amount);
+            if (amount > 0) {
+                // Request the asset pool to transfer funds to the LP
+                assetPool.transferRebalanceAmount(lp, amount);
+            }
         }
         // If rebalanceAmount is 0, no action needed
 
@@ -245,6 +249,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (lpCycleInterest > 0) {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
+        
+        poolLiquidityManager.resolveRequest(lp);
         
         cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;

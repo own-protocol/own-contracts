@@ -25,6 +25,28 @@ interface IPoolLiquidityManager {
     }
 
     /**
+     * @notice Request type enum to track different kinds of LP requests
+     */
+    enum RequestType {
+        NONE,           // No active request
+        ADD_LIQUIDITY,  // Request to add liquidity
+        REDUCE_LIQUIDITY, // Request to reduce liquidity
+        LIQUIDATE       // Request for liquidation
+    }
+
+    /**
+     * @notice LP request struct to track LP requests
+     * @param requestType Type of request
+     * @param requestAmount Amount involved in the request
+     * @param requestCycle Cycle when request was made
+     */
+    struct LPRequest {
+        RequestType requestType;      // Type of request
+        uint256 requestAmount;        // Amount involved in the request
+        uint256 requestCycle;         // Cycle when request was made
+    }
+
+    /**
      * @notice Emitted when an LP deposits collateral
      */
     event CollateralAdded(address indexed lp, uint256 amount);
@@ -47,12 +69,22 @@ interface IPoolLiquidityManager {
     /**
      * @notice Emitted when an LP adds liquidity
      */
-    event LiquidityAdded(address indexed lp, uint256 amount, uint256 collateral);
+    event LiquidityAdded(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when an LP reduced liquidity
      */
-    event LiquidityReduced(address indexed lp, uint256 amount, uint256 collateral);
+    event LiquidityReduced(address indexed lp, uint256 amount);
+
+    /**
+     * @notice Emitted when an LP request to add liquidity is made
+     */
+    event LiquidityAdditionRequested(address indexed lp, uint256 amount, uint256 cycle);
+
+    /**
+     * @notice Emitted when an LP request to reduce liquidity is made
+     */
+    event LiquidityReductionRequested(address indexed lp, uint256 amount, uint256 cycle);
 
     /**
      * @notice Emitted when an LP is added
@@ -125,6 +157,31 @@ interface IPoolLiquidityManager {
     error Unauthorized();
 
     /**
+     * @notice Error when pool utilization is too high for requested operation
+     */
+    error UtilizationTooHighForOperation();
+
+    /**
+    * @notice Error when a cycle is not in the required state
+    */
+    error InvalidCycleState();
+    
+    /**
+     * @notice Error when a request is already pending
+     */
+    error RequestPending();
+
+    /**
+     * @notice Error when operation would exceed available liquidity
+     */
+    error OperationExceedsAvailableLiquidity(uint256 requested, uint256 available);
+
+    /**
+     * @notice Error when collateral health is insufficient
+     */
+    error InsufficientCollateralHealth(uint256 cuurentHealth);
+
+    /**
      * @notice Total liquidity committed by LPs
      */
     function totalLPLiquidityCommited() external view returns (uint256);
@@ -182,6 +239,13 @@ interface IPoolLiquidityManager {
     function addToInterest(address lp, uint256 amount) external;
 
     /**
+     * @notice Resolves an LP request after a rebalance cycle
+     * @dev This should be called after a rebalance to clear pending request flags
+     * @param lp Address of the LP
+     */
+    function resolveRequest(address lp) external;
+
+    /**
      * @notice Get LP asset holdings value (in reserve token)
      * @param lp Address of the LP
      */
@@ -233,4 +297,10 @@ interface IPoolLiquidityManager {
      * @notice Returns the reserve to asset decimal factor
      */
     function getReserveToAssetDecimalFactor() external view returns (uint256);
+
+    /**
+     * @notice Calculate available liquidity for operations based on current utilization
+     * @return availableLiquidity Maximum amount of liquidity available for operations
+    */
+    function calculateAvailableLiquidity() external view returns (uint256 availableLiquidity);
 }
