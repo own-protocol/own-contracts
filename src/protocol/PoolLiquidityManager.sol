@@ -114,7 +114,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Transfer required collateral
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
 
-        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
         if (collateralHealth < 3) revert InsufficientCollateralHealth(collateralHealth);
 
         LPPosition storage position = lpPositions[msg.sender]; 
@@ -158,7 +158,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         if (availableLiquidity == 0) revert UtilizationTooHighForOperation();
 
-        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
         if (collateralHealth < 2) revert InsufficientCollateralHealth(collateralHealth);
 
         // Determine allowed reduction amount
@@ -239,7 +239,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     * @notice Liquidate an LP below threshold 
     * @param lp Address of the LP to liquidate
     */
-    function liquidateLP(address lp) external nonReentrant onlyRegisteredLP {
+    function liquidateLP(address lp) external nonReentrant {
         if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
         
     }
