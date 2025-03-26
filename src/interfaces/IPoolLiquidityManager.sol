@@ -32,7 +32,7 @@ interface IPoolLiquidityManager {
     /**
      * @notice Emitted when an LP withdraws collateral
      */
-    event CollateralRemoved(address indexed lp, uint256 amount);
+    event CollateralReduced(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when interest is claimed by an LP
@@ -50,9 +50,9 @@ interface IPoolLiquidityManager {
     event LiquidityAdded(address indexed lp, uint256 amount, uint256 collateral);
 
     /**
-     * @notice Emitted when an LP removes liquidity
+     * @notice Emitted when an LP reduced liquidity
      */
-    event LiquidityRemoved(address indexed lp, uint256 amount, uint256 collateral);
+    event LiquidityReduced(address indexed lp, uint256 amount, uint256 collateral);
 
     /**
      * @notice Emitted when an LP is added
@@ -146,10 +146,10 @@ interface IPoolLiquidityManager {
     function addLiquidity(uint256 amount) external;
 
     /**
-     * @notice remove lp liquidity
-     * @param amount The amount of liquidity to remove
+     * @notice reduce lp liquidity
+     * @param amount The amount of liquidity to reduce
      */
-    function removeLiquidity(uint256 amount) external;
+    function reduceLiquidity(uint256 amount) external;
 
     /**
      * @notice Deposit additional collateral beyond the minimum
@@ -159,9 +159,9 @@ interface IPoolLiquidityManager {
 
     /**
      * @notice Withdraw excess collateral if above minimum requirements
-     * @param amount Amount of collateral to remove
+     * @param amount Amount of collateral to reduce
      */
-    function removeCollateral(uint256 amount) external;
+    function reduceCollateral(uint256 amount) external;
 
     /**
      * @notice Claim interest accrued on LP position

@@ -139,9 +139,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
     /**
      * @notice Remove an lp's liquidity
-     * @param amount The amount of liquidity to remove
+     * @param amount The amount of liquidity to reduce
      */
-    function removeLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function reduceLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
         
         LPPosition storage position = lpPositions[msg.sender];
@@ -168,7 +168,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         totalLPLiquidityCommited -= amount;
         totalLPCollateral -= releasableCollateral;
         
-        emit LiquidityRemoved(msg.sender, amount, releasableCollateral);
+        emit LiquidityReduced(msg.sender, amount, releasableCollateral);
 
         if (position.liquidityCommitment == 0) {
             if (position.interestAccrued > 0) {
@@ -199,9 +199,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
     /**
      * @notice Remove excess collateral if above minimum requirements
-     * @param amount Amount of collateral to remove
+     * @param amount Amount of collateral to reduce
      */
-    function removeCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function reduceCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
         LPPosition storage position = lpPositions[msg.sender];
         if (amount == 0 || amount > position.collateralAmount) revert InvalidWithdrawalAmount();
         
@@ -214,7 +214,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         totalLPCollateral -= amount;
         reserveToken.transfer(msg.sender, amount);
         
-        emit CollateralRemoved(msg.sender, amount);
+        emit CollateralReduced(msg.sender, amount);
     }
 
     /**
