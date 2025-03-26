@@ -112,9 +112,9 @@ interface IPoolLiquidityManager {
     error InvalidWithdrawalAmount();
 
     /**
-     * @notice Error when liquidity would fall below minimum ratio
+     * @notice Error when collateral amount is insufficient
      */
-    error InsufficientLiquidity();
+    error InsufficientCollateral();
 
     /**
      * @notice Error when LP is not eligible for liquidation

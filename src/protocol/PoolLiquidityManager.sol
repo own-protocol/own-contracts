@@ -151,7 +151,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (request.requestType != RequestType.NONE) revert RequestPending();
         
         LPPosition storage position = lpPositions[msg.sender];
-        if (amount > position.liquidityCommitment) revert InsufficientLiquidity();
+        if (amount > position.liquidityCommitment) revert InvalidAmount();
 
         // Calculate available liquidity for reduction based on utilization
         uint256 availableLiquidity = calculateAvailableLiquidity();
@@ -206,11 +206,12 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function reduceCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
         LPPosition storage position = lpPositions[msg.sender];
-        if (amount == 0 || amount > position.collateralAmount) revert InvalidWithdrawalAmount();
+        uint256 lpCollateral = position.collateralAmount;
+        if (amount == 0 || amount > lpCollateral) revert InvalidWithdrawalAmount();
         
-        uint256 requiredCollateral = poolStrategy.calculateLPRequiredLiquidity(address(this), msg.sender);
-        if (position.collateralAmount - amount < requiredCollateral) {
-            revert InsufficientLiquidity();
+        uint256 requiredCollateral = poolStrategy.calculateLPRequiredCollateral(address(this), msg.sender);
+        if (lpCollateral - amount < requiredCollateral) {
+            revert InsufficientCollateral();
         }
         
         position.collateralAmount -= amount;

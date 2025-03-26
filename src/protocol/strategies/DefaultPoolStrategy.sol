@@ -342,11 +342,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Calculates required LP liquidity
+     * @notice Calculates required LP collateral
      * @param liquidityManager Address of the pool liquidity manager
      * @param lp Address of the LP
      */
-    function calculateLPRequiredLiquidity(address liquidityManager, address lp) external view returns (uint256) {
+    function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
