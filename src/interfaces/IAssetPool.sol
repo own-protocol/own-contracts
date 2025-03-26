@@ -36,7 +36,7 @@ interface IAssetPool {
      * @param collateralAmount Amount of collateral provided
      * @param scaledInterest User's scaled interest value for debt calculation
      */
-    struct Position {
+    struct UserPosition {
         uint256 assetAmount;
         uint256 collateralAmount;
         uint256 scaledInterest;
@@ -112,9 +112,8 @@ interface IAssetPool {
      * @notice Emitted when fee is deducted from user
      * @param user Address of the user
      * @param amount Amount of fee deducted
-     * @param feeType Type of fee deducted (0 = deposit, 1 = redemption)
      */
-    event FeeDeducted(address indexed user, uint256 amount, uint8 feeType);
+    event FeeDeducted(address indexed user, uint256 amount);
 
     /**
      * @notice Emitted when a position is liquidated
@@ -226,9 +225,9 @@ interface IAssetPool {
     function deductInterest(address lp, uint256 amount) external;
 
     /**
-     * @notice Reset cycle data at the end of a cycle
+     * @notice Update cycle data at the end of a cycle
      */
-    function resetCycleData() external;
+    function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
@@ -287,6 +286,11 @@ interface IAssetPool {
      * @return Total amount of pending redemptions
      */
     function cycleTotalRedemptionRequests() external view returns (uint256);
+
+    /**
+     * @notice Returns reserve token balance of the pool (excluding new deposits).
+     */
+    function poolReserveBalance() external view returns (uint256);
 
     /**
      * @notice Total user collateral in the pool

@@ -29,7 +29,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public cycleIndex;
 
     /**
-     * @notice Current state of the pool (ACTIVE or REBALANCING).
+     * @notice Current state of the pool (ACTIVE or REBALANCING etc).
      */
     CycleState public cycleState;
 
@@ -37,11 +37,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Timestamp of the last cycle action.
      */
     uint256 public lastCycleActionDateTime;
-
-    /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
-     */
-    uint256 public poolReserveBalance;
 
     /**
      * @notice Asset token balance of the pool.
@@ -134,7 +129,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
         assetOracle = IAssetOracle(_assetOracle);
-        cycleState = CycleState.ACTIVE;
+        cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
 
@@ -161,22 +156,17 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Initiates the off-chain rebalance process.
      */
     function initiateOffchainRebalance() external {
-        if (cycleState != CycleState.ACTIVE) revert InvalidCycleState();
-        (uint256 cycleLength, , uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
+        if (cycleState != CycleState.POOL_ACTIVE) revert InvalidCycleState();
+        (, uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
         bool isMarketOpen = assetOracle.isMarketOpen();
         if (!isMarketOpen) revert MarketClosed();
 
-        if (cycleLength > 0) {
-            uint256 expectedDateTime = lastCycleActionDateTime + cycleLength;
-            if (block.timestamp < expectedDateTime) revert CycleInProgress();
-        }
-
         // Accrue interest before changing cycle state
         _accrueInterest();
 
-        cycleState = CycleState.REBALANCING_OFFCHAIN;
+        cycleState = CycleState.POOL_REBALANCING_OFFCHAIN;
         lastCycleActionDateTime = block.timestamp;
     }
 
@@ -185,8 +175,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      *         needs to move, and broadcasts instructions for LPs to act on.
      */
     function initiateOnchainRebalance() external {
-        if (cycleState != CycleState.REBALANCING_OFFCHAIN) revert InvalidCycleState();
-        (, , uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
+        if (cycleState != CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        (, uint256 oracleUpdateThreshold) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
         bool isMarketOpen = assetOracle.isMarketOpen();
@@ -198,7 +188,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _accrueInterest();
 
         lastCycleActionDateTime = block.timestamp;
-        cycleState = CycleState.REBALANCING_ONCHAIN;
+        cycleState = CycleState.POOL_REBALANCING_ONCHAIN;
 
         emit RebalanceInitiated(
             cycleIndex,
@@ -215,17 +205,17 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
+        if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
+        (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
 
         _validateRebalancingPrice(rebalancePrice);
 
-        uint8 lpCollateralHealth = poolStrategy.getLPCollateralHealth(address(poolLiquidityManager), lp);
-        if (lpCollateralHealth == 1) revert InsufficientLPCollateral();
-        uint256 lpLiquidity = poolLiquidityManager.getLPLiquidity(lp);
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidity();
+        uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
+        if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
 
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;
@@ -234,30 +224,25 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
-            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidity, totalLiquidity);
+            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Deduct from LP's collateral and transfer to pool
-            poolLiquidityManager.deductRebalanceAmount(lp, amount);
         } else if (rebalanceAmount < 0) {
-            // Negative rebalance amount means Pool needs to add to LP collateral
-            // The LP gets back funds which are added to their collateral
-            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidity, totalLiquidity);
+            // Negative rebalance amount means Pool needs to add to LP liquidity
+            // The LP gets back funds which are added to their liquidity
+            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Transfer from pool to LP's collateral
+            // Transfer from pool to LP's liquidity
             reserveToken.transfer(address(poolLiquidityManager), amount);
-            
-            // Add to LP's collateral
-            poolLiquidityManager.addToCollateral(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
         // Deduct interest from the pool and add to LP's collateral
-        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidity, totalLiquidity);
+        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidityCommitment, totalLiquidity);
         if (lpCycleInterest > 0) {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
         
-        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidity * reserveToAssetDecimalFactor, PRECISION);
+        cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
 
@@ -268,15 +253,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
             cycleRebalancePrice[cycleIndex] = price;
             int256 finalRebalanceAmount = calculateRebalanceAmount(price);
-            poolReserveBalance = poolReserveBalance 
-                + assetPool.cycleTotalDepositRequests()
-                - Math.mulDiv(assetPool.cycleTotalRedemptionRequests(), price, PRECISION * reserveToAssetDecimalFactor);
 
-            if (finalRebalanceAmount > 0) {
-                poolReserveBalance += uint256(finalRebalanceAmount);
-            } else if (finalRebalanceAmount < 0) {
-                poolReserveBalance -= uint256(-finalRebalanceAmount);
-            }
+            assetPool.updateCycleData(price, finalRebalanceAmount);
 
             _startNewCycle();
         }
@@ -286,10 +264,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
      */
     function settlePool() external onlyLP {
-        if (cycleState != CycleState.REBALANCING_ONCHAIN) revert InvalidCycleState();
-        (, uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
+        if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
+        (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
+        // assetPool.updateCycleData(price, finalRebalanceAmount);
         _startNewCycle();
     }
 
@@ -345,7 +324,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 poolReserveValue = poolReserveBalance;
+        uint256 poolReserveValue = assetPool.poolReserveBalance();
         return int256(poolAssetValue - poolReserveValue);
     }
 
@@ -365,14 +344,12 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     function _startNewCycle() internal {
 
         cycleIndex++;
-        cycleState = CycleState.ACTIVE;
+        cycleState = CycleState.POOL_ACTIVE;
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
         poolAssetBalance = assetToken.totalSupply();
         cycleInterestAmount = 0;
-
-        assetPool.resetCycleData();
 
         emit CycleStarted(cycleIndex, block.timestamp);
     }
@@ -406,7 +383,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _cycleIndex = cycleIndex;
         _assetPrice = assetOracle.assetPrice();
         _lastCycleActionDateTime = lastCycleActionDateTime;
-        _reserveBalance = poolReserveBalance;
+        _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDepositRequests();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();

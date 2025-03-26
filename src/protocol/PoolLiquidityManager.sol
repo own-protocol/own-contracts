@@ -15,18 +15,21 @@ import {PoolStorage} from "./PoolStorage.sol";
 
 /**
  * @title PoolLiquidityManager
- * @notice Manages LP collateral requirements and registry for the asset pool
+ * @notice Manages LP liquidity requirements and registry for the asset pool
  */
 contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
     
-    // Total liquidity in the pool
-    uint256 public totalLPLiquidity;
+    // Total liquidity committed by LPs
+    uint256 public totalLPLiquidityCommited;
+
+    // Total lp collateral
+    uint256 public totalLPCollateral;
     
     // Number of registered LPs
     uint256 public lpCount;
 
-    // Mapping of LP addresses to their collateral info
-    mapping(address => CollateralInfo) private lpInfo;
+    // Mapping of LP addresses to their liquidity info
+    mapping(address => LPPosition) private lpPositions;
     
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
@@ -94,242 +97,158 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-     * @notice Register as a liquidity provider
-     * @param liquidityAmount The amount of liquidity to provide
-     */
-    function registerLP(uint256 liquidityAmount) external nonReentrant {
-        if (registeredLPs[msg.sender]) revert AlreadyRegistered();
-        if (liquidityAmount == 0) revert InvalidAmount();
-
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPCollateralParams();
-        
-        // Calculate required collateral (20% of liquidity)
-        uint256 requiredCollateral = Math.mulDiv(liquidityAmount, registrationRatio, BPS);
-        
-        // Transfer collateral from LP to contract
-        reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
-        
-        // Update LP info
-        registeredLPs[msg.sender] = true;
-        lpInfo[msg.sender] = CollateralInfo({
-            collateralAmount: requiredCollateral,
-            liquidityAmount: liquidityAmount
-        });
-        
-        // Update pool stats
-        totalLPLiquidity += liquidityAmount;
-        lpCount++;
-        
-        emit LPRegistered(msg.sender, liquidityAmount, requiredCollateral);
-    }
-
-    /**
-     * @notice Unregister LP from registry
-     * @param lp The address of the LP
-     */
-    function unregisterLP(address lp) external {
-        if (msg.sender != lp) revert Unauthorized();
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
-        
-        CollateralInfo storage info = lpInfo[lp];
-        if (info.liquidityAmount > 0) revert("LP has active liquidity");
-        
-        // Refund any remaining collateral
-        if (info.collateralAmount > 0) {
-            uint256 refundAmount = info.collateralAmount;
-            info.collateralAmount = 0;
-            reserveToken.transfer(lp, refundAmount);
-        }
-        
-        registeredLPs[lp] = false;
-        lpCount--;
-        
-        emit LPRemoved(lp);
-    }
-
-    /**
-     * @notice Increase your liquidity amount
+     * @notice Add liquidity to the pool
      * @param amount The amount of liquidity to add
      */
-    function increaseLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function addLiquidity(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
+        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
+        // Calculate additional required collateral
+        uint256 requiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
+        // Transfer required collateral
+        reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
         
-        CollateralInfo storage info = lpInfo[msg.sender];
+        if (registeredLPs[msg.sender]) {
 
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPCollateralParams();
-        
-        // Calculate additional required collateral (20% of new liquidity)
-        uint256 additionalCollateral = Math.mulDiv(amount, registrationRatio, BPS);
-        
-        // Transfer additional collateral
-        reserveToken.transferFrom(msg.sender, address(this), additionalCollateral);
-        
-        // Update LP info
-        info.liquidityAmount += amount;
-        info.collateralAmount += additionalCollateral;
-        
-        // Update total liquidity
-        totalLPLiquidity += amount;
-        
-        emit LiquidityIncreased(msg.sender, amount);
+            LPPosition storage position = lpPositions[msg.sender];            
+            // Update LP position
+            position.liquidityCommitment += amount;
+            position.collateralAmount += requiredCollateral;
+            
+            // Update total liquidity
+            totalLPLiquidityCommited += amount;
+            totalLPCollateral += requiredCollateral;
+            
+            emit LiquidityAdded(msg.sender, amount, requiredCollateral);
+        } else {
+            registeredLPs[msg.sender] = true;
+            lpPositions[msg.sender] = LPPosition({
+                liquidityCommitment: amount,
+                collateralAmount: requiredCollateral,
+                interestAccrued: 0
+            });
+            
+            // Update pool stats
+            totalLPLiquidityCommited += amount;
+            totalLPCollateral += requiredCollateral;
+            lpCount++;
+            
+            emit LPAdded(msg.sender, amount, requiredCollateral);
+        }
     }
 
     /**
-     * @notice Decrease your liquidity amount
+     * @notice Remove an lp's liquidity
      * @param amount The amount of liquidity to remove
      */
-    function decreaseLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function removeLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
         
-        CollateralInfo storage info = lpInfo[msg.sender];
-        if (amount > info.liquidityAmount) revert InsufficientLiquidity();
+        LPPosition storage position = lpPositions[msg.sender];
+        if (amount > position.liquidityCommitment) revert InsufficientLiquidity();
 
-        (, , uint256 registrationRatio, ) = poolStrategy.getLPCollateralParams();
+        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         
-        // Calculate releasable collateral (20% of removed liquidity)
-        uint256 releasableCollateral = Math.mulDiv(amount, registrationRatio, BPS);
+        // Calculate releasable collateral
+        uint256 releasableCollateral = Math.mulDiv(amount, healthyRatio, BPS);
         
-        // Update LP info
-        info.liquidityAmount -= amount;
+        // Update LP position
+        position.liquidityCommitment -= amount;
         
-        // Ensure remaining collateral meets minimum requirements for remaining liquidity
-        uint256 requiredCollateral = poolStrategy.calculateLPRequiredCollateral(address(this), msg.sender);
+        // Ensure remaining collateral meets minimum requirements
+        uint256 requiredCollateral = poolStrategy.calculateLPRequiredLiquidity(address(this), msg.sender);
         
-        // Can only release excess collateral if remaining above minimum required
-        if (info.collateralAmount - releasableCollateral >= requiredCollateral) {
-            info.collateralAmount -= releasableCollateral;
+        // Can only release excess liquidity if remaining above minimum required
+        if (position.collateralAmount - releasableCollateral >= requiredCollateral) {
+            position.collateralAmount -= releasableCollateral;
             reserveToken.transfer(msg.sender, releasableCollateral);
         }
         
         // Update total liquidity
-        totalLPLiquidity -= amount;
+        totalLPLiquidityCommited -= amount;
+        totalLPCollateral -= releasableCollateral;
         
-        emit LiquidityDecreased(msg.sender, amount);
+        emit LiquidityRemoved(msg.sender, amount, releasableCollateral);
+
+        if (position.liquidityCommitment == 0) {
+            if (position.interestAccrued > 0) {
+                reserveToken.transfer(msg.sender, position.interestAccrued);
+                position.interestAccrued = 0;
+            }
+            registeredLPs[msg.sender] = false;
+            lpCount--;
+            delete lpPositions[msg.sender];
+            emit LPRemoved(msg.sender);
+        }
     }
 
     /**
-     * @notice Deposit additional collateral beyond the minimum
+     * @notice Add additional collateral beyond the minimum
      * @param amount Amount of collateral to deposit
      */
-    function deposit(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function addCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert ZeroAmount();
         
         reserveToken.transferFrom(msg.sender, address(this), amount);
-        lpInfo[msg.sender].collateralAmount += amount;
+        lpPositions[msg.sender].collateralAmount += amount;
+
+        totalLPCollateral += amount;
         
-        emit CollateralDeposited(msg.sender, amount);
+        emit CollateralAdded(msg.sender, amount);
     }
 
     /**
-     * @notice Withdraw excess collateral if above minimum requirements
-     * @param amount Amount of collateral to withdraw
+     * @notice Remove excess collateral if above minimum requirements
+     * @param amount Amount of collateral to remove
      */
-    function withdraw(uint256 amount) external nonReentrant onlyRegisteredLP {
-        CollateralInfo storage info = lpInfo[msg.sender];
-        if (amount == 0 || amount > info.collateralAmount) revert InvalidWithdrawalAmount();
+    function removeCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
+        LPPosition storage position = lpPositions[msg.sender];
+        if (amount == 0 || amount > position.collateralAmount) revert InvalidWithdrawalAmount();
         
-        uint256 requiredCollateral = poolStrategy.calculateLPRequiredCollateral(address(this), msg.sender);
-        if (info.collateralAmount - amount < requiredCollateral) {
-            revert InsufficientCollateral();
+        uint256 requiredCollateral = poolStrategy.calculateLPRequiredLiquidity(address(this), msg.sender);
+        if (position.collateralAmount - amount < requiredCollateral) {
+            revert InsufficientLiquidity();
         }
         
-        info.collateralAmount -= amount;
+        position.collateralAmount -= amount;
+        totalLPCollateral -= amount;
         reserveToken.transfer(msg.sender, amount);
         
-        emit CollateralWithdrawn(msg.sender, amount);
+        emit CollateralRemoved(msg.sender, amount);
     }
 
     /**
-    * @notice Liquidate an LP below threshold - Gas optimized version
+     * @notice Claim interest accrued on LP position
+     */
+    function claimInterest() external nonReentrant onlyRegisteredLP {
+        LPPosition storage position = lpPositions[msg.sender];
+        uint256 interestAccrued = position.interestAccrued;
+        if (interestAccrued == 0) revert NoInterestAccrued();
+        
+        position.interestAccrued = 0;
+        reserveToken.transfer(msg.sender, interestAccrued);
+        
+        emit InterestClaimed(msg.sender, interestAccrued);
+    }
+
+    /**
+    * @notice Liquidate an LP below threshold 
     * @param lp Address of the LP to liquidate
     */
     function liquidateLP(address lp) external nonReentrant onlyRegisteredLP {
         if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
         
-        CollateralInfo memory targetInfo = lpInfo[lp];
-        uint256 lpLiquidity = targetInfo.liquidityAmount;
-        uint256 lpCollateral = targetInfo.collateralAmount;
-        
-        if (lpLiquidity == 0) revert NoLiquidityToLiquidate();
-        
-        uint256 lpAssetHolding = getLPAssetHoldingValue(lp);
-
-        (, uint256 warningThreshold, , uint256 liquidationReward) = poolStrategy.getLPCollateralParams();
-        
-        // Check liquidation eligibility
-         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        if (lpCollateral * BPS * reserveToAssetDecimalFactor >= lpAssetHolding * warningThreshold) {
-            revert NotEligibleForLiquidation();
-        }
-        
-        // Calculate liquidation reward
-        uint256 reward = lpCollateral * liquidationReward / BPS;
-        
-        // Calculate remaining collateral
-        uint256 remainingCollateral = lpCollateral - reward;
-        
-        // Calculate liquidator's new position requirements
-        CollateralInfo memory callerInfo = lpInfo[msg.sender];
-        uint256 callerAssetHolding = getLPAssetHoldingValue(msg.sender);
-        
-        // Add target LP's asset holding to caller's
-        uint256 newCallerAssetHolding = callerAssetHolding + lpAssetHolding;
-         // we need to convert the assetHolding to the same decimal factor as the reserve token i.e collateral
-        uint256 newRequiredCollateral = newCallerAssetHolding * warningThreshold / 100_00 * reserveToAssetDecimalFactor;
-        
-        // Check if additional collateral is needed
-        uint256 additionalCollateralNeeded = 0;
-        if (newRequiredCollateral > callerInfo.collateralAmount) {
-            additionalCollateralNeeded = newRequiredCollateral - callerInfo.collateralAmount;
-            
-            // Transfer additional collateral in one go if needed
-            reserveToken.transferFrom(msg.sender, address(this), additionalCollateralNeeded);
-        }
-        
-        lpInfo[msg.sender].liquidityAmount = callerInfo.liquidityAmount + lpLiquidity;
-        lpInfo[msg.sender].collateralAmount = callerInfo.collateralAmount + additionalCollateralNeeded + reward;
-        
-        // Reset liquidated LP's position
-        delete lpInfo[lp];
-        
-        if (remainingCollateral > 0) {
-            reserveToken.transfer(lp, remainingCollateral);
-        }
-        
-        emit LPLiquidated(lp, msg.sender, reward);
     }
 
     /**
-     * @notice Deduct rebalance amount from LP's collateral
-     * @param lp Address of the LP
-     * @param amount Amount to deduct
-     */
-    function deductRebalanceAmount(address lp, uint256 amount) external onlyPoolCycleManager {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
-            
-        CollateralInfo storage info = lpInfo[lp];
-        if (amount > info.collateralAmount) revert InsufficientCollateral();
-
-        uint8 collateralHealth = poolStrategy.getLPCollateralHealth(address(this), lp);
-        if (collateralHealth == 1) revert InsufficientCollateral();
-            
-        info.collateralAmount -= amount;
-        reserveToken.transfer(address(assetPool), amount);
-        
-        emit RebalanceDeducted(lp, amount);
-    }
-
-    /**
-     * @notice Add rebalance amount or interest to LP's collateral
+     * @notice Add interest amount to LP's position
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToCollateral(address lp, uint256 amount) external onlyPoolCycleManager {
+    function addToInterest(address lp, uint256 amount) external onlyPoolCycleManager {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
-        lpInfo[lp].collateralAmount += amount;
-        
-        emit RebalanceAdded(lp, amount);
+        lpPositions[lp].interestAccrued += amount;
     }
 
     /**
@@ -353,17 +272,17 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function getLPLiquidityShare(address lp) public view returns (uint256) {
         if (!registeredLPs[lp]) return 0;
-        // If no total liquidity, no collateral required
-        if (totalLPLiquidity == 0) return 0;
-        return Math.mulDiv(lpInfo[lp].liquidityAmount, PRECISION, totalLPLiquidity);
+        // If no total liquidity, return 0
+        if (totalLPLiquidityCommited == 0) return 0;
+        return Math.mulDiv(lpPositions[lp].liquidityCommitment, PRECISION, totalLPLiquidityCommited);
     }
     
     /**
-     * @notice Get LP's current collateral and liquidity info
+     * @notice Get LP's current liquidity position
      * @param lp Address of the LP
      */
-    function getLPInfo(address lp) external view returns (CollateralInfo memory) {
-        return lpInfo[lp];
+    function getLPPosition(address lp) external view returns (LPPosition memory) {
+        return lpPositions[lp];
     }
     
     /**
@@ -384,20 +303,28 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
     
     /**
-     * @notice Returns the current liquidity amount for an LP
+     * @notice Returns the current liquidity commited by the LP
      * @param lp The address of the LP
      * @return uint256 The current liquidity amount
      */
-    function getLPLiquidity(address lp) external view returns (uint256) {
-        return lpInfo[lp].liquidityAmount;
+    function getLPLiquidityCommitment(address lp) external view returns (uint256) {
+        return lpPositions[lp].liquidityCommitment;
     }
     
     /**
      * @notice Returns the total liquidity amount
      * @return uint256 The total liquidity amount
      */
-    function getTotalLPLiquidity() external view returns (uint256) {
-        return totalLPLiquidity;
+    function getTotalLPLiquidityCommited() external view returns (uint256) {
+        return totalLPLiquidityCommited;
+    }
+
+    /**
+     * @notice Returns the total lp collateral
+     * @return uint256 The total lp collateral
+     */
+    function getTotalLPCollateral() external view returns (uint256) {
+        return totalLPCollateral;
     }
 
     /**

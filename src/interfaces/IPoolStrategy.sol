@@ -6,7 +6,7 @@ pragma solidity ^0.8.20;
 /**
  * @title IPoolStrategy
  * @notice Interface for strategy contracts that manage pool economics
- * @dev Handles interest rates, collateral requirements, fees, etc.
+ * @dev Handles interest rates, collateral & liquidity requirements, fees, etc.
  */
 interface IPoolStrategy {
     
@@ -19,7 +19,6 @@ interface IPoolStrategy {
      * @notice Emitted when cycle parameters are updated
      */
     event CycleParamsUpdated(
-        uint256 cyclePeriod,
         uint256 rebalancePeriod,
         uint256 OracleUpdateThreshold
     );
@@ -40,10 +39,7 @@ interface IPoolStrategy {
      * @notice Emitted when fee parameters are updated
      */
     event FeeParamsUpdated(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+        uint256 protocolFee,
         address feeRecipient
     );
     
@@ -57,12 +53,11 @@ interface IPoolStrategy {
     );
     
     /**
-     * @notice Emitted when LP collateral parameters are updated
+     * @notice Emitted when LP liquidity parameters are updated
      */
-    event LPCollateralParamsUpdated(
+    event LPLiquidityParamsUpdated(
         uint256 healthyRatio,
-        uint256 warningThreshold,
-        uint256 registrationRatio,
+        uint256 liquidationThreshold,
         uint256 liquidationReward
     );
 
@@ -72,12 +67,10 @@ interface IPoolStrategy {
 
     /**
      * @notice Sets the cycle parameters
-     * @param cyclePeriod Length of each cycle in seconds
      * @param rebalancePeriod Length of rebalancing period in seconds
      * @param oracleUpdateThreshold Threshold for Oracle update
      */
     function setCycleParams(
-        uint256 cyclePeriod, 
         uint256 rebalancePeriod,
         uint256 oracleUpdateThreshold
     ) external;
@@ -102,17 +95,11 @@ interface IPoolStrategy {
     
     /**
      * @notice Sets the fee parameters
-     * @param depositFee Fee for deposits (scaled by 10000)
-     * @param redemptionFee Fee for redemptions (scaled by 10000)
-     * @param interestFee Fee on interest (scaled by 10000)
-     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param protocolFee Protocol fee (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
-    function setFeeParams(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+    function setProtocolFeeParams(
+        uint256 protocolFee,
         address _feeRecipient
     ) external;
     
@@ -129,16 +116,14 @@ interface IPoolStrategy {
     ) external;
     
     /**
-     * @notice Sets the LP collateral parameters
-     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @param warningThreshold Warning threshold (scaled by 10000)
-     * @param registrationRatio Registration minimum ratio (scaled by 10000)
+     * @notice Sets the LP liquidity parameters
+     * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @param liquidationThreshold Liquidation threshold (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
-    function setLPCollateralParams(
+    function setLPLiquidityParams(
         uint256 healthyRatio,
-        uint256 warningThreshold,
-        uint256 registrationRatio,
+        uint256 liquidationThreshold,
         uint256 liquidationReward
     ) external;
 
@@ -148,12 +133,10 @@ interface IPoolStrategy {
 
     /**
      * @notice Returns the cycle parameters
-     * @return cycleLength Length of each cycle in seconds
      * @return rebalanceLength Length of rebalancing period in seconds
      * @return oracleUpdateThreshold Threshold for Oracle update
      */
     function getCycleParams() external view returns (
-        uint256 cycleLength, 
         uint256 rebalanceLength, 
         uint256 oracleUpdateThreshold
     );
@@ -192,18 +175,10 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
     
     /**
-     * @notice Returns fee percentages for different operations
-     * @return depositFee Fee percentage for deposits (scaled by 10000)
-     * @return redemptionFee Fee percentage for redemptions (scaled by 10000)
-     * @return interestFee Fee percentage taken by protocol from interest (scaled by 10000)
-     * @return yieldFee Fee percentage taken by protocol from yield generated on reserve tokens (scaled by 10000)
+     * @notice Returns Protocol fee percentage
+     * @return protocolFee Fee percentage (scaled by 10000)
      */
-    function getFeePercentages() external view returns (
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee
-    );
+    function getProtocolFee() external view returns (uint256 protocolFee);
     
     /**
      * @notice Returns the fee recipient address
@@ -212,7 +187,7 @@ interface IPoolStrategy {
     function getFeeRecipient() external view returns (address recipient);
 
     // --------------------------------------------------------------------------------
-    //                             COLLATERAL FUNCTIONS
+    //                             COLLATERAL & LIQUIDITY FUNCTIONS
     // --------------------------------------------------------------------------------
     
     /**
@@ -228,16 +203,14 @@ interface IPoolStrategy {
     );
     
     /**
-     * @notice Returns LP collateral parameters
-     * @return healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @return warningThreshold Warning threshold (scaled by 10000)
-     * @return registrationRatio Registration minimum ratio (scaled by 10000)
+     * @notice Returns LP liquidity parameters
+     * @return healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @return liquidationThreshold Liquidation threshold (scaled by 10000)
      * @return liquidationReward Liquidation reward percentage (scaled by 10000)
      */
-    function getLPCollateralParams() external view returns (
+    function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
-        uint256 warningThreshold,
-        uint256 registrationRatio,
+        uint256 liquidationThreshold,
         uint256 liquidationReward
     );
     
@@ -253,14 +226,14 @@ interface IPoolStrategy {
     ) external view returns (uint256 requiredCollateral);
     
     /**
-     * @notice Calculates required LP collateral
+     * @notice Calculates required LP liquidity
      * @param liquidityManager Address of the LP Registry contract
      * @param lp Address of the LP
      */
-    function calculateLPRequiredCollateral(
+    function calculateLPRequiredLiquidity(
         address liquidityManager, 
         address lp
-    ) external view returns (uint256 requiredCollateral);
+    ) external view returns (uint256 requiredLiquidity);
 
     /**
      * @notice Check collateral health status of a user
@@ -271,10 +244,10 @@ interface IPoolStrategy {
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health);
 
     /**
-     * @notice Check collateral health status of an LP
+     * @notice Check liquidity health status of an LP
      * @param liquidityManager Address of the pool liquidity manager
      * @param lp LP address
      * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
      */
-    function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health);
+    function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health);
 }

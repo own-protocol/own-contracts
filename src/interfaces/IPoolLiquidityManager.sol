@@ -11,58 +11,58 @@ import "../interfaces/IAssetOracle.sol";
  * @notice Interface for the pool liquidity manager contract
  */
 interface IPoolLiquidityManager {
+
     /**
-     * @notice LP's current collateral and liquidity information
+     * @notice LP position in the protocol
+     * @param liquidityCommitment Amount of liquidity committed
+     * @param collateralAmount Amount of collateral
+     * @param interestAccrued Interest accrued on the position
      */
-    struct CollateralInfo {
-        uint256 collateralAmount;      // Amount of collateral deposited
-        uint256 liquidityAmount;       // Amount of liquidity provided
+    struct LPPosition {
+        uint256 liquidityCommitment;
+        uint256 collateralAmount;
+        uint256 interestAccrued;
     }
 
     /**
      * @notice Emitted when an LP deposits collateral
      */
-    event CollateralDeposited(address indexed lp, uint256 amount);
+    event CollateralAdded(address indexed lp, uint256 amount);
 
     /**
      * @notice Emitted when an LP withdraws collateral
      */
-    event CollateralWithdrawn(address indexed lp, uint256 amount);
+    event CollateralRemoved(address indexed lp, uint256 amount);
 
     /**
-     * @notice Emitted when rebalance amount is added to LP's collateral
+     * @notice Emitted when interest is claimed by an LP
      */
-    event RebalanceAdded(address indexed lp, uint256 amount);
+    event InterestClaimed(address indexed lp, uint256 amount);
 
     /**
-     * @notice Emitted when rebalance amount is deducted from LP's collateral
-     */
-    event RebalanceDeducted(address indexed lp, uint256 amount);
-
-    /**
-     * @notice Emitted when LP's collateral is liquidated
+     * @notice Emitted when LP's liquidity is liquidated
      */
     event LPLiquidated(address indexed lp, address indexed liquidator, uint256 reward);
 
     /**
-     * @notice Emitted when a new LP is registered
+     * @notice Emitted when an LP adds liquidity
      */
-    event LPRegistered(address indexed lp, uint256 liquidityAmount, uint256 collateralAmount);
+    event LiquidityAdded(address indexed lp, uint256 amount, uint256 collateral);
+
+    /**
+     * @notice Emitted when an LP removes liquidity
+     */
+    event LiquidityRemoved(address indexed lp, uint256 amount, uint256 collateral);
+
+    /**
+     * @notice Emitted when an LP is added
+     */
+    event LPAdded(address indexed lp, uint256 amount, uint256 collateral);
 
     /**
      * @notice Emitted when an LP is removed
      */
     event LPRemoved(address indexed lp);
-
-    /**
-     * @notice Emitted when an LP increases their liquidity
-     */
-    event LiquidityIncreased(address indexed lp, uint256 amount);
-
-    /**
-     * @notice Emitted when an LP decreases their liquidity
-     */
-    event LiquidityDecreased(address indexed lp, uint256 amount);
 
     /**
      * @notice Error when zero amount is provided
@@ -75,24 +75,19 @@ interface IPoolLiquidityManager {
     error NotRegisteredLP();
 
     /**
-     * @notice Error when withdrawal amount exceeds available collateral
+     * @notice Error when withdrawal amount exceeds available liquidity
      */
     error InvalidWithdrawalAmount();
 
     /**
-     * @notice Error when collateral would fall below minimum ratio
+     * @notice Error when liquidity would fall below minimum ratio
      */
-    error InsufficientCollateral();
+    error InsufficientLiquidity();
 
     /**
      * @notice Error when LP is not eligible for liquidation
      */
     error NotEligibleForLiquidation();
-    
-    /**
-     * @notice Error when LP is already registered
-     */
-    error AlreadyRegistered();
 
     /**
      * @notice Error when liquidation is invalid
@@ -100,14 +95,14 @@ interface IPoolLiquidityManager {
     error InvalidLiquidation();
 
     /**
+     * @notice Error when LP has no interest accrued
+     */
+    error NoInterestAccrued();
+
+    /**
      * @notice Error when LP has no liquidity to liquidate
      */
     error NoLiquidityToLiquidate();
-    
-    /**
-     * @notice Error when trying to decrease liquidity more than available
-     */
-    error InsufficientLiquidity();
 
     /**
      * @notice Error when caller is not the pool cycle manager
@@ -130,9 +125,14 @@ interface IPoolLiquidityManager {
     error Unauthorized();
 
     /**
-     * @notice Total liquidity in the pool
+     * @notice Total liquidity committed by LPs
      */
-    function totalLPLiquidity() external view returns (uint256);
+    function totalLPLiquidityCommited() external view returns (uint256);
+
+    /**
+     * @notice Total lp collateral
+     */
+    function totalLPCollateral() external view returns (uint256);
     
     /**
      * @notice Number of registered LPs
@@ -140,40 +140,33 @@ interface IPoolLiquidityManager {
     function lpCount() external view returns (uint256);
 
     /**
-     * @notice Register as a liquidity provider
-     * @param liquidityAmount The amount of liquidity to provide
-     */
-    function registerLP(uint256 liquidityAmount) external;
-
-    /**
-     * @notice Unregister LP from registry
-     * @param lp The address of the LP
-     */
-    function unregisterLP(address lp) external;
-
-    /**
-     * @notice Increase your liquidity amount
+     * @notice Add lp liquidity
      * @param amount The amount of liquidity to add
      */
-    function increaseLiquidity(uint256 amount) external;
+    function addLiquidity(uint256 amount) external;
 
     /**
-     * @notice Decrease your liquidity amount
+     * @notice remove lp liquidity
      * @param amount The amount of liquidity to remove
      */
-    function decreaseLiquidity(uint256 amount) external;
+    function removeLiquidity(uint256 amount) external;
 
     /**
      * @notice Deposit additional collateral beyond the minimum
-     * @param amount Amount of collateral to deposit
+     * @param amount Amount of collateral to add
      */
-    function deposit(uint256 amount) external;
+    function addCollateral(uint256 amount) external;
 
     /**
      * @notice Withdraw excess collateral if above minimum requirements
-     * @param amount Amount of collateral to withdraw
+     * @param amount Amount of collateral to remove
      */
-    function withdraw(uint256 amount) external;
+    function removeCollateral(uint256 amount) external;
+
+    /**
+     * @notice Claim interest accrued on LP position
+     */
+    function claimInterest() external;
 
     /**
      * @notice Liquidate an LP below threshold
@@ -182,18 +175,11 @@ interface IPoolLiquidityManager {
     function liquidateLP(address lp) external;
 
     /**
-     * @notice Deduct rebalance amount from LP's collateral
-     * @param lp Address of the LP
-     * @param amount Amount to deduct
-     */
-    function deductRebalanceAmount(address lp, uint256 amount) external;
-
-    /**
-     * @notice Add rebalance amount to LP's collateral
+     * @notice Add interest amount to LP's position
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToCollateral(address lp, uint256 amount) external;
+    function addToInterest(address lp, uint256 amount) external;
 
     /**
      * @notice Get LP asset holdings value (in reserve token)
@@ -208,10 +194,10 @@ interface IPoolLiquidityManager {
     function getLPLiquidityShare(address lp) external view returns (uint256);
     
     /**
-     * @notice Get LP's current collateral and liquidity info
+     * @notice Get LP's current liquidity and liquidity info
      * @param lp Address of the LP
      */
-    function getLPInfo(address lp) external view returns (CollateralInfo memory);
+    function getLPPosition(address lp) external view returns (LPPosition memory);
     
     /**
      * @notice Check if an address is a registered LP
@@ -227,17 +213,21 @@ interface IPoolLiquidityManager {
     function getLPCount() external view returns (uint256);
     
     /**
-     * @notice Returns the current liquidity amount for an LP
+     * @notice Returns the current liquidity commitment of an LP
      * @param lp The address of the LP
      * @return uint256 The current liquidity amount
      */
-    function getLPLiquidity(address lp) external view returns (uint256);
+    function getLPLiquidityCommitment(address lp) external view returns (uint256);
     
     /**
-     * @notice Returns the total liquidity amount
-     * @return uint256 The total liquidity amount
+     * @notice Returns the total liquidity committed by LPs
      */
-    function getTotalLPLiquidity() external view returns (uint256);
+    function getTotalLPLiquidityCommited() external view returns (uint256);
+
+    /**
+     * @notice Returns the total lp collateral
+     */
+    function getTotalLPCollateral() external view returns (uint256);
 
     /**
      * @notice Returns the reserve to asset decimal factor

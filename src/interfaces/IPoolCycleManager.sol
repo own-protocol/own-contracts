@@ -17,14 +17,18 @@ import {IAssetPool} from "./IAssetPool.sol";
 interface IPoolCycleManager {
     /**
      * @notice Enum representing the current state of the pool's operational cycle
-     * @param ACTIVE Normal operation state where users can deposit and redeem
-     * @param REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
-     * @param REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
+     * @param POOL_ACTIVE Normal operation state where users can deposit and redeem
+     * @param POOL_REBALANCING_OFFCHAIN State during which LPs adjust their asset positions offchain
+     * @param POOL_REBALANCING_ONCHAIN State during which LPs rebalance the pool onchain
+     * @param POOL_ACTIVE_WITH_DEVIATION State when the pool is active but has a deviation from the asset price
+     * @param POOL_HALTED State when the pool is halted due to rebalance failure or other issues
      */
     enum CycleState {
-        ACTIVE,
-        REBALANCING_OFFCHAIN,
-        REBALANCING_ONCHAIN
+        POOL_ACTIVE,
+        POOL_REBALANCING_OFFCHAIN,
+        POOL_REBALANCING_ONCHAIN,
+        POOL_ACTIVE_WITH_DEVIATION,
+        POOL_HALTED
     }
 
     // --------------------------------------------------------------------------------
@@ -84,8 +88,6 @@ interface IPoolCycleManager {
     error AlreadyRebalanced();
     /// @notice Thrown when a rebalance action is attempted after the window has closed
     error RebalancingExpired();
-    /// @notice Thrown when attempting operations during an active cycle
-    error CycleInProgress();
     /// @notice Thrown when an LP has insufficient liquidity for an operation
     error InsufficientLPLiquidity();
     /// @notice Thrown when an LP has insufficient collateral for an operation
@@ -183,11 +185,6 @@ interface IPoolCycleManager {
      * @notice Returns the timestamp of the last cycle action
      */
     function lastCycleActionDateTime() external view returns (uint256);
-
-    /**
-     * @notice Returns reserve token balance of the pool (excluding new deposits).
-     */
-    function poolReserveBalance() external view returns (uint256);
 
     /**
      * @notice Returns the asset token balance of the pool

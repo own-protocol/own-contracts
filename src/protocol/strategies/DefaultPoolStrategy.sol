@@ -13,8 +13,7 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
  * @title DefaultPoolStrategy
- * @notice Default implementation of pool strategy with standard interest and collateral models
- * @dev Uses variable LP collateral based on asset holdings and fixed user collateral based on deposits
+ * @notice Default implementation of pool strategy with standard interest, collateral & liquidity models
  */
 contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
@@ -22,7 +21,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     // cycle parameters
-    uint256 public cycleLength;           // Length of each cycle (default 0, not used)
     uint256 public rebalanceLength;      // length of onchain rebalancing period (default: 3 hours)
     uint256 public oracleUpdateThreshold; // Threshold for oracle update (15 minutes)
     
@@ -30,26 +28,22 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
     uint256 public interestRate1;         // Tier 1 interest rate (e.g., 18%)
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
-    uint256 public utilizationTier1;      // First utilization tier (e.g., 50%)
+    uint256 public utilizationTier1;      // First utilization tier (e.g., 65%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
     uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
     // Fee parameters
-    uint256 public depositFeePercentage;  // Fee for deposits (e.g., 0.0%)
-    uint256 public redemptionFeePercentage; // Fee for redemptions (e.g., 0.0%)
-    uint256 public interestFeePercentage; // Fee on interest (e.g., 0.0%)
-    uint256 public yieldFeePercentage;    // Fee on reserve token yield (e.g., 0.0%)
+    uint256 public protocolFeePercentage; // Fee on interest (e.g., 10.0%)
     address public feeRecipient;          // Address to receive fees
     
-    // User collateral parameters (fixed deposit based)
+    // User collateral parameters 
     uint256 public userHealthyCollateralRatio;    // Healthy ratio (e.g., 20%)
-    uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 10%)
-    uint256 public userLiquidationReward;         // Liquidation reward (e.g., 5%)
+    uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 12.5%)
+    uint256 public userLiquidationReward;         // Liquidation reward (e.g., 10%)
     
-    // LP collateral parameters (variable asset based)
-    uint256 public lpHealthyCollateralRatio;      // Healthy ratio (e.g., 50%)
-    uint256 public lpWarningThreshold;            // Warning threshold (e.g., 30%) 
-    uint256 public lpRegistrationRatio;           // Registration minimum (e.g., 20%)
+    // LP liquidity parameters 
+    uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
+    uint256 public lpLiquidationThreshold;        // Liquidatiom threshold (e.g., 20%) 
     uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
     
     // Constants
@@ -73,21 +67,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
     /**
      * @notice Sets the cycle parameters
-     * @param _cycleLength Length of each cycle in seconds
      * @param _rebalanceLength Length of rebalancing period in seconds
      * @param _oracleUpdateThreshold Threshold for oracle update
      */
     function setCycleParams(
-        uint256 _cycleLength, 
         uint256 _rebalanceLength,
         uint256 _oracleUpdateThreshold
     ) external onlyOwner {
-        require(_rebalanceLength <= _cycleLength, "Rebalance length must be < cycle length");
-        cycleLength = _cycleLength;
         rebalanceLength = _rebalanceLength;
         oracleUpdateThreshold = _oracleUpdateThreshold;
 
-        emit CycleParamsUpdated(_cycleLength, _rebalanceLength, _oracleUpdateThreshold);
+        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold);
     }
     
     /**
@@ -133,39 +123,24 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     /**
      * @notice Sets the fee parameters
-     * @param depositFee Fee for deposits (scaled by 10000)
-     * @param redemptionFee Fee for redemptions (scaled by 10000)
-     * @param interestFee Fee on interest (scaled by 10000)
-     * @param yieldFee Fee on reserve token yield (scaled by 10000)
+     * @param protocolFee fee on interest (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
-    function setFeeParams(
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee,
+    function setProtocolFeeParams(
+        uint256 protocolFee,
         address _feeRecipient
     ) external onlyOwner {
         require(
-            depositFee <= BPS && 
-            redemptionFee <= BPS && 
-            interestFee <= BPS && 
-            yieldFee <= BPS, 
+            protocolFee <= BPS, 
             "Fees cannot exceed 100%"
         );
         require(_feeRecipient != address(0), "Invalid fee recipient");
         
-        depositFeePercentage = depositFee;
-        redemptionFeePercentage = redemptionFee;
-        interestFeePercentage = interestFee;
-        yieldFeePercentage = yieldFee;
+        protocolFeePercentage = protocolFee;
         feeRecipient = _feeRecipient;
         
         emit FeeParamsUpdated(
-            depositFee,
-            redemptionFee,
-            interestFee,
-            yieldFee,
+            protocolFee,
             _feeRecipient
         );
     }
@@ -196,31 +171,26 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Sets the LP collateral parameters
-     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
-     * @param warningThreshold Warning threshold (scaled by 10000)
-     * @param registrationRatio Registration minimum ratio (scaled by 10000)
+     * @notice Sets the LP liquidity parameters
+     * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @param liquidationThreshold Warning threshold (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
-    function setLPCollateralParams(
+    function setLPLiquidityParams(
         uint256 healthyRatio,
-        uint256 warningThreshold,
-        uint256 registrationRatio,
+        uint256 liquidationThreshold,
         uint256 liquidationReward
     ) external onlyOwner {
-        require(warningThreshold < healthyRatio, "Warning threshold must be < healthy ratio");
-        require(registrationRatio <= warningThreshold, "Registration ratio must be <= warning threshold");
+        require(liquidationThreshold < healthyRatio, "liquidation threshold must be < healthy ratio");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
-        lpHealthyCollateralRatio = healthyRatio;
-        lpWarningThreshold = warningThreshold;
-        lpRegistrationRatio = registrationRatio;
+        lpHealthyLiquidityRatio = healthyRatio;
+        lpLiquidationThreshold = liquidationThreshold;
         lpLiquidationReward = liquidationReward;
         
-        emit LPCollateralParamsUpdated(
+        emit LPLiquidityParamsUpdated(
             healthyRatio,
-            warningThreshold,
-            registrationRatio,
+            liquidationThreshold,
             liquidationReward
         );
     }
@@ -231,16 +201,14 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
     /**
      * @notice Returns the cycle parameters
-     * @return cyclePeriod Length of each cycle in seconds
      * @return rebalancePeriod Length of rebalancing period in seconds
      * @return oracleThreshold Threshold for oracle update
      */
     function getCycleParams() external view returns (
-        uint256 cyclePeriod, 
         uint256 rebalancePeriod,
         uint256 oracleThreshold
     ) {
-        return (cycleLength, rebalanceLength, oracleThreshold);
+        return (rebalanceLength, oracleThreshold);
     }
     
     // --------------------------------------------------------------------------------
@@ -307,15 +275,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
     
     /**
-     * @notice Returns fee percentages for different operations
+     * @notice Returns protocol fee percentage
      */
-    function getFeePercentages() external view returns (
-        uint256 depositFee,
-        uint256 redemptionFee,
-        uint256 interestFee,
-        uint256 yieldFee
+    function getProtocolFee() external view returns (
+        uint256 protocolFee
     ) {
-        return (depositFeePercentage, redemptionFeePercentage, interestFeePercentage, yieldFeePercentage);
+        return protocolFeePercentage;
     }
     
     /**
@@ -326,7 +291,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     // --------------------------------------------------------------------------------
-    //                             COLLATERAL FUNCTIONS
+    //                             COLLATERAL & LIQUIDITY FUNCTIONS
     // --------------------------------------------------------------------------------
     
     /**
@@ -345,18 +310,16 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Returns LP collateral parameters
+     * @notice Returns LP liquidity parameters
      */
-    function getLPCollateralParams() external view returns (
+    function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
-        uint256 warningThreshold,
-        uint256 registrationRatio,
+        uint256 liquidationThreshold,
         uint256 liquidationReward
     ) {
         return (
-            lpHealthyCollateralRatio,
-            lpWarningThreshold,
-            lpRegistrationRatio,
+            lpHealthyLiquidityRatio,
+            lpLiquidationThreshold,
             lpLiquidationReward
         );
     }
@@ -379,16 +342,16 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Calculates required LP collateral
+     * @notice Calculates required LP liquidity
      * @param liquidityManager Address of the pool liquidity manager
      * @param lp Address of the LP
      */
-    function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
+    function calculateLPRequiredLiquidity(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
 
-        return Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
+        return Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
     }
 
     /**
@@ -424,23 +387,23 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
 
     /**
-     * @notice Check collateral health status of an LP
+     * @notice Check liquidity health status of an LP
      * @param lp Address of the LP
      * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
      */
-    function getLPCollateralHealth(address liquidityManager, address lp) external view returns (uint8 health) {
+    function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
-        IPoolLiquidityManager.CollateralInfo memory lpInfo = manager.getLPInfo(lp);
-        uint256 collateralAmount = lpInfo.collateralAmount;
+        IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
+        uint256 lpCollateral = position.collateralAmount;
         
-        uint256 healthyCollateral = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
-        uint256 reqCollateral = Math.mulDiv(lpAssetValue, lpWarningThreshold, BPS);
+        uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
+        uint256 reqLiquidity = Math.mulDiv(lpAssetValue, lpLiquidationThreshold, BPS);
         
-        if (collateralAmount >= healthyCollateral) {
+        if (lpCollateral >= healthyLiquidity) {
             return 3; // Healthy
-        } else if (collateralAmount >= reqCollateral) {
+        } else if (lpCollateral >= reqLiquidity) {
             return 2; // Warning
         } else {
             return 1; // Liquidatable
