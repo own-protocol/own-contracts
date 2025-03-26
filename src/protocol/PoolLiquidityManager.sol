@@ -37,6 +37,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
 
+    // Mapping to track liquidation initiators
+    mapping(address => address) public liquidationInitiators;
+
     // --------------------------------------------------------------------------------
     //                                  MODIFIERS
     // --------------------------------------------------------------------------------
@@ -196,8 +199,18 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         lpPositions[msg.sender].collateralAmount += amount;
 
         totalLPCollateral += amount;
-        
+        uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        if (liquidityHealth == 1) revert InsufficientCollateralHealth(liquidityHealth);
+
         emit CollateralAdded(msg.sender, amount);
+
+        LPRequest storage request = lpRequests[msg.sender];
+        if (request.requestType == RequestType.LIQUIDATE && _isPoolCycleActive()) {
+            // Position is no longer liquidatable, cancel the liquidation request
+            delete liquidationInitiators[msg.sender];
+            request.requestType = RequestType.NONE;
+            emit LiquidationCancelled(msg.sender);
+        }
     }
 
     /**
@@ -236,12 +249,62 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-    * @notice Liquidate an LP below threshold 
-    * @param lp Address of the LP to liquidate
+     * @notice Liquidate an LP below threshold 
+     * @param lp Address of the LP to liquidate
+     * @param amount Amount of liquidity to liquidate
     */
-    function liquidateLP(address lp) external nonReentrant {
+    function liquidateLP(address lp, uint256 amount) external nonReentrant {
         if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
+            if (liquidationAmount == 0) revert InvalidAmount();
+    
+        // Check if LP is liquidatable
+        uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
+        if (liquidityHealth != 1) revert NotEligibleForLiquidation();
+
+        LPRequest storage request = lpRequests[lp];
+        if (request.requestType != RequestType.NONE) revert RequestPending();
+
+        // Get LP position details
+        LPPosition storage position = lpPositions[lp];
+        uint256 liquidityCommitment = position.liquidityCommitment;
+        uint256 collateralAmount = position.collateralAmount;
+        if (liquidationAmount > liquidityCommitment) revert InvalidAmount();
+
+        // Get LP liquidity parameters
+        (uint256 healthyRatio, , uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
+
+        // Calculate liquidation reward
+        uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
+        if (collateralAmount < rewardAmount) revert InsufficientCollateral();
+        uint256 collateralAfterReward = collateralAmount - rewardAmount;
+
+        // Calculate if position will be healthy after liquidation
+        uint256 remainingLiquidity = liquidityCommitment - liquidationAmount;
+        uint256 requiredCollateral = Math.mulDiv(remainingLiquidity, healthyRatio, BPS);
+        if (collateralAfterReward < requiredCollateral) revert InsufficientCollateral();
+
+        // Calculate available liquidity for reduction based on utilization
+        uint256 availableLiquidity = calculateAvailableLiquidity();
         
+        if (availableLiquidity == 0) revert UtilizationTooHighForOperation();
+        
+        // Determine allowed reduction amount (same logic as reduceLiquidity)
+        uint256 allowedReduction = availableLiquidity / 2;
+
+        // Ensure liquidation amount doesn't exceed allowed reduction
+        if (liquidationAmount > allowedReduction) {
+            revert OperationExceedsAvailableLiquidity(liquidationAmount, allowedReduction);
+        }
+
+        // Create the liquidation request
+        _createRequest(lp, RequestType.LIQUIDATE, liquidationAmount);
+
+        // Store liquidator to reward them when request is resolved
+        liquidationInitiators[lp] = msg.sender;
+
+        totalLPLiquidityCommited -= liquidationAmount;
+
+        emit LPLiquidationRequested(lp, msg.sender, poolCycleManager.cycleIndex(), liquidationAmount);
     }
 
     /**
@@ -276,6 +339,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             position.liquidityCommitment -= request.requestAmount;
 
             emit LiquidityReduced(lp, request.requestAmount);
+
+            if(position.liquidityCommitment == 0) {
+                _removeLP(lp);
+            }
+        } else if (request.requestType == RequestType.LIQUIDATE) {
+
+            (,, uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
+            // Transfer liquidation reward to liquidator
+            uint256 rewardAmount = Math.mulDiv(request.requestAmount, liquidationReward, BPS);
+
+            position.liquidityCommitment -= request.requestAmount;
+            position.collateralAmount -= rewardAmount;
+            totalLPCollateral -= rewardAmount;
+
+            reserveToken.transfer(liquidationInitiators[lp], rewardAmount);
+
+            emit LPLiquidated(lp, liquidationInitiators[lp], request.requestAmount);
 
             if(position.liquidityCommitment == 0) {
                 _removeLP(lp);
@@ -319,7 +399,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getLPPosition(address lp) external view returns (LPPosition memory) {
         return lpPositions[lp];
     }
-    
+
+    /**
+     * @notice Get LP's current request
+     * @param lp Address of the LP
+     */
+    function getLPRequest(address lp) external view returns (LPRequest memory) {
+        return lpRequests[lp];
+    }
+
+    /**
+     * @notice Get LP's current liquidation initiator
+     * @param lp Address of the LP
+     */
+    function getLPliquidationIntiator(address lp) external view returns (address) {
+        return liquidationInitiators[lp];
+    }
+
     /**
      * @notice Check if an address is a registered LP
      * @param lp The address to check
