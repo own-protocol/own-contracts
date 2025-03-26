@@ -225,14 +225,18 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
             amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            isDeposit = true;
+            
+            // Transfer funds from LP's wallet to the pool
+            reserveToken.transferFrom(lp, address(assetPool), amount);
             
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP liquidity
             // The LP gets back funds which are added to their liquidity
             amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             
-            // Transfer from pool to LP's liquidity
-            reserveToken.transfer(address(poolLiquidityManager), amount);
+            // Request the asset pool to transfer funds to the LP
+            assetPool.transferRebalanceAmount(lp, amount);
         }
         // If rebalanceAmount is 0, no action needed
 
@@ -357,6 +361,44 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     // --------------------------------------------------------------------------------
     //                            VIEW FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Calculates the expected rebalance amount for a specific LP at a given price
+     * @dev This helper function allows LPs to determine how much they need to approve/have available
+     * @param lp Address of the LP
+     * @param rebalancePrice Price at which to calculate the rebalance
+     * @return rebalanceAmount The amount the LP needs to contribute (positive) or will receive (negative)
+     * @return isDeposit True if LP needs to deposit funds, false if LP will receive funds
+     */
+    function calculateLPRebalanceAmount(address lp, uint256 rebalancePrice) public view returns (uint256 rebalanceAmount, bool isDeposit) {
+        // Validate the LP is registered
+        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+        
+        // Get LP's liquidity commitment and total liquidity
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
+        
+        if (totalLiquidity == 0) return (0, false);
+        
+        // Calculate overall rebalance amount based on price
+        int256 overallRebalanceAmount = calculateRebalanceAmount(rebalancePrice);
+        
+        if (overallRebalanceAmount > 0) {
+            // Positive rebalance amount means LP needs to deposit funds
+            rebalanceAmount = Math.mulDiv(uint256(overallRebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            isDeposit = true;
+        } else if (overallRebalanceAmount < 0) {
+            // Negative rebalance amount means LP will receive funds
+            rebalanceAmount = Math.mulDiv(uint256(-overallRebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            isDeposit = false;
+        } else {
+            // Zero rebalance amount, no action needed
+            rebalanceAmount = 0;
+            isDeposit = false;
+        }
+        
+        return (rebalanceAmount, isDeposit);
+    }
 
     /**
      * @notice Returns information about the pool.

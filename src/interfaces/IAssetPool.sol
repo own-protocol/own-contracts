@@ -124,6 +124,18 @@ interface IAssetPool {
     event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
 
     /**
+     * @notice Emitted when rebalance amount is transferred to an LP
+     * @param lp Address of the LP
+     * @param amount Amount of rebalance funds transferred
+     * @param cycleIndex Index of the cycle
+     */
+    event RebalanceAmountTransferred(
+        address indexed lp,
+        uint256 indexed amount,
+        uint256 indexed cycleIndex
+    );
+
+    /**
      * @notice Emitted when interest is distributed to an LP
      * @param lp Address of the LP
      * @param amount Amount of interest distributed
@@ -214,8 +226,15 @@ interface IAssetPool {
     function liquidatePosition(address user) external;
 
     // --------------------------------------------------------------------------------
-    //                               EXTERNAL FUNCTIONS
+    //                      EXTERNAL FUNCTIONS (POOL CYCLE MANAGER)
     // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Transfers rebalance amount from the pool to the LP during negative rebalance
+     * @param lp Address of the LP to whom rebalance amount is owed
+     * @param amount Amount of reserve tokens to transfer to the LP
+     */
+    function transferRebalanceAmount(address lp, uint256 amount) external;
 
     /**
     * @notice Deducts interest from the pool and transfers it to the liquidity manager
