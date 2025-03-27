@@ -158,6 +158,48 @@ interface IAssetPool {
         uint256 indexed cycleIndex
     );
 
+    /**
+     * @notice Emitted when a liquidation is requested
+     * @param user Address of the user being liquidated
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of tokens being liquidated
+     * @param cycleIndex Cycle index when the request was made
+     */
+    event LiquidationRequested(
+        address indexed user, 
+        address liquidator, 
+        uint256 indexed amount, 
+        uint256 indexed cycleIndex
+    );
+
+    /**
+     * @notice Emitted when a liquidation is cancelled
+     * @param user Address of the user
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of tokens returned to liquidator
+     */
+    event LiquidationCancelled(
+        address indexed user, 
+        address indexed liquidator, 
+        uint256 amount
+    );
+
+    /**
+     * @notice Emitted when a liquidation is claimed
+     * @param user Address of the user
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of tokens liquidated
+     * @param redemptionAmount Amount of reserve tokens for redemption
+     * @param rewardAmount Amount of reward tokens
+     */
+    event LiquidationClaimed(
+        address indexed user, 
+        address indexed liquidator, 
+        uint256 amount, 
+        uint256 redemptionAmount, 
+        uint256 rewardAmount
+    );
+
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
@@ -190,6 +232,12 @@ interface IAssetPool {
     error InvalidRedemptionRequest();
     /// @notice Thrown when pool has insufficient liquidity
     error InsufficientLiquidity();
+    /// @notice Thrown when liquidation request is invalid
+    error InvalidLiquidationRequest();
+    /// @notice Thrown when liquidation amount exceeds the limit
+    error ExcessiveLiquidationAmount(uint256 amount, uint256 maxLiquidationAmount);
+    /// @notice Thrown when a better liquidation request exists
+    error BetterLiquidationRequestExists();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -231,10 +279,17 @@ interface IAssetPool {
     function withdrawCollateral(uint256 amount) external;
 
     /**
-     * @notice Liquidate an undercollateralized position
-     * @param user Address of the user whose position to liquidate
+     * @notice Initiates a liquidation request for an underwater position
+     * @param user Address of the user whose position is to be liquidated
+     * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
      */
-    function liquidatePosition(address user) external;
+    function requestLiquidation(address user, uint256 amount) external;
+
+    /**
+     * @notice Process a liquidation claim after the cycle is completed
+     * @param user Address of the user whose position was liquidated
+     */
+    function claimLiquidation(address user) external;
 
     // --------------------------------------------------------------------------------
     //                      EXTERNAL FUNCTIONS (POOL CYCLE MANAGER)
@@ -306,6 +361,12 @@ interface IAssetPool {
     );
 
     /**
+     * @notice Get users's current liquidation initiator
+     * @param user Address of the user
+     */
+    function getUserLiquidationIntiator(address user) external view returns (address);
+
+    /**
      * @notice Get total pending deposit requests for the current cycle
      * @return Total amount of pending deposits
      */
@@ -321,11 +382,6 @@ interface IAssetPool {
      * @notice Returns reserve token balance of the pool (excluding new deposits).
      */
     function poolReserveBalance() external view returns (uint256);
-
-    /**
-     * @notice Total user collateral in the pool
-     */
-    function totalUserCollateral() external view returns (uint256);
 
     /**
      * @notice Calculate current interest rate based on pool utilization

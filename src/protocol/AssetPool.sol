@@ -52,9 +52,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     mapping(address => UserRequest) public userRequests;
 
     /**
-     * @notice Total user collateral in the pool
+     * @notice Mapping of user addresses to their liquidation initiators
      */
-    uint256 public totalUserCollateral;
+    mapping(address => address) public liquidationInitiators;
 
     /**
      * @dev Constructor for the implementation contract
@@ -131,7 +131,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @notice Allows users to deposit additional collateral
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(uint256 amount) external nonReentrant {
+    function addCollateral(uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
 
         UserPosition storage position = userPositions[msg.sender];
@@ -141,6 +141,27 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         
         // Update user's position
         position.collateralAmount += amount;
+
+        uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), msg.sender);
+        if (collateralHealth < 3)  revert InsufficientCollateral();
+
+        UserRequest storage request = userRequests[msg.sender];
+        if (request.requestType == RequestType.LIQUIDATE) {
+
+            if (request.requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
+
+            uint256 requestAmount = request.amount;
+            address liquidationInitiator = liquidationInitiators[msg.sender];
+            // Cancel liquidation request if collateral is added
+            cycleTotalRedemptionRequests -= requestAmount;
+            // Refund the liquidator's tokens
+            assetToken.transfer(liquidationInitiators[msg.sender], requestAmount);
+
+            delete userRequests[msg.sender];
+            delete liquidationInitiators[msg.sender];
+
+            emit LiquidationCancelled(msg.sender, liquidationInitiator, requestAmount);
+        }
         
         emit CollateralDeposited(msg.sender, amount);
     }
@@ -172,42 +193,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         reserveToken.transfer(msg.sender, amount);
         
         emit CollateralWithdrawn(msg.sender, amount);
-    }
-
-    /**
-     * @notice Liquidate an undercollateralized position
-     * @param user Address of the user whose position to liquidate
-     * ToDo: Require liquidator to add the assetToken to the pool which will be used to liquidate the position
-     */
-    function liquidatePosition(address user) external nonReentrant {
-        if (user == address(0) || user == msg.sender) revert Unauthorized();
-        
-        UserPosition storage position = userPositions[user];
-        
-        // Check if position is liquidatable
-        uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
-        bool isLiquidatable = collateralHealth == 1;
-        if (!isLiquidatable) revert PositionNotLiquidatable();
-
-        ( , , uint256 liquidationReward) = poolStrategy.getUserCollateralParams();
-        
-        // Calculate liquidation reward
-        uint256 liquidationRewardAmount = Math.mulDiv(position.collateralAmount, liquidationReward, BPS);
-        uint256 remainingCollateral = position.collateralAmount - (liquidationRewardAmount + getInterestDebt(user));
-        
-        // Clear the user's position
-        position.collateralAmount = 0;
-        position.scaledInterest = 0;
-        
-        // Transfer reward to liquidator
-        reserveToken.transfer(msg.sender, liquidationRewardAmount);
-        
-        // Transfer remaining collateral back to user
-        if (remainingCollateral > 0) {
-            reserveToken.transfer(user, remainingCollateral);
-        }
-        
-        emit PositionLiquidated(user, msg.sender, liquidationRewardAmount);
     }
 
     // --------------------------------------------------------------------------------
@@ -390,6 +375,113 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             
             emit ReserveWithdrawn(user, reserveAmount, requestCycle);
         }
+    }
+
+    /**
+     * @notice Initiates a liquidation request for an underwater position
+     * @param user Address of the user whose position is to be liquidated
+     * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
+     */
+    function requestLiquidation(address user, uint256 amount) external nonReentrant onlyActiveCycle {
+        // Basic validations
+        if (user == address(0) || user == msg.sender) revert InvalidLiquidationRequest();
+        if (amount == 0) revert InvalidAmount();
+        
+        // Check if the user's position is liquidatable
+        uint8 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
+        if (collateralHealth != 1) revert PositionNotLiquidatable();
+        
+        // Get user's current position
+        UserPosition storage position = userPositions[user];
+        uint256 userAssetAmount = position.assetAmount;
+        
+        // Verify that user has assets
+        if (userAssetAmount == 0) revert InvalidLiquidationRequest();
+        
+        // Check if amount exceeds the 30% limit
+        uint256 maxLiquidationAmount = (userAssetAmount * 30) / 100; // 30% of user's position
+        if (amount > maxLiquidationAmount) revert ExcessiveLiquidationAmount(amount, maxLiquidationAmount);
+        
+        // Verify the liquidator has enough xTokens
+        if (assetToken.balanceOf(msg.sender) < amount) revert InsufficientBalance();
+        
+        // Check if there's already a liquidation request
+        UserRequest storage request = userRequests[user];
+        
+        // If the current request is better than the previous one, cancel the previous one
+        if (request.requestType == RequestType.LIQUIDATE) {
+
+            if(request.amount >= amount) revert BetterLiquidationRequestExists();
+            cycleTotalRedemptionRequests -= request.amount;
+            // Refund the previous liquidator's tokens
+            assetToken.transfer(liquidationInitiators[user], request.amount);
+            emit LiquidationCancelled(user, liquidationInitiators[user], request.amount);
+
+        } else if (request.requestType != RequestType.NONE) {
+            // Cannot liquidate if there's a non-liquidation request pending
+            revert RequestPending();
+        }
+        
+        // Transfer xTokens from liquidator to pool
+        assetToken.transferFrom(msg.sender, address(this), amount);
+        
+        // Create the liquidation request
+        request.requestType = RequestType.LIQUIDATE;
+        request.amount = amount;
+        request.collateralAmount = 0;
+        request.requestCycle = poolCycleManager.cycleIndex();
+
+        // Store the liquidator's address
+        liquidationInitiators[user] = msg.sender;
+        
+        cycleTotalRedemptionRequests += amount;
+        
+        emit LiquidationRequested(user, msg.sender, amount, poolCycleManager.cycleIndex());
+    }
+
+
+    /**
+     * @notice Process a liquidation claim after the cycle is completed
+     * @param user Address of the user whose position was liquidated
+     */
+    function claimLiquidation(address user) external nonReentrant onlyActiveCycle {
+        // Get the liquidation request
+        UserRequest storage request = userRequests[user];
+        if (request.requestType != RequestType.LIQUIDATE) revert NothingToClaim();
+        if (request.requestCycle >= poolCycleManager.cycleIndex()) revert NothingToClaim();
+        
+        // Get the liquidator's address
+        address liquidator = liquidationInitiators[user];
+        
+        // Get the liquidation amount
+        uint256 amount = request.amount;
+        uint256 requestCycle = request.requestCycle;
+        
+        // Clear the liquidation request
+        delete userRequests[user];
+        delete liquidationInitiators[user];
+        
+        // Get user position
+        UserPosition storage position = userPositions[user];
+        // uint256 positionRatio = Math.mulDiv(amount, PRECISION, position.);
+        
+        // Get rebalance price from completed cycle
+        uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
+        
+        // Calculate base redemption amount (in reserve tokens)
+        uint256 redemptionAmount = Math.mulDiv(
+            amount,
+            rebalancePrice,
+            PRECISION * reserveToAssetDecimalFactor
+        );
+
+        // Get liquidation reward parameters
+        (,, uint256 liquidationReward) = poolStrategy.getUserCollateralParams();
+
+        uint256 rewardAmount = Math.mulDiv(redemptionAmount, liquidationReward, BPS);
+    
+        
+        emit LiquidationClaimed(user, liquidator, amount, poolCycleManager.cycleIndex());
     }
 
     // --------------------------------------------------------------------------------
@@ -658,6 +750,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      */
     function getReserveToAssetDecimalFactor() external view returns (uint256) {
         return reserveToAssetDecimalFactor;
+    }
+
+    /**
+     * @notice Returns the liquidation initiator for a user
+     * @param user Address of the user
+     * @return Address of the liquidation initiator
+     */
+    function getUserLiquidationIntiator(address user) external view returns (address) {
+        return liquidationInitiators[user];
     }
 
 }
