@@ -37,6 +37,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
 
+    // Mapping to track liquidation initiators
+    mapping(address => address) public liquidationInitiators;
+
     // --------------------------------------------------------------------------------
     //                                  MODIFIERS
     // --------------------------------------------------------------------------------
@@ -114,7 +117,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Transfer required collateral
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
 
-        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
         if (collateralHealth < 3) revert InsufficientCollateralHealth(collateralHealth);
 
         LPPosition storage position = lpPositions[msg.sender]; 
@@ -153,28 +156,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[msg.sender];
         if (amount > position.liquidityCommitment) revert InvalidAmount();
 
-        // Calculate available liquidity for reduction based on utilization
-        uint256 availableLiquidity = calculateAvailableLiquidity();
+        // Calculate allowed reduction amount
+        uint256 allowedReduction = calculateAvailableLiquidity() / 2;
+        // Ensure there is available liquidity for the operation
+        if (allowedReduction == 0) revert UtilizationTooHighForOperation();
+        // Ensure reduction amount doesn't exceed allowed reduction
+        if (amount > allowedReduction) revert OperationExceedsAvailableLiquidity(amount, allowedReduction);
 
-        if (availableLiquidity == 0) revert UtilizationTooHighForOperation();
-
-        uint256 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
         if (collateralHealth < 2) revert InsufficientCollateralHealth(collateralHealth);
-
-        // Determine allowed reduction amount
-        uint256 allowedReduction;
-        if (availableLiquidity >= amount * 2) {
-            // If available liquidity is >= 2x requested amount, can reduce full amount
-            allowedReduction = amount;
-        } else {
-            // Otherwise, can only reduce up to half of available liquidity
-            allowedReduction = availableLiquidity / 2;
-            
-            // If requesting more than allowed, revert with explanation
-            if (amount > allowedReduction) {
-                revert OperationExceedsAvailableLiquidity(amount, allowedReduction);
-            }
-        }
 
         // Create the reduction request
         _createRequest(msg.sender, RequestType.REDUCE_LIQUIDITY, allowedReduction);
@@ -196,8 +186,18 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         lpPositions[msg.sender].collateralAmount += amount;
 
         totalLPCollateral += amount;
-        
+        uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
+        if (liquidityHealth == 1) revert InsufficientCollateralHealth(liquidityHealth);
+
         emit CollateralAdded(msg.sender, amount);
+
+        LPRequest storage request = lpRequests[msg.sender];
+        if (request.requestType == RequestType.LIQUIDATE && _isCycleActive()) {
+            // Position is no longer liquidatable, cancel the liquidation request
+            delete liquidationInitiators[msg.sender];
+            request.requestType = RequestType.NONE;
+            emit LiquidationCancelled(msg.sender);
+        }
     }
 
     /**
@@ -236,12 +236,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-    * @notice Liquidate an LP below threshold 
-    * @param lp Address of the LP to liquidate
+     * @notice Liquidate an LP below threshold 
+     * @param lp Address of the LP to liquidate
+     * @param liquidationAmount Amount of liquidity to liquidate
     */
-    function liquidateLP(address lp) external nonReentrant onlyRegisteredLP {
-        if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
-        
+    function liquidateLP(address lp, uint256 liquidationAmount) external nonReentrant {
+        // Validate liquidation request
+        _validateLiquidation(lp, liquidationAmount);
+
+        // Create the liquidation request
+        _createRequest(lp, RequestType.LIQUIDATE, liquidationAmount);
+
+        // Store liquidator to reward them when request is resolved
+        liquidationInitiators[lp] = msg.sender;
+
+        totalLPLiquidityCommited -= liquidationAmount;
+
+        emit LPLiquidationRequested(lp, poolCycleManager.cycleIndex(), liquidationAmount);
     }
 
     /**
@@ -276,6 +287,24 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             position.liquidityCommitment -= request.requestAmount;
 
             emit LiquidityReduced(lp, request.requestAmount);
+
+            if(position.liquidityCommitment == 0) {
+                _removeLP(lp);
+            }
+        } else if (request.requestType == RequestType.LIQUIDATE) {
+
+            (,, uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
+            // Transfer liquidation reward to liquidator
+            uint256 liquidationAmount = request.requestAmount;
+            uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
+
+            position.liquidityCommitment -= liquidationAmount;
+            position.collateralAmount -= rewardAmount;
+            totalLPCollateral -= rewardAmount;
+
+            reserveToken.transfer(liquidationInitiators[lp], rewardAmount);
+
+            emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, rewardAmount);
 
             if(position.liquidityCommitment == 0) {
                 _removeLP(lp);
@@ -319,7 +348,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getLPPosition(address lp) external view returns (LPPosition memory) {
         return lpPositions[lp];
     }
-    
+
+    /**
+     * @notice Get LP's current request
+     * @param lp Address of the LP
+     */
+    function getLPRequest(address lp) external view returns (LPRequest memory) {
+        return lpRequests[lp];
+    }
+
+    /**
+     * @notice Get LP's current liquidation initiator
+     * @param lp Address of the LP
+     */
+    function getLPliquidationIntiator(address lp) external view returns (address) {
+        return liquidationInitiators[lp];
+    }
+
     /**
      * @notice Check if an address is a registered LP
      * @param lp The address to check
@@ -375,6 +420,49 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     */
     function _isCycleActive() internal view returns (bool) {
         return poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE;
+    }
+
+    /**
+     * @notice Validate liquidation request
+     * @param lp Address of the LP to liquidate
+     * @param liquidationAmount Amount of liquidity to liquidate
+     */
+    function _validateLiquidation(address lp, uint256 liquidationAmount) internal view {
+        if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
+        if (liquidationAmount == 0) revert InvalidAmount();
+    
+        // Check if LP is liquidatable
+        uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
+        if (liquidityHealth != 1) revert NotEligibleForLiquidation();
+
+        LPRequest storage request = lpRequests[lp];
+        if (request.requestType != RequestType.NONE) revert RequestPending();
+
+        // Get LP position details
+        LPPosition storage position = lpPositions[lp];
+        if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
+
+        // Get LP liquidity parameters
+        (uint256 healthyRatio, , uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
+
+        // Calculate liquidation reward
+        uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
+        if (position.collateralAmount < rewardAmount) revert InsufficientCollateral();
+        uint256 collateralAfterReward = position.collateralAmount - rewardAmount;
+
+        // Calculate if position will be healthy after liquidation
+        uint256 remainingLiquidity =  position.liquidityCommitment - liquidationAmount;
+        uint256 requiredCollateral = Math.mulDiv(remainingLiquidity, healthyRatio, BPS);
+        if (collateralAfterReward < requiredCollateral) revert InsufficientCollateral();
+        
+        // Determine allowed reduction amount (same logic as reduceLiquidity)
+        uint256 allowedReduction = calculateAvailableLiquidity() / 2;
+        if (allowedReduction == 0) revert UtilizationTooHighForOperation();
+
+        // Ensure liquidation amount doesn't exceed allowed reduction
+        if (liquidationAmount > allowedReduction) {
+            revert OperationExceedsAvailableLiquidity(liquidationAmount, allowedReduction);
+        }
     }
 
     /**

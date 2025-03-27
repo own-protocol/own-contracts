@@ -62,9 +62,14 @@ interface IPoolLiquidityManager {
     event InterestClaimed(address indexed lp, uint256 amount);
 
     /**
+     * @notice Emitted when LP's liquidity is requested to be liquidated
+     */
+    event LPLiquidationRequested(address indexed lp, uint256 cycle, uint256 amount);
+
+    /**
      * @notice Emitted when LP's liquidity is liquidated
      */
-    event LPLiquidated(address indexed lp, address indexed liquidator, uint256 reward);
+    event LPLiquidationExecuted(address indexed lp, address indexed liquidator, uint256 amount, uint256 reward);
 
     /**
      * @notice Emitted when an LP adds liquidity
@@ -85,6 +90,11 @@ interface IPoolLiquidityManager {
      * @notice Emitted when an LP request to reduce liquidity is made
      */
     event LiquidityReductionRequested(address indexed lp, uint256 amount, uint256 cycle);
+
+    /**
+     * @notice Emitted when an LP request to liquidate is cancelled
+     */
+    event LiquidationCancelled(address indexed lp);
 
     /**
      * @notice Emitted when an LP is added
@@ -227,9 +237,10 @@ interface IPoolLiquidityManager {
 
     /**
      * @notice Liquidate an LP below threshold
-     * @param lp Address of the LP to liquidate
+     * @param lp Address of the LP to liquidate\
+     * @param liquidationAmount Amount of liquidity to liquidate
      */
-    function liquidateLP(address lp) external;
+    function liquidateLP(address lp, uint256 liquidationAmount) external;
 
     /**
      * @notice Add interest amount to LP's position
@@ -262,6 +273,18 @@ interface IPoolLiquidityManager {
      * @param lp Address of the LP
      */
     function getLPPosition(address lp) external view returns (LPPosition memory);
+
+    /**
+     * @notice Get LP's current request
+     * @param lp Address of the LP
+     */
+    function getLPRequest(address lp) external view returns (LPRequest memory);
+
+    /**
+     * @notice Get LP's current liquidation initiator
+     * @param lp Address of the LP
+     */
+    function getLPliquidationIntiator(address lp) external view returns (address);
     
     /**
      * @notice Check if an address is a registered LP

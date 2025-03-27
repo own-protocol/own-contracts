@@ -44,7 +44,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // LP liquidity parameters 
     uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
     uint256 public lpLiquidationThreshold;        // Liquidatiom threshold (e.g., 20%) 
-    uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 5%)
+    uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 0.5%)
     
     // Constants
     uint256 private constant BPS = 100_00;  // 100% in basis points (10000)
