@@ -427,7 +427,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP to liquidate
      * @param liquidationAmount Amount of liquidity to liquidate
      */
-    function _validateLiquidation(address lp, uint256 liquidationAmount) internal {
+    function _validateLiquidation(address lp, uint256 liquidationAmount) internal view {
         if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
         if (liquidationAmount == 0) revert InvalidAmount();
     
