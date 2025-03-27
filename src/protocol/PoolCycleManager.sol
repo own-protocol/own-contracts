@@ -132,6 +132,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
+        cumulativePoolInterest = 1;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
     }
