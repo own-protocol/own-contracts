@@ -16,17 +16,28 @@ import {IPoolStrategy} from "./IPoolStrategy.sol";
  * @dev Handles user deposits, withdrawals, and position management
  */
 interface IAssetPool {
+
+    /**
+     * @notice Request type enum to track different kinds of User requests
+     */
+    enum RequestType {
+        NONE,       // No active request
+        DEPOSIT,    // Request to deposit
+        REDEEM,     // Request to redeem
+        LIQUIDATE   // Request for liquidation
+    }
+
     /**
      * @notice User request for deposit or redemption
+     * @param requestType Type of request
      * @param amount Amount of tokens in the request
      * @param collateralAmount Amount of collateral locked with the request
-     * @param isDeposit Whether it's a deposit (true) or redemption (false)
      * @param requestCycle Cycle when request was made
      */
     struct UserRequest {
+        RequestType requestType;
         uint256 amount;
         uint256 collateralAmount;
-        bool isDeposit;
         uint256 requestCycle;
     }
 
@@ -282,15 +293,15 @@ interface IAssetPool {
     /**
      * @notice Get a user's pending request
      * @param user Address of the user
+     * @return requestType Type of request
      * @return amount Amount involved in the request
      * @return collateralAmount Collateral locked in the request
-     * @return isDeposit Whether it's a deposit or redemption
      * @return requestCycle Cycle when request was made
      */
     function userRequest(address user) external view returns (
+        RequestType requestType,
         uint256 amount,
         uint256 collateralAmount,
-        bool isDeposit,
         uint256 requestCycle
     );
 

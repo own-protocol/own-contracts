@@ -245,9 +245,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         reserveToken.transferFrom(msg.sender, address(this), totalDeposit);
         
         // Update request state
+        request.requestType = RequestType.DEPOSIT;
         request.amount = amount;
         request.collateralAmount = collateralAmount;
-        request.isDeposit = true;
         request.requestCycle = poolCycleManager.cycleIndex();
         cycleTotalDepositRequests += amount;
         
@@ -268,15 +268,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (userBalance < amount) revert InsufficientBalance();
         
         UserRequest storage request = userRequests[msg.sender];
-        if (request.amount > 0) revert RequestPending();
+        if (request.requestType != RequestType.NONE) revert RequestPending();
         
         // Transfer asset tokens from user to poolCycleManager
         assetToken.transferFrom(msg.sender, address(this), amount);
         
         // Update request state
+        request.requestType = RequestType.REDEEM;
         request.amount = amount;
         request.collateralAmount = 0;
-        request.isDeposit = false;
         request.requestCycle = poolCycleManager.cycleIndex();
         cycleTotalRedemptionRequests += amount;
         
@@ -288,28 +288,30 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      */
     function cancelRequest() external nonReentrant onlyActiveCycle {
         UserRequest storage request = userRequests[msg.sender];
+        RequestType requestType = request.requestType;
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
-        bool isDeposit = request.isDeposit;
         uint256 requestCycle = request.requestCycle;
         
         if (requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
-        if (amount == 0) revert NothingToCancel();
+        if (requestType == RequestType.NONE) revert NothingToCancel();
 
         uint256 totalDeposit = amount + collateralAmount;
         
         // Clear request
         delete userRequests[msg.sender];
         
-        if (isDeposit) {
+        if (requestType == RequestType.DEPOSIT) {
             cycleTotalDepositRequests -= amount;
+            requestType = RequestType.NONE;
             // Return reserve tokens and collateral
             reserveToken.transfer(msg.sender, totalDeposit);
             
             
             emit DepositCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
-        } else {
+        } else if (requestType == RequestType.REDEEM) {
             cycleTotalRedemptionRequests -= amount;
+            requestType = RequestType.NONE;
             // Return asset tokens
             assetToken.transferFrom(address(this), msg.sender, amount);
             emit RedemptionCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
@@ -322,13 +324,13 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      */
     function claimRequest(address user) external nonReentrant onlyActiveCycle {
         UserRequest storage request = userRequests[user];
+        RequestType requestType = request.requestType;
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
-        bool isDeposit = request.isDeposit;
         uint256 requestCycle = request.requestCycle;
         
         if (requestCycle >= poolCycleManager.cycleIndex()) revert NothingToClaim();
-        if (amount == 0) revert NothingToClaim();
+        if (requestType == RequestType.NONE) revert NothingToClaim();
         
         // Get the rebalance price from the pool cycle manager
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
@@ -338,7 +340,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
         UserPosition storage position = userPositions[user];
         
-        if (isDeposit) {
+        if (requestType == RequestType.DEPOSIT) {
             // Mint case - convert reserve to asset using rebalance price
             uint256 assetAmount = Math.mulDiv(
                 amount, 
@@ -362,7 +364,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             assetToken.mint(user, assetAmount, amount);
             
             emit AssetClaimed(user, assetAmount, requestCycle);
-        } else {
+        } else if (requestType == RequestType.REDEEM) {
             // Withdraw case - convert asset to reserve using rebalance price
             uint256 reserveAmount = Math.mulDiv(
                 amount, 
@@ -594,19 +596,19 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     /**
      * @notice Get a user's pending request
      * @param user Address of the user
+     * @return requestType Type of request
      * @return amount Amount involved in the request
      * @return collateralAmount Collateral amount involved in the request
-     * @return isDeposit Whether it's a deposit or redemption
      * @return requestCycle Cycle when request was made
      */
     function userRequest(address user) external view returns (
+        RequestType requestType,
         uint256 amount,
         uint256 collateralAmount,
-        bool isDeposit,
         uint256 requestCycle
     ) {
         UserRequest storage request = userRequests[user];
-        return (request.amount, request.collateralAmount, request.isDeposit, request.requestCycle);
+        return (request.requestType, request.amount, request.collateralAmount, request.requestCycle);
     }
 
     /**
