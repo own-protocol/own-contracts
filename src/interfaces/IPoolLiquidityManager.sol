@@ -284,7 +284,7 @@ interface IPoolLiquidityManager {
      * @notice Get LP's current liquidation initiator
      * @param lp Address of the LP
      */
-    function getLPliquidationIntiator(address lp) external view returns (address);
+    function getLPLiquidationIntiator(address lp) external view returns (address);
     
     /**
      * @notice Check if an address is a registered LP

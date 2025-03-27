@@ -361,7 +361,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Get LP's current liquidation initiator
      * @param lp Address of the LP
      */
-    function getLPliquidationIntiator(address lp) external view returns (address) {
+    function getLPLiquidationIntiator(address lp) external view returns (address) {
         return liquidationInitiators[lp];
     }
 
