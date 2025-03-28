@@ -213,8 +213,9 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
         (, , , , ,uint256 maxUtilisation) = poolStrategy.getInterestRateParams();
         // Check if pool has enough liquidity to accept the deposit
-        uint256 utilisation = getPoolUtilizationWithDeposit(amount);
-        if (utilisation > maxUtilisation) revert InsufficientLiquidity();
+        uint256 availableLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited() - getCycleUtilisedLiquidity();
+
+        if (availableLiquidity < amount) revert InsufficientLiquidity();
 
         (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();
         
@@ -266,41 +267,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         cycleTotalRedemptions += amount;
         
         emit RedemptionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
-    }
-
-    /**
-     * @notice Cancel a pending request
-     */
-    function cancelRequest() external nonReentrant onlyActiveCycle {
-        UserRequest storage request = userRequests[msg.sender];
-        RequestType requestType = request.requestType;
-        uint256 amount = request.amount;
-        uint256 collateralAmount = request.collateralAmount;
-        uint256 requestCycle = request.requestCycle;
-        
-        if (requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
-        if (requestType == RequestType.NONE) revert NothingToCancel();
-
-        uint256 totalDeposit = amount + collateralAmount;
-        
-        // Clear request
-        delete userRequests[msg.sender];
-        
-        if (requestType == RequestType.DEPOSIT) {
-            cycleTotalDeposits -= amount;
-            requestType = RequestType.NONE;
-            // Return reserve tokens and collateral
-            reserveToken.transfer(msg.sender, totalDeposit);
-            
-            
-            emit DepositCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
-        } else if (requestType == RequestType.REDEEM) {
-            cycleTotalRedemptions -= amount;
-            requestType = RequestType.NONE;
-            // Return asset tokens
-            assetToken.transferFrom(address(this), msg.sender, amount);
-            emit RedemptionCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
-        }
     }
 
     /**
@@ -531,22 +497,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Calculate pool utilization ratio considering the deposit amount
-     * @param depositAmount Additional deposit amount to consider in calculation
+     * @notice Calculate pool utilization ratio (including cycle changes)
      * @return utilization Pool utilization as a percentage (scaled by 10000)
-     */
-    function getPoolUtilizationWithDeposit(uint256 depositAmount) public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
-        if (totalLiquidity == 0) return 0;
-
-        uint256 assetPrice = assetOracle.assetPrice();
+     */    
+    function getCyclePoolUtilization() public view returns (uint256 utilization) {
+        uint256 cycleTotalLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited();
+        if (cycleTotalLiquidity == 0) return 0;
+        uint256 cycleUtilisedLiquidity = getCycleUtilisedLiquidity();
         
-        uint256 utilisedLiquidity = getUtilisedLiquidity() 
-            + cycleTotalDeposits
-            + depositAmount
-            - Math.mulDiv(cycleTotalRedemptions, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        
-        return ((utilisedLiquidity * BPS) / totalLiquidity);
+        return Math.min((cycleUtilisedLiquidity * BPS) / cycleTotalLiquidity, BPS);
     }
 
     /**
@@ -562,6 +521,30 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         uint256 utilisedLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
         
         return utilisedLiquidity;
+    }
+
+    /**
+     * @notice Calculate utilised liquidity (including cycle changes)
+     * @return cycleUtilisedLiquidity Total utilised liquidity
+     */
+    function getCycleUtilisedLiquidity() public view returns (uint256) {      
+        (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
+        uint256 totalRatio = BPS + healthyRatio;
+        uint256 utilisedLiquidity = getUtilisedLiquidity();
+        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, assetOracle.assetPrice(), PRECISION * reserveToAssetDecimalFactor);
+        uint256 nettChange = 0;
+        uint256 cycleUtilisedLiquidity = 0;
+        if (cycleTotalDeposits > cycleRedemtionsInReserveToken) {
+            nettChange = cycleTotalDeposits - cycleRedemtionsInReserveToken;
+            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
+            cycleUtilisedLiquidity = utilisedLiquidity + nettChange;
+        } else {
+            nettChange = cycleRedemtionsInReserveToken - cycleTotalDeposits;
+            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
+            cycleUtilisedLiquidity = utilisedLiquidity - nettChange;
+        }
+        
+        return cycleUtilisedLiquidity;
     }
 
     /**

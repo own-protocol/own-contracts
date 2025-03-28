@@ -66,14 +66,6 @@ interface IAssetPool {
     event DepositRequested(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
-     * @notice Emitted when a user cancels their deposit request
-     * @param user Address of the user canceling the deposit
-     * @param amount Amount of reserve tokens being returned
-     * @param cycleIndex Current operational cycle index
-     */
-    event DepositCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-
-    /**
      * @notice Emitted when a user claims their minted asset tokens
      * @param user Address of the user claiming assets
      * @param amount Amount of asset tokens claimed
@@ -88,14 +80,6 @@ interface IAssetPool {
      * @param cycleIndex Current operational cycle index
      */
     event RedemptionRequested(address indexed user, uint256 assetAmount, uint256 indexed cycleIndex);
-
-    /**
-     * @notice Emitted when a user cancels their redemption request
-     * @param user Address of the user canceling the redemption
-     * @param amount Amount of asset tokens being returned
-     * @param cycleIndex Current operational cycle index
-     */
-    event RedemptionCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
      * @notice Emitted when a user withdraws reserve tokens after burning
@@ -257,11 +241,6 @@ interface IAssetPool {
     function redemptionRequest(uint256 amount) external;
 
     /**
-     * @notice Allows users to cancel their pending request
-     */
-    function cancelRequest() external;
-
-    /**
      * @notice Claim processed request for the user
      */
     function claimRequest(address user) external;
@@ -396,17 +375,22 @@ interface IAssetPool {
     function getPoolUtilization() external view returns (uint256 utilization);
 
     /**
-     * @notice Calculate pool utilization ratio considering the deposit amount
-     * @param depositAmount Additional deposit amount to consider in calculation
+     * @notice Calculate pool utilization ratio (including cycle changes)
      * @return utilization Pool utilization as a percentage (scaled by 10000)
-     */
-    function getPoolUtilizationWithDeposit(uint256 depositAmount) external view returns (uint256 utilization);
+     */    
+    function getCyclePoolUtilization() external view returns (uint256 utilization);
 
     /**
      * @notice Calculate utilised liquidity in the pool
      * @return utilisedLiquidity Total utilised liquidity in reserve tokens
      */
     function getUtilisedLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Calculate utilised liquidity in the pool (including cycle changes)
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getCycleUtilisedLiquidity() external view returns (uint256);
 
      /**
      * @notice Calculate pool value
