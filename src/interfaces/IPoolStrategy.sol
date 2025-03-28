@@ -47,8 +47,7 @@ interface IPoolStrategy {
      */
     event UserCollateralParamsUpdated(
         uint256 healthyRatio,
-        uint256 liquidationRatio,
-        uint256 liquidationReward
+        uint256 liquidationRatio
     );
     
     /**
@@ -104,12 +103,10 @@ interface IPoolStrategy {
      * @notice Sets the user collateral parameters
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationRatio Liquidation threshold (scaled by 10000)
-     * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setUserCollateralParams(
         uint256 healthyRatio,
-        uint256 liquidationRatio,
-        uint256 liquidationReward
+        uint256 liquidationRatio
     ) external;
     
     /**
@@ -189,12 +186,10 @@ interface IPoolStrategy {
      * @notice Returns user collateral parameters
      * @return healthyRatio Healthy collateral ratio (scaled by 10000)
      * @return liquidationThreshold Liquidation threshold (scaled by 10000)
-     * @return liquidationReward Liquidation reward percentage (scaled by 10000)
      */
     function getUserCollateralParams() external view returns (
         uint256 healthyRatio,
-        uint256 liquidationThreshold,
-        uint256 liquidationReward
+        uint256 liquidationThreshold
     );
     
     /**

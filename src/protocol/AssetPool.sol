@@ -226,7 +226,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
         if (availableLiquidity < amount) revert InsufficientLiquidity();
 
-        (uint256 healthyRatio , ,) = poolStrategy.getUserCollateralParams();
+        (uint256 healthyRatio ,) = poolStrategy.getUserCollateralParams();
         
         // Calculate minimum required collateral based on deposit amount
         uint256 minRequiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
