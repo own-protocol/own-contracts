@@ -216,7 +216,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
         if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
 
         // Calculate the LP's share of the rebalance amount
         uint256 amount = 0;
@@ -266,6 +266,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             int256 finalRebalanceAmount = calculateRebalanceAmount(price);
 
             assetPool.updateCycleData(price, finalRebalanceAmount);
+            poolLiquidityManager.updateCycleData();
 
             _startNewCycle();
         }
@@ -280,6 +281,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         
         // assetPool.updateCycleData(price, finalRebalanceAmount);
+        // poolLiquidityManager.updateCycleData();
         _startNewCycle();
     }
 
@@ -297,7 +299,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
             return;
         }
         
-        // Convert BPS interest rate (10000 = 100%) to ray (1e27)
+        // Convert BPS interest rate (10000 = 100%) to a rate with precision
         uint256 currentRate = assetPool.getCurrentInterestRate();
         uint256 rateWithPrecision = Math.mulDiv(currentRate, PRECISION, BPS);
         
@@ -383,7 +385,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         
         // Get LP's liquidity commitment and total liquidity
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
         
         if (totalLiquidity == 0) return (0, false);
         
@@ -434,7 +436,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _lastCycleActionDateTime = lastCycleActionDateTime;
         _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();
-        _totalDepositRequests = assetPool.cycleTotalDepositRequests();
-        _totalRedemptionRequests = assetPool.cycleTotalRedemptionRequests();
+        _totalDepositRequests = assetPool.cycleTotalDeposits();
+        _totalRedemptionRequests = assetPool.cycleTotalRedemptions();
     }
 }
