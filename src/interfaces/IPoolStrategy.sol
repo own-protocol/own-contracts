@@ -31,8 +31,7 @@ interface IPoolStrategy {
         uint256 interestRate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     );
     
     /**
@@ -82,15 +81,13 @@ interface IPoolStrategy {
      * @param maxRate Maximum interest rate (scaled by 10000)
      * @param utilTier1 First utilization tier (scaled by 10000)
      * @param utilTier2 Second utilization tier (scaled by 10000)
-     * @param maxUtil Maximum utilization (scaled by 10000)
      */
     function setInterestRateParams(
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     ) external;
     
     /**
@@ -152,15 +149,13 @@ interface IPoolStrategy {
      * @return maxRate The maximum interest rate (scaled by 10000)
      * @return utilTier1 The first utilization tier (scaled by 10000)
      * @return utilTier2 The second utilization tier (scaled by 10000)
-     * @return maxUtil The maximum utilization (scaled by 10000)
     */
     function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     );
 
     /**

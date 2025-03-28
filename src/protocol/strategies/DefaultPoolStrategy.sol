@@ -30,7 +30,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
     uint256 public utilizationTier1;      // First utilization tier (e.g., 65%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
-    uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
     // Fee parameters
     uint256 public protocolFeePercentage; // Fee on interest (e.g., 10.0%)
@@ -87,37 +86,33 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param maxRate Maximum interest rate (scaled by 10000)
      * @param utilTier1 First utilization tier (scaled by 10000)
      * @param utilTier2 Second utilization tier (scaled by 10000)
-     * @param maxUtil Maximum utilization (scaled by 10000)
      */
     function setInterestRateParams(
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     ) external onlyOwner {
         // Parameter validation
         require(baseRate <= rate1, "Base rate must be <= Interest rate 1");
         require(rate1 <= maxRate, "Interest rate 1 must be <= max rate");
         require(maxRate <= BPS, "Max rate cannot exceed 100%");
         require(utilTier1 < utilTier2, "Tier1 must be < Tier2");
-        require(utilTier2 < maxUtil, "Tier2 must be < max utilization");
+        require(utilTier2 < BPS, "Tier2 must be < BPS");
         
         baseInterestRate = baseRate;
         interestRate1 = rate1;
         maxInterestRate = maxRate;
         utilizationTier1 = utilTier1;
         utilizationTier2 = utilTier2;
-        maxUtilization = maxUtil;
         
         emit InterestRateParamsUpdated(
             baseRate,
             interestRate1,
             maxRate,
             utilTier1,
-            utilTier2,
-            maxUtil
+            utilTier2
         );
     }
     
@@ -222,23 +217,20 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return maxRate The maximum interest rate (scaled by 10000)
      * @return utilTier1 The first utilization tier (scaled by 10000)
      * @return utilTier2 The second utilization tier (scaled by 10000)
-     * @return maxUtil The maximum utilization (scaled by 10000)
      */
     function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     ) {
         return (
             baseInterestRate,
             interestRate1,
             maxInterestRate,
             utilizationTier1,
-            utilizationTier2,
-            maxUtilization
+            utilizationTier2
         );
     }
 
@@ -258,10 +250,10 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             
             uint256 additionalRate = ((interestRate1 - baseInterestRate) * utilizationDelta) / optimalDelta;
             return baseInterestRate + additionalRate;
-        } else if (utilization <= maxUtilization) {
+        } else if (utilization <= BPS) {
             // Linear increase from interest rate 1 to max rate
             uint256 utilizationDelta = utilization - utilizationTier2;
-            uint256 optimalDelta = maxUtilization - utilizationTier2;
+            uint256 optimalDelta = BPS - utilizationTier2;
             
             uint256 additionalRate = ((maxInterestRate - interestRate1) * utilizationDelta) / optimalDelta;
             return interestRate1 + additionalRate;
