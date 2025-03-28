@@ -61,10 +61,10 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     ) external returns (address) {
         if (
             depositToken == address(0) ||
-            oracle == address(0)
+            oracle == address(0) ||
+            poolStrategy == address(0) ||
+            bytes(assetSymbol).length == 0
         ) revert InvalidParams();
-
-        address owner = owner();
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
@@ -79,8 +79,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             cycleManager,
             liquidityManager,
-            poolStrategy,
-            owner
+            poolStrategy
         );
 
         IXToken assetToken = AssetPool(pool).assetToken();
