@@ -69,12 +69,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 public cumulativePoolInterest;
 
     /**
-     * @notice Total cumulative interest amount accrued (in reserve token units).
-     */
-    uint256 public cumulativeInterestAmount;
-
-    /**
-     * @notice Total interest accrued in the current cycle (in reserve token units).
+     * @notice Total interest accrued in the current cycle (in terms of asset).
      */
     uint256 public cycleInterestAmount;
 
@@ -245,8 +240,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         }
         // If rebalanceAmount is 0, no action needed
 
+        // Calculate interest for the LP's liquidity commitment
+        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, rebalancePrice, PRECISION);
+        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
         // Deduct interest from the pool and add to LP's collateral
-        uint256 lpCycleInterest = Math.mulDiv(cycleInterestAmount, lpLiquidityCommitment, totalLiquidity);
         if (lpCycleInterest > 0) {
             assetPool.deductInterest(lp, lpCycleInterest);
         }
@@ -309,14 +306,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Calculate interest for the elapsed time
         // Formula: interest = rate * timeElapsed / secondsPerYear
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
-
-        // Update cumulativeInterestAmount
-        uint256 assetSupply = assetToken.totalSupply();
-        uint256 assetPrice = assetOracle.assetPrice();
-
-        uint256 assetValue = Math.mulDiv(assetSupply, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        cycleInterestAmount = Math.mulDiv(assetValue, interest, PRECISION);
-        cumulativeInterestAmount += cycleInterestAmount;
+        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION);
         
         // Add interest to cumulative total
         cumulativePoolInterest += interest;

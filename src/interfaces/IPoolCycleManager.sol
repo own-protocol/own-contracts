@@ -224,12 +224,7 @@ interface IPoolCycleManager {
     function cumulativePoolInterest() external view returns (uint256);
 
     /**
-     * @notice Returns the cumulative interest amount accrued
-     */
-    function cumulativeInterestAmount() external view returns (uint256);
-
-    /**
-     * @notice Returns the interest amount accrued in the current cycle
+     * @notice Returns the interest amount accrued in the current cycle (interms of asset)
      */
     function cycleInterestAmount() external view returns (uint256);
 
