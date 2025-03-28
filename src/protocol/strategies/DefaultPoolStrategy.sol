@@ -315,16 +315,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param user Address of the user
      */
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
-
         IAssetPool pool = IAssetPool(assetPool);
         IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
+
+        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
-        uint256 rebalancePrice = cycleManager.getRebalancePrice(prevCycle);
+        uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
         (uint256 assetAmount, , uint256 interestDebt) = pool.userPosition(user);
-        uint256 assetValue = assetAmount * rebalancePrice;
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
         
-        uint256 baseCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
-        return baseCollateral + Math.mulDiv(interestDebt, rebalancePrice, PRECISION);
+        uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
+        uint256 interestDebtValue = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+        return requiredCollateral + interestDebtValue;
     }
     
     /**
@@ -357,10 +360,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         if (assetAmount == 0) {
             return 3; // Healthy - no asset balance means no risk
         }
+
+        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
-        uint256 rebalancePrice = cycleManager.getRebalancePrice(prevCycle);
-        uint256 assetValue = assetAmount * rebalancePrice;
-        uint256 userCollateralBalance = collateralAmount - Math.mulDiv(interestDebt, rebalancePrice, PRECISION);
+        uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
+        uint256 userCollateralBalance = collateralAmount - Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
         uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS);
