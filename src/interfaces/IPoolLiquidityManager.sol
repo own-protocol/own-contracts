@@ -257,6 +257,17 @@ interface IPoolLiquidityManager {
     function resolveRequest(address lp) external;
 
     /**
+     * @notice Update cycle data at the end of a cycle
+     */
+    function updateCycleData() external;
+
+    /**
+     * @notice Get the total nett liquidity committed by LPs (including cycle changes)
+     * @return uint256 Total liquidity committed
+     */
+    function getCycleTotalLiquidityCommited() external view returns (uint256);
+
+    /**
      * @notice Get LP asset holdings value (in reserve token)
      * @param lp Address of the LP
      */
@@ -298,6 +309,18 @@ interface IPoolLiquidityManager {
      * @return uint256 The number of registered LPs
      */
     function getLPCount() external view returns (uint256);
+
+    /**
+     * @notice Returns the total amount of liquidity added in the current cycle
+     * @return uint256 The total amount of liquidity added
+     */
+    function cycleTotalAddLiquidityAmount() external view returns (uint256);
+
+    /**
+     * @notice Returns the total amount of liquidity reduced in the current cycle
+     * @return uint256 The total amount of liquidity reduced
+     */
+    function cycleTotalReduceLiquidityAmount() external view returns (uint256);
     
     /**
      * @notice Returns the current liquidity commitment of an LP
@@ -309,12 +332,12 @@ interface IPoolLiquidityManager {
     /**
      * @notice Returns the total liquidity committed by LPs
      */
-    function getTotalLPLiquidityCommited() external view returns (uint256);
+    function totalLPLiquidityCommited() external view returns (uint256);
 
     /**
      * @notice Returns the total lp collateral
      */
-    function getTotalLPCollateral() external view returns (uint256);
+    function totalLPCollateral() external view returns (uint256);
 
     /**
      * @notice Returns the reserve to asset decimal factor

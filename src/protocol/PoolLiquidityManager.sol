@@ -28,6 +28,12 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Number of registered LPs
     uint256 public lpCount;
 
+    // Add liquidity requests for the current cycle
+    uint256 public cycleTotalAddLiquidityAmount;
+
+    // Reduce liquidity requests for the current cycle
+    uint256 public cycleTotalReduceLiquidityAmount;
+
     // Mapping to track LP requests
     mapping(address => LPRequest) private lpRequests;
 
@@ -133,7 +139,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
 
         position.collateralAmount += requiredCollateral; 
-        totalLPLiquidityCommited += amount;
+        cycleTotalAddLiquidityAmount += amount;
         totalLPCollateral += requiredCollateral;
 
         _createRequest(msg.sender, RequestType.ADD_LIQUIDITY, amount);
@@ -169,8 +175,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Create the reduction request
         _createRequest(msg.sender, RequestType.REDUCE_LIQUIDITY, allowedReduction);
         
-        // Update total liquidity
-        totalLPLiquidityCommited -= amount;
+        cycleTotalReduceLiquidityAmount += amount;
         
         emit LiquidityReductionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -194,6 +199,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPRequest storage request = lpRequests[msg.sender];
         if (request.requestType == RequestType.LIQUIDATE && _isCycleActive()) {
             // Position is no longer liquidatable, cancel the liquidation request
+            cycleTotalReduceLiquidityAmount -= request.requestAmount;
             delete liquidationInitiators[msg.sender];
             request.requestType = RequestType.NONE;
             emit LiquidationCancelled(msg.sender);
@@ -250,7 +256,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Store liquidator to reward them when request is resolved
         liquidationInitiators[lp] = msg.sender;
 
-        totalLPLiquidityCommited -= liquidationAmount;
+        cycleTotalReduceLiquidityAmount += liquidationAmount;
 
         emit LPLiquidationRequested(lp, poolCycleManager.cycleIndex(), liquidationAmount);
     }
@@ -313,6 +319,30 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         // Mark request as resolved
         request.requestType = RequestType.NONE;
+    }
+
+    /**
+     * @notice Update cycle data at the end of a cycle
+     */
+    function updateCycleData() external onlyPoolCycleManager {
+        totalLPLiquidityCommited += cycleTotalAddLiquidityAmount;
+        totalLPLiquidityCommited -= cycleTotalReduceLiquidityAmount;
+        // Reset cycle data
+        cycleTotalAddLiquidityAmount = 0;
+        cycleTotalReduceLiquidityAmount = 0;
+    }
+
+    /**
+     * @notice Get the total nett liquidity committed by LPs (including cycle changes)
+     * @return uint256 Total liquidity committed
+     */
+    function getCycleTotalLiquidityCommited() public view returns (uint256) {
+        if (totalLPLiquidityCommited == 0) return 0;
+        uint256 cycleTotalLiquidity = totalLPLiquidityCommited
+            + cycleTotalAddLiquidityAmount
+            - cycleTotalReduceLiquidityAmount;
+
+        return cycleTotalLiquidity;
     }
 
     /**
@@ -389,22 +419,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function getLPLiquidityCommitment(address lp) external view returns (uint256) {
         return lpPositions[lp].liquidityCommitment;
-    }
-    
-    /**
-     * @notice Returns the total liquidity amount
-     * @return uint256 The total liquidity amount
-     */
-    function getTotalLPLiquidityCommited() external view returns (uint256) {
-        return totalLPLiquidityCommited;
-    }
-
-    /**
-     * @notice Returns the total lp collateral
-     * @return uint256 The total lp collateral
-     */
-    function getTotalLPCollateral() external view returns (uint256) {
-        return totalLPCollateral;
     }
 
     /**
@@ -497,24 +511,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @return availableLiquidity Maximum amount of liquidity available for operations
     */
     function calculateAvailableLiquidity() public view returns (uint256 availableLiquidity) {
-        // Get current and maximum utilization
-        uint256 currentUtilization = assetPool.getPoolUtilization();
-        (,,,,, uint256 maxUtilization) = poolStrategy.getInterestRateParams();
-        
-        // If utilization is already at or above max, nothing is available
-        if (currentUtilization >= maxUtilization) {
-            return 0;
-        }
-        
-        // Calculate available utilization
-        uint256 availableUtilization = maxUtilization - currentUtilization;
-        
-        // Calculate total liquidity committed
-        uint256 totalLiquidity = totalLPLiquidityCommited;
-        
-        // Calculate available liquidity based on available utilization
-        availableLiquidity = Math.mulDiv(availableUtilization, totalLiquidity, BPS);
-        
+        uint256 availableLiquidity =  getCycleTotalLiquidityCommited() - assetPool.getCycleUtilisedLiquidity();
+
         return availableLiquidity;
     }
 
