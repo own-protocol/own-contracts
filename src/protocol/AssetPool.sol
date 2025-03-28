@@ -27,14 +27,14 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Total user deposit requests for the current cycle
+     * @notice Total user deposits for the current cycle
      */
-    uint256 public cycleTotalDepositRequests;
+    uint256 public cycleTotalDeposits;
 
     /**
-     * @notice Total user redemption requests for the current cycle
+     * @notice Total user redemptions for the current cycle
      */
-    uint256 public cycleTotalRedemptionRequests;
+    uint256 public cycleTotalRedemptions;
 
     /**
      * @notice Reserve token balance of the pool (excluding new deposits).
@@ -153,7 +153,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             uint256 requestAmount = request.amount;
             address liquidationInitiator = liquidationInitiators[msg.sender];
             // Cancel liquidation request if collateral is added
-            cycleTotalRedemptionRequests -= requestAmount;
+            cycleTotalRedemptions -= requestAmount;
             // Refund the liquidator's tokens
             assetToken.transfer(liquidationInitiators[msg.sender], requestAmount);
 
@@ -234,7 +234,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         request.amount = amount;
         request.collateralAmount = collateralAmount;
         request.requestCycle = poolCycleManager.cycleIndex();
-        cycleTotalDepositRequests += amount;
+        cycleTotalDeposits += amount;
         
         emit DepositRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -263,7 +263,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         request.amount = amount;
         request.collateralAmount = 0;
         request.requestCycle = poolCycleManager.cycleIndex();
-        cycleTotalRedemptionRequests += amount;
+        cycleTotalRedemptions += amount;
         
         emit RedemptionRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -287,7 +287,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         delete userRequests[msg.sender];
         
         if (requestType == RequestType.DEPOSIT) {
-            cycleTotalDepositRequests -= amount;
+            cycleTotalDeposits -= amount;
             requestType = RequestType.NONE;
             // Return reserve tokens and collateral
             reserveToken.transfer(msg.sender, totalDeposit);
@@ -295,7 +295,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             
             emit DepositCancelled(msg.sender, amount, poolCycleManager.cycleIndex());
         } else if (requestType == RequestType.REDEEM) {
-            cycleTotalRedemptionRequests -= amount;
+            cycleTotalRedemptions -= amount;
             requestType = RequestType.NONE;
             // Return asset tokens
             assetToken.transferFrom(address(this), msg.sender, amount);
@@ -412,7 +412,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         if (request.requestType == RequestType.LIQUIDATE) {
 
             if(request.amount >= amount) revert BetterLiquidationRequestExists();
-            cycleTotalRedemptionRequests -= request.amount;
+            cycleTotalRedemptions -= request.amount;
             // Refund the previous liquidator's tokens
             assetToken.transfer(liquidationInitiators[user], request.amount);
             emit LiquidationCancelled(user, liquidationInitiators[user], request.amount);
@@ -434,7 +434,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         // Store the liquidator's address
         liquidationInitiators[user] = msg.sender;
         
-        cycleTotalRedemptionRequests += amount;
+        cycleTotalRedemptions += amount;
         
         emit LiquidationRequested(user, msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -523,7 +523,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
         if (totalLiquidity == 0) return 0;
         uint256 utilisedLiquidity = getUtilisedLiquidity();
         
@@ -536,15 +536,15 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilizationWithDeposit(uint256 depositAmount) public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.getTotalLPLiquidityCommited();
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
         if (totalLiquidity == 0) return 0;
 
         uint256 assetPrice = assetOracle.assetPrice();
         
         uint256 utilisedLiquidity = getUtilisedLiquidity() 
-            + cycleTotalDepositRequests 
+            + cycleTotalDeposits
             + depositAmount
-            - Math.mulDiv(cycleTotalRedemptionRequests, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+            - Math.mulDiv(cycleTotalRedemptions, assetPrice, PRECISION * reserveToAssetDecimalFactor);
         
         return ((utilisedLiquidity * BPS) / totalLiquidity);
     }
@@ -637,8 +637,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         uint256 assetBalance = assetToken.balanceOf(address(this));
         uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
         poolReserveBalance = poolReserveBalance 
-            + cycleTotalDepositRequests
-            - Math.mulDiv(cycleTotalRedemptionRequests, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+            + cycleTotalDeposits
+            - Math.mulDiv(cycleTotalRedemptions, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
         if (rebalanceAmount > 0) {
             poolReserveBalance += uint256(rebalanceAmount);
@@ -650,8 +650,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
             assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
         }
 
-        cycleTotalDepositRequests = 0;
-        cycleTotalRedemptionRequests = 0;
+        cycleTotalDeposits = 0;
+        cycleTotalRedemptions = 0;
     }
 
     // --------------------------------------------------------------------------------

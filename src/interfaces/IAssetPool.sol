@@ -367,16 +367,16 @@ interface IAssetPool {
     function getUserLiquidationIntiator(address user) external view returns (address);
 
     /**
-     * @notice Get total pending deposit requests for the current cycle
+     * @notice Get total pending deposits for the current cycle
      * @return Total amount of pending deposits
      */
-    function cycleTotalDepositRequests() external view returns (uint256);
+    function cycleTotalDeposits() external view returns (uint256);
 
     /**
-     * @notice Get total pending redemption requests for the current cycle
+     * @notice Get total pending redemptions for the current cycle
      * @return Total amount of pending redemptions
      */
-    function cycleTotalRedemptionRequests() external view returns (uint256);
+    function cycleTotalRedemptions() external view returns (uint256);
 
     /**
      * @notice Returns reserve token balance of the pool (excluding new deposits).
