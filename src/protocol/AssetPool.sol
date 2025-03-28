@@ -211,7 +211,6 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         UserRequest storage request = userRequests[msg.sender];
         if (request.amount > 0) revert RequestPending();
 
-        (, , , , ,uint256 maxUtilisation) = poolStrategy.getInterestRateParams();
         // Check if pool has enough liquidity to accept the deposit
         uint256 availableLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited() - getCycleUtilisedLiquidity();
 
@@ -485,6 +484,17 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Calculate interest rate based on pool utilization (including cycle changes)
+     * @dev This function gives the expected interest rate for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return rate interest rate (scaled by 10000)
+     */
+    function getCycleInterestRate() public view returns (uint256 rate) {
+        uint256 utilization = getCyclePoolUtilization();
+        return poolStrategy.calculateInterestRate(utilization);
+    }
+
+    /**
      * @notice Calculate pool utilization ratio
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
@@ -498,6 +508,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
     /**
      * @notice Calculate pool utilization ratio (including cycle changes)
+     * @dev This function gives the expected utilization for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */    
     function getCyclePoolUtilization() public view returns (uint256 utilization) {
@@ -525,6 +537,8 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
     /**
      * @notice Calculate utilised liquidity (including cycle changes)
+     * @dev This function gives the expected utilised liquidity for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
      * @return cycleUtilisedLiquidity Total utilised liquidity
      */
     function getCycleUtilisedLiquidity() public view returns (uint256) {      
