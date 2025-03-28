@@ -511,7 +511,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @return availableLiquidity Maximum amount of liquidity available for operations
     */
     function calculateAvailableLiquidity() public view returns (uint256 availableLiquidity) {
-        uint256 availableLiquidity =  getCycleTotalLiquidityCommited() - assetPool.getCycleUtilisedLiquidity();
+        availableLiquidity =  getCycleTotalLiquidityCommited() - assetPool.getCycleUtilisedLiquidity();
 
         return availableLiquidity;
     }

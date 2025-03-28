@@ -328,16 +328,6 @@ interface IPoolLiquidityManager {
      * @return uint256 The current liquidity amount
      */
     function getLPLiquidityCommitment(address lp) external view returns (uint256);
-    
-    /**
-     * @notice Returns the total liquidity committed by LPs
-     */
-    function totalLPLiquidityCommited() external view returns (uint256);
-
-    /**
-     * @notice Returns the total lp collateral
-     */
-    function totalLPCollateral() external view returns (uint256);
 
     /**
      * @notice Returns the reserve to asset decimal factor
