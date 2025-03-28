@@ -233,9 +233,14 @@ interface IAssetPool {
     function redemptionRequest(uint256 amount) external;
 
     /**
-     * @notice Claim processed request for the user
+     * @notice Claim asset tokens after a successful deposit
      */
-    function claimRequest(address user) external;
+    function claimAsset(address user) external;
+
+    /**
+     * @notice Claim reserve tokens after a successful redemption or liquidation request
+     */
+    function claimReserve(address user) external;
 
     /**
      * @notice Allows users to deposit additional collateral
