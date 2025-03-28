@@ -109,14 +109,6 @@ interface IAssetPool {
     event FeeDeducted(address indexed user, uint256 amount);
 
     /**
-     * @notice Emitted when a position is liquidated
-     * @param user Address of the user whose position was liquidated
-     * @param liquidator Address of the liquidator
-     * @param reward Amount of collateral given as reward
-     */
-    event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
-
-    /**
      * @notice Emitted when rebalance amount is transferred to an LP
      * @param lp Address of the LP
      * @param amount Amount of rebalance funds transferred
@@ -170,9 +162,11 @@ interface IAssetPool {
      * @notice Emitted when a liquidation is claimed
      * @param user Address of the user
      * @param liquidator Address of the liquidator
-     * @param amount Amount of tokens liquidated
-     * @param redemptionAmount Amount of reserve tokens for redemption
-     * @param rewardAmount Amount of reward tokens
+     * @param amount Amount of asset tokens liquidated
+     * @param redemptionAmount Amount of reserve tokens redeemed
+     * @param rewardAmount Amount of reward tokens claimed
+     * @dev This event is emitted when a liquidation is successfully claimed
+     * @dev The rewardAmount is distributed as part of the redemptionAmount. It is not a separate transfer.
      */
     event LiquidationClaimed(
         address indexed user, 
@@ -260,13 +254,7 @@ interface IAssetPool {
      * @param user Address of the user whose position is to be liquidated
      * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
      */
-    function requestLiquidation(address user, uint256 amount) external;
-
-    /**
-     * @notice Process a liquidation claim after the cycle is completed
-     * @param user Address of the user whose position was liquidated
-     */
-    function claimLiquidation(address user) external;
+    function liquidationRequest(address user, uint256 amount) external;
 
     // --------------------------------------------------------------------------------
     //                      EXTERNAL FUNCTIONS (POOL CYCLE MANAGER)
