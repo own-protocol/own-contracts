@@ -45,12 +45,10 @@ interface IAssetPool {
      * @notice User position in the protocol
      * @param assetAmount Amount of asset tokens held
      * @param collateralAmount Amount of collateral provided
-     * @param scaledInterest User's scaled interest value for debt calculation
      */
     struct UserPosition {
         uint256 assetAmount;
         uint256 collateralAmount;
-        uint256 scaledInterest;
     }
 
     // --------------------------------------------------------------------------------
@@ -64,14 +62,6 @@ interface IAssetPool {
      * @param cycleIndex Current operational cycle index
      */
     event DepositRequested(address indexed user, uint256 amount, uint256 indexed cycleIndex);
-
-    /**
-     * @notice Emitted when a user cancels their deposit request
-     * @param user Address of the user canceling the deposit
-     * @param amount Amount of reserve tokens being returned
-     * @param cycleIndex Current operational cycle index
-     */
-    event DepositCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
      * @notice Emitted when a user claims their minted asset tokens
@@ -88,14 +78,6 @@ interface IAssetPool {
      * @param cycleIndex Current operational cycle index
      */
     event RedemptionRequested(address indexed user, uint256 assetAmount, uint256 indexed cycleIndex);
-
-    /**
-     * @notice Emitted when a user cancels their redemption request
-     * @param user Address of the user canceling the redemption
-     * @param amount Amount of asset tokens being returned
-     * @param cycleIndex Current operational cycle index
-     */
-    event RedemptionCancelled(address indexed user, uint256 amount, uint256 indexed cycleIndex);
 
     /**
      * @notice Emitted when a user withdraws reserve tokens after burning
@@ -127,14 +109,6 @@ interface IAssetPool {
     event FeeDeducted(address indexed user, uint256 amount);
 
     /**
-     * @notice Emitted when a position is liquidated
-     * @param user Address of the user whose position was liquidated
-     * @param liquidator Address of the liquidator
-     * @param reward Amount of collateral given as reward
-     */
-    event PositionLiquidated(address indexed user, address indexed liquidator, uint256 reward);
-
-    /**
      * @notice Emitted when rebalance amount is transferred to an LP
      * @param lp Address of the LP
      * @param amount Amount of rebalance funds transferred
@@ -156,6 +130,50 @@ interface IAssetPool {
         address indexed lp,
         uint256 indexed amount,
         uint256 indexed cycleIndex
+    );
+
+    /**
+     * @notice Emitted when a liquidation is requested
+     * @param user Address of the user being liquidated
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of tokens being liquidated
+     * @param cycleIndex Cycle index when the request was made
+     */
+    event LiquidationRequested(
+        address indexed user, 
+        address liquidator, 
+        uint256 indexed amount, 
+        uint256 indexed cycleIndex
+    );
+
+    /**
+     * @notice Emitted when a liquidation is cancelled
+     * @param user Address of the user
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of tokens returned to liquidator
+     */
+    event LiquidationCancelled(
+        address indexed user, 
+        address indexed liquidator, 
+        uint256 amount
+    );
+
+    /**
+     * @notice Emitted when a liquidation is claimed
+     * @param user Address of the user
+     * @param liquidator Address of the liquidator
+     * @param amount Amount of asset tokens liquidated
+     * @param redemptionAmount Amount of reserve tokens redeemed
+     * @param rewardAmount Amount of reward tokens claimed
+     * @dev This event is emitted when a liquidation is successfully claimed
+     * @dev The rewardAmount is distributed as part of the redemptionAmount. It is not a separate transfer.
+     */
+    event LiquidationClaimed(
+        address indexed user, 
+        address indexed liquidator, 
+        uint256 amount, 
+        uint256 redemptionAmount, 
+        uint256 rewardAmount
     );
 
     // --------------------------------------------------------------------------------
@@ -190,6 +208,12 @@ interface IAssetPool {
     error InvalidRedemptionRequest();
     /// @notice Thrown when pool has insufficient liquidity
     error InsufficientLiquidity();
+    /// @notice Thrown when liquidation request is invalid
+    error InvalidLiquidationRequest();
+    /// @notice Thrown when liquidation amount exceeds the limit
+    error ExcessiveLiquidationAmount(uint256 amount, uint256 maxLiquidationAmount);
+    /// @notice Thrown when a better liquidation request exists
+    error BetterLiquidationRequestExists();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -209,14 +233,14 @@ interface IAssetPool {
     function redemptionRequest(uint256 amount) external;
 
     /**
-     * @notice Allows users to cancel their pending request
+     * @notice Claim asset tokens after a successful deposit
      */
-    function cancelRequest() external;
+    function claimAsset(address user) external;
 
     /**
-     * @notice Claim processed request for the user
+     * @notice Claim reserve tokens after a successful redemption or liquidation request
      */
-    function claimRequest(address user) external;
+    function claimReserve(address user) external;
 
     /**
      * @notice Allows users to deposit additional collateral
@@ -231,10 +255,11 @@ interface IAssetPool {
     function withdrawCollateral(uint256 amount) external;
 
     /**
-     * @notice Liquidate an undercollateralized position
-     * @param user Address of the user whose position to liquidate
+     * @notice Initiates a liquidation request for an underwater position
+     * @param user Address of the user whose position is to be liquidated
+     * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
      */
-    function liquidatePosition(address user) external;
+    function liquidationRequest(address user, uint256 amount) external;
 
     // --------------------------------------------------------------------------------
     //                      EXTERNAL FUNCTIONS (POOL CYCLE MANAGER)
@@ -306,26 +331,27 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Get total pending deposit requests for the current cycle
-     * @return Total amount of pending deposits
+     * @notice Get users's current liquidation initiator
+     * @param user Address of the user
      */
-    function cycleTotalDepositRequests() external view returns (uint256);
+    function getUserLiquidationIntiator(address user) external view returns (address);
 
     /**
-     * @notice Get total pending redemption requests for the current cycle
+     * @notice Get total pending deposits for the current cycle
+     * @return Total amount of pending deposits
+     */
+    function cycleTotalDeposits() external view returns (uint256);
+
+    /**
+     * @notice Get total pending redemptions for the current cycle
      * @return Total amount of pending redemptions
      */
-    function cycleTotalRedemptionRequests() external view returns (uint256);
+    function cycleTotalRedemptions() external view returns (uint256);
 
     /**
      * @notice Returns reserve token balance of the pool (excluding new deposits).
      */
     function poolReserveBalance() external view returns (uint256);
-
-    /**
-     * @notice Total user collateral in the pool
-     */
-    function totalUserCollateral() external view returns (uint256);
 
     /**
      * @notice Calculate current interest rate based on pool utilization
@@ -334,23 +360,40 @@ interface IAssetPool {
     function getCurrentInterestRate() external view returns (uint256 rate);
 
     /**
+     * @notice Calculate interest rate based on pool utilization (including cycle changes)
+     * @dev This function gives the expected interest rate for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return rate interest rate (scaled by 10000)
+     */
+    function getCycleInterestRate() external view returns (uint256 rate);
+
+    /**
      * @notice Calculate pool utilization ratio
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
     function getPoolUtilization() external view returns (uint256 utilization);
 
     /**
-     * @notice Calculate pool utilization ratio considering the deposit amount
-     * @param depositAmount Additional deposit amount to consider in calculation
+     * @notice Calculate pool utilization ratio (including cycle changes)
+     * @dev This function gives the expected utilization for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
      * @return utilization Pool utilization as a percentage (scaled by 10000)
-     */
-    function getPoolUtilizationWithDeposit(uint256 depositAmount) external view returns (uint256 utilization);
+     */    
+    function getCyclePoolUtilization() external view returns (uint256 utilization);
 
     /**
      * @notice Calculate utilised liquidity in the pool
      * @return utilisedLiquidity Total utilised liquidity in reserve tokens
      */
     function getUtilisedLiquidity() external view returns (uint256);
+
+    /**
+     * @notice Calculate utilised liquidity in the pool (including cycle changes)
+     * @dev This function gives the expected utilised liquidity for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function getCycleUtilisedLiquidity() external view returns (uint256);
 
      /**
      * @notice Calculate pool value

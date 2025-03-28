@@ -30,7 +30,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
     uint256 public utilizationTier1;      // First utilization tier (e.g., 65%)
     uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
-    uint256 public maxUtilization;        // Maximum utilization (e.g., 100%)
     
     // Fee parameters
     uint256 public protocolFeePercentage; // Fee on interest (e.g., 10.0%)
@@ -39,7 +38,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // User collateral parameters 
     uint256 public userHealthyCollateralRatio;    // Healthy ratio (e.g., 20%)
     uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 12.5%)
-    uint256 public userLiquidationReward;         // Liquidation reward (e.g., 10%)
     
     // LP liquidity parameters 
     uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
@@ -48,6 +46,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     // Constants
     uint256 private constant BPS = 100_00;  // 100% in basis points (10000)
+    uint256 private constant PRECISION = 1e18; // Precision for calculations
     
     // --------------------------------------------------------------------------------
     //                                  CONSTRUCTOR
@@ -87,37 +86,33 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param maxRate Maximum interest rate (scaled by 10000)
      * @param utilTier1 First utilization tier (scaled by 10000)
      * @param utilTier2 Second utilization tier (scaled by 10000)
-     * @param maxUtil Maximum utilization (scaled by 10000)
      */
     function setInterestRateParams(
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     ) external onlyOwner {
         // Parameter validation
         require(baseRate <= rate1, "Base rate must be <= Interest rate 1");
         require(rate1 <= maxRate, "Interest rate 1 must be <= max rate");
         require(maxRate <= BPS, "Max rate cannot exceed 100%");
         require(utilTier1 < utilTier2, "Tier1 must be < Tier2");
-        require(utilTier2 < maxUtil, "Tier2 must be < max utilization");
+        require(utilTier2 < BPS, "Tier2 must be < BPS");
         
         baseInterestRate = baseRate;
         interestRate1 = rate1;
         maxInterestRate = maxRate;
         utilizationTier1 = utilTier1;
         utilizationTier2 = utilTier2;
-        maxUtilization = maxUtil;
         
         emit InterestRateParamsUpdated(
             baseRate,
             interestRate1,
             maxRate,
             utilTier1,
-            utilTier2,
-            maxUtil
+            utilTier2
         );
     }
     
@@ -149,24 +144,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the user collateral parameters
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationRatio Liquidation threshold (scaled by 10000)
-     * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setUserCollateralParams(
         uint256 healthyRatio,
-        uint256 liquidationRatio,
-        uint256 liquidationReward
+        uint256 liquidationRatio
     ) external onlyOwner {
-        require(liquidationRatio < healthyRatio, "Liquidation ratio must be < healthy ratio");
-        require(liquidationReward <= BPS, "Reward cannot exceed 100%");
+        require(liquidationRatio <= healthyRatio, "Liquidation ratio must be <= healthy ratio");
         
         userHealthyCollateralRatio = healthyRatio;
         userLiquidationThreshold = liquidationRatio;
-        userLiquidationReward = liquidationReward;
         
         emit UserCollateralParamsUpdated(
             healthyRatio,
-            liquidationRatio,
-            liquidationReward
+            liquidationRatio
         );
     }
     
@@ -181,7 +171,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 liquidationThreshold,
         uint256 liquidationReward
     ) external onlyOwner {
-        require(liquidationThreshold < healthyRatio, "liquidation threshold must be < healthy ratio");
+        require(liquidationThreshold <= healthyRatio, "liquidation threshold must be <= healthy ratio");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
         lpHealthyLiquidityRatio = healthyRatio;
@@ -222,23 +212,20 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return maxRate The maximum interest rate (scaled by 10000)
      * @return utilTier1 The first utilization tier (scaled by 10000)
      * @return utilTier2 The second utilization tier (scaled by 10000)
-     * @return maxUtil The maximum utilization (scaled by 10000)
      */
     function getInterestRateParams() external view returns (
         uint256 baseRate,
         uint256 rate1,
         uint256 maxRate,
         uint256 utilTier1,
-        uint256 utilTier2,
-        uint256 maxUtil
+        uint256 utilTier2
     ) {
         return (
             baseInterestRate,
             interestRate1,
             maxInterestRate,
             utilizationTier1,
-            utilizationTier2,
-            maxUtilization
+            utilizationTier2
         );
     }
 
@@ -258,10 +245,10 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             
             uint256 additionalRate = ((interestRate1 - baseInterestRate) * utilizationDelta) / optimalDelta;
             return baseInterestRate + additionalRate;
-        } else if (utilization <= maxUtilization) {
+        } else if (utilization <= BPS) {
             // Linear increase from interest rate 1 to max rate
             uint256 utilizationDelta = utilization - utilizationTier2;
-            uint256 optimalDelta = maxUtilization - utilizationTier2;
+            uint256 optimalDelta = BPS - utilizationTier2;
             
             uint256 additionalRate = ((maxInterestRate - interestRate1) * utilizationDelta) / optimalDelta;
             return interestRate1 + additionalRate;
@@ -299,13 +286,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      */
     function getUserCollateralParams() external view returns (
         uint256 healthyRatio,
-        uint256 liquidationThreshold,
-        uint256 liquidationReward
+        uint256 liquidationThreshold
     ) {
         return (
             userHealthyCollateralRatio,
-            userLiquidationThreshold,
-            userLiquidationReward
+            userLiquidationThreshold
         );
     }
     
@@ -330,15 +315,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param user Address of the user
      */
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
-
         IAssetPool pool = IAssetPool(assetPool);
-        (uint256 assetAmount, , uint256 interestDebt) = pool.userPosition(user);
+        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
 
-        IAssetOracle oracle = IAssetOracle(pool.getAssetOracle());
-        uint256 assetValue = assetAmount * oracle.assetPrice();
+        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        // Get the previous cycle's rebalance price
+        uint256 prevCycle = cycleManager.cycleIndex() - 1;
+        uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
+        (uint256 assetAmount, , uint256 interestDebt) = pool.userPosition(user);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
         
-        uint256 baseCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
-        return baseCollateral + interestDebt;
+        uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
+        uint256 interestDebtValue = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+        return requiredCollateral + interestDebtValue;
     }
     
     /**
@@ -361,6 +350,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      */
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
         IAssetPool pool = IAssetPool(assetPool);
+        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
         
         ( uint256 assetAmount,
           uint256 collateralAmount, 
@@ -371,15 +361,19 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             return 3; // Healthy - no asset balance means no risk
         }
 
-        IAssetOracle oracle = IAssetOracle(pool.getAssetOracle());
-        uint256 assetValue = assetAmount * oracle.assetPrice();
+        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        // Get the previous cycle's rebalance price
+        uint256 prevCycle = cycleManager.cycleIndex() - 1;
+        uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
+        uint256 userCollateralBalance = collateralAmount - Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
         uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS);
         
-        if (collateralAmount >= healthyCollateral + interestDebt) {
+        if (userCollateralBalance >= healthyCollateral) {
             return 3; // Healthy
-        } else if (collateralAmount >= reqCollateral + interestDebt) {
+        } else if (userCollateralBalance >= reqCollateral) {
             return 2; // Warning
         } else {
             return 1; // Liquidatable
