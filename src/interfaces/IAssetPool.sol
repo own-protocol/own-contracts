@@ -45,12 +45,10 @@ interface IAssetPool {
      * @notice User position in the protocol
      * @param assetAmount Amount of asset tokens held
      * @param collateralAmount Amount of collateral provided
-     * @param scaledInterest User's scaled interest value for debt calculation
      */
     struct UserPosition {
         uint256 assetAmount;
         uint256 collateralAmount;
-        uint256 scaledInterest;
     }
 
     // --------------------------------------------------------------------------------

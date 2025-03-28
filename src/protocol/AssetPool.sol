@@ -57,6 +57,16 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     mapping(address => address) public liquidationInitiators;
 
     /**
+     * @notice Scaled asset balance for interest calculation
+     */
+    mapping(address => uint256) private scaledAssetBalance;
+
+    /**
+     * @notice Scaled reserve balance for interest calculation
+     */
+    mapping(address => uint256) private scaledReserveBalance;
+
+    /**
      * @dev Constructor for the implementation contract
      */
     constructor() Ownable(msg.sender) {
@@ -289,6 +299,7 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
         delete userRequests[user];
 
         UserPosition storage position = userPositions[user];
+        uint256 poolInterest = poolCycleManager.cumulativePoolInterest();
         
         if (requestType == RequestType.DEPOSIT) {
             // Mint case - convert reserve to asset using rebalance price
@@ -298,17 +309,12 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
                 rebalancePrice
             );
 
-            // Get total cumulative interest in reserve from cycle manager
-            uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
-            
-            if (totalInterest > 0) {
-                // Calculate scaled interest based on asset amount
-                position.scaledInterest += Math.mulDiv(assetAmount, PRECISION, totalInterest * reserveToAssetDecimalFactor);
-            }
+            uint256 scaledAssetAmount = Math.mulDiv(assetAmount, PRECISION, poolInterest);
 
             // Update user's position
             position.assetAmount += assetAmount;
             position.collateralAmount += collateralAmount;
+            scaledAssetBalance[user] += scaledAssetAmount;
             
             // Mint tokens
             assetToken.mint(user, assetAmount, amount);
@@ -324,17 +330,20 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
 
             uint256 balanceCollateral = 0;
             uint256 positionAssetAmount = position.assetAmount;
+            uint256 interestDebtInReserve = Math.mulDiv(getInterestDebt(user), rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
             if(positionAssetAmount - amount == 0) {
-                uint256 interestDebt = getInterestDebt(user);
-                balanceCollateral = position.collateralAmount - interestDebt;
-                position.scaledInterest = 0;
+                balanceCollateral = position.collateralAmount;
                 position.assetAmount = 0;
                 position.collateralAmount = 0;
+                scaledAssetBalance[user] = 0;
             } else {
                 position.assetAmount -= amount;
+                interestDebtInReserve = Math.mulDiv(interestDebtInReserve, amount, positionAssetAmount);
+                uint256 scaledAssetAmount = Math.mulDiv(amount, PRECISION, poolInterest);
+                scaledAssetBalance[user] -= scaledAssetAmount;
             }         
         
-            uint256 totalAmount = reserveAmount + balanceCollateral;
+            uint256 totalAmount = reserveAmount + balanceCollateral - interestDebtInReserve;
             // Transfer reserve tokens from poolCycleManager to user
             reserveToken.transfer(user, totalAmount);
             
@@ -454,24 +463,21 @@ contract AssetPool is IAssetPool, PoolStorage, Ownable, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Calculate interest debt for a user
+     * @notice Calculate interest debt for a user (in asset tokens)
      * @param user User address
      * @return interestDebt Amount of interest debt in reserve tokens
      */
     function getInterestDebt(address user) public view returns (uint256 interestDebt) {
         UserPosition storage position = userPositions[user];
-        uint256 scaledInterest = position.scaledInterest;
-        if (scaledInterest == 0) return 0;
-        
-        uint256 totalInterest = poolCycleManager.cumulativeInterestAmount();
-        if (totalInterest == 0) return 0;
-        
-        // Calculate user's share of total interest
-        return Math.mulDiv(
-            scaledInterest,
-            totalInterest,
-            PRECISION
-        );
+        uint256 assetAmount = position.assetAmount;
+        uint256 scaledAssetAmount = scaledAssetBalance[user];
+
+        if (assetAmount == 0) return 0;
+
+        uint256 interest = poolCycleManager.cumulativePoolInterest();
+        uint256 debt = Math.mulDiv(scaledAssetAmount, interest, PRECISION) - assetAmount;
+
+        return debt;
     }
 
     /**
