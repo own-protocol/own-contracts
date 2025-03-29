@@ -121,6 +121,11 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 uint256 closePrice,
                 uint256 dataTimestamp
             ) = abi.decode(response, (uint256, uint256, uint256, uint256, uint256));
+
+            // Validate that none of the price values are zero
+            if (openPrice == 0 || highPrice == 0 || lowPrice == 0 || closePrice == 0) {
+                revert InvalidPrice();
+            }
             
             // Update asset price
             assetPrice = closePrice;

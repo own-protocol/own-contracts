@@ -6,30 +6,30 @@ pragma solidity ^0.8.20;
 /**
  * @title IAssetOracle
  * @notice Interface for the AssetOracle contract that fetches and stores real-world asset prices
- * @dev Implements Chainlink Functions to fetch off-chain asset prices
+ * @notice Implements Chainlink Functions to fetch off-chain asset prices
  */
 interface IAssetOracle {
     /**
-     * @dev Emitted when the asset symbol is updated
+     * @notice Emitted when the asset symbol is updated
      * @param newAssetSymbol The new symbol for the asset
      */
     event AssetSymbolUpdated(string newAssetSymbol);
 
     /**
-     * @dev Emitted when a new price is received and updated
+     * @notice Emitted when a new price is received and updated
      * @param price The new price of the asset in cents
      * @param timestamp The timestamp when the price was updated
      */
     event AssetPriceUpdated(uint256 price, uint256 timestamp);
 
     /**
-     * @dev Emitted when the source hash is updated
+     * @notice Emitted when the source hash is updated
      * @param newSourceHash The new hash of the JavaScript source code
      */
     event SourceHashUpdated(bytes32 newSourceHash);
     
     /**
-     * @dev Emitted when OHLC data is updated
+     * @notice Emitted when OHLC data is updated
      * @param open The opening price
      * @param high The highest price
      * @param low The lowest price
@@ -45,15 +45,20 @@ interface IAssetOracle {
     );
 
     /**
-     * @dev Thrown when received requestId doesn't match the expected one
+     * @notice Thrown when received requestId doesn't match the expected one
      * @param requestId The unexpected requestId received
      */
     error UnexpectedRequestID(bytes32 requestId);
 
     /**
-     * @dev Thrown when the provided source code hash doesn't match the stored hash
+     * @notice Thrown when the provided source code hash doesn't match the stored hash
      */
     error InvalidSource();
+
+    /**
+     * @notice Thrown when the asset price is not valid
+     */
+    error InvalidPrice();
 
     /**
      * @notice Initiates a request to fetch the current asset price
