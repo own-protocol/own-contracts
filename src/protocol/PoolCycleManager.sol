@@ -236,7 +236,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
             
             if (amount > 0) {
                 // Request the asset pool to transfer funds to the LP
-                assetPool.transferRebalanceAmount(lp, amount);
+                assetPool.transferRebalanceAmount(lp, amount, false);
             }
         }
         // If rebalanceAmount is 0, no action needed
@@ -271,12 +271,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     }
 
     /**
-     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
+     * @notice Settle an lp if the rebalance window has expired and the LP has not rebalanced
+     * @param lp Address of the LP to settle
      */
-    function settlePool() external onlyLP {
+    function settleLP(address lp) external {
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
+        if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         
         // assetPool.updateCycleData(price, finalRebalanceAmount);
         // poolLiquidityManager.updateCycleData();

@@ -269,8 +269,9 @@ interface IAssetPool {
      * @notice Transfers rebalance amount from the pool to the LP during negative rebalance
      * @param lp Address of the LP to whom rebalance amount is owed
      * @param amount Amount of reserve tokens to transfer to the LP
+     * @param isSettle Boolean If the function is called during settlement
      */
-    function transferRebalanceAmount(address lp, uint256 amount) external;
+    function transferRebalanceAmount(address lp, uint256 amount, bool isSettle) external;
 
     /**
     * @notice Deducts interest from the pool and transfers it to the liquidity manager
