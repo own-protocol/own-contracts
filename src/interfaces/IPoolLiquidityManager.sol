@@ -278,7 +278,28 @@ interface IPoolLiquidityManager {
      * @param lp Address of the LP
      */
     function getLPLiquidityShare(address lp) external view returns (uint256);
+
+    /**
+     * @notice Get LP's current asset share of the pool
+     * @param lp Address of the LP
+     */
+    function getLPAssetShare(address lp) external view returns (uint256);
+
+    /**
+     * @notice Get LP's projected asset share after the current cycle completes based on expected rebalance price
+     * @param lp Address of the LP
+     * @param expectedRebalancePrice The expected rebalance price provided by the LP
+     * @return LP's projected share of the asset supply after cycle completion
+     */
+    function getLPCycleAssetShare(address lp, uint256 expectedRebalancePrice) external view returns (uint256);
     
+    /**
+     * @notice Get LP's projected asset share after the current cycle completes based on current oracle price
+     * @param lp Address of the LP
+     * @return LP's projected share of the asset supply after cycle completion
+     */
+    function getLPCycleAssetShare(address lp) external view returns (uint256);
+
     /**
      * @notice Get LP's current liquidity and liquidity info
      * @param lp Address of the LP
