@@ -137,9 +137,10 @@ interface IPoolCycleManager {
     function rebalancePool(address lp, uint256 rebalancePrice) external;
 
     /**
-     * @notice Settle the pool if the rebalance window has expired and pool is not fully rebalanced.
+     * @notice Settle an lp if the rebalance window has expired and the LP has not rebalanced
+     * @param lp Address of the LP to settle
      */
-    function settlePool() external;
+    function settleLP(address lp) external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
