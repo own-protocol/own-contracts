@@ -564,16 +564,23 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Transfers rebalance amount from the pool to the LP during negative rebalance
      * @param lp Address of the LP to whom rebalance amount is owed
      * @param amount Amount of reserve tokens to transfer to the LP
+     * @param isSettle Boolean If the function is called during settlement
      */
-    function transferRebalanceAmount(address lp, uint256 amount) external onlyPoolCycleManager {
+    function transferRebalanceAmount(address lp, uint256 amount, bool isSettle) external onlyPoolCycleManager {
         if (amount == 0) revert InvalidAmount();
 
         // Check if we have enough reserve tokens for the transfer
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
         if (reserveBalance < amount) revert InsufficientBalance();
 
-        // Transfer the rebalance amount to the LP
-        reserveToken.transfer(lp, amount);
+        if (isSettle) {
+            // Transfer the rebalance amount to the liquidity manager
+            reserveToken.transfer(address(poolLiquidityManager), amount);
+            poolLiquidityManager.addToCollateral(lp, amount);      
+        } else {
+            // Transfer the rebalance amount to the LP
+            reserveToken.transfer(lp, amount);
+        }
         
         emit RebalanceAmountTransferred(lp, amount, poolCycleManager.cycleIndex());
     }

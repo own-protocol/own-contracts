@@ -60,6 +60,14 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
+     * @dev Ensures the caller is the asset pool
+     */
+    modifier onlyAssetPool() {
+        if (msg.sender != address(assetPool)) revert NotAssetPool();
+        _;
+    }
+
+    /**
      * @notice Modifier to ensure the caller is a registered LP
      */
     modifier onlyRegisteredLP() {
@@ -267,10 +275,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP
      * @param amount Amount to add
      */
-    function addToInterest(address lp, uint256 amount) external onlyPoolCycleManager {
+    function addToInterest(address lp, uint256 amount) external onlyAssetPool {
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpPositions[lp].interestAccrued += amount;
+    }
+
+    /**
+     * @notice Add rebalance amount to LP's position
+     * @dev During settle pool, we use this to add the rebalance amount to LP's position
+     * @param lp Address of the LP
+     * @param amount Amount to add
+     */
+    function addToCollateral(address lp, uint256 amount) external onlyAssetPool {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
+        lpPositions[lp].collateralAmount += amount;
+        totalLPCollateral += amount;
     }
 
     /**

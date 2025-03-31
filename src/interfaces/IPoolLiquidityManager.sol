@@ -150,6 +150,10 @@ interface IPoolLiquidityManager {
      * @notice Error when caller is not the pool cycle manager
      */
     error NotPoolCycleManager();
+    /**
+     * @notice Error when caller is not the asset pool
+     */
+    error NotAssetPool();
 
     /**
      * @notice Thrown when an is zero address
@@ -244,10 +248,20 @@ interface IPoolLiquidityManager {
 
     /**
      * @notice Add interest amount to LP's position
+     * @dev Can be called only by the asset pool contract
      * @param lp Address of the LP
      * @param amount Amount to add
      */
     function addToInterest(address lp, uint256 amount) external;
+
+    /**
+     * @notice Add rebalance amount to LP's position
+     * @dev During settle pool, we use this to add the rebalance amount to LP's position
+     * @dev Can be called only by the asset pool contract
+     * @param lp Address of the LP
+     * @param amount Amount to add
+     */
+    function addToCollateral(address lp, uint256 amount) external;
 
     /**
      * @notice Resolves an LP request after a rebalance cycle

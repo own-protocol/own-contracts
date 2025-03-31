@@ -236,7 +236,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
             
             if (amount > 0) {
                 // Request the asset pool to transfer funds to the LP
-                assetPool.transferRebalanceAmount(lp, amount);
+                assetPool.transferRebalanceAmount(lp, amount, false);
             }
         }
         // If rebalanceAmount is 0, no action needed
