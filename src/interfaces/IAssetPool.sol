@@ -274,11 +274,12 @@ interface IAssetPool {
     function transferRebalanceAmount(address lp, uint256 amount, bool isSettle) external;
 
     /**
-    * @notice Deducts interest from the pool and transfers it to the liquidity manager
-    * @param lp Address of the LP to whom interest is owed
-    * @param amount Amount of interest to deduct
-    */
-    function deductInterest(address lp, uint256 amount) external;
+     * @notice Deducts interest from the pool and transfers it to the liquidity manager
+     * @param lp Address of the LP to whom interest is owed
+     * @param amount Amount of interest to deduct
+     * @param isSettle Boolean If the function is called during settlement
+     */
+    function deductInterest(address lp, uint256 amount, bool isSettle) external;
 
     /**
      * @notice Update cycle data at the end of a cycle

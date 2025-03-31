@@ -295,6 +295,24 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
+     * @notice Deduct collateral from LP's position
+     * @dev This is used to deduct collateral during lp settlement
+     * @param lp Address of the LP
+     * @param amount Amount to deduct
+     */
+    function deductFromCollateral(address lp, uint256 amount) external onlyPoolCycleManager {
+        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        
+        LPPosition storage position = lpPositions[lp];
+        if (position.collateralAmount < amount) revert InvalidAmount();
+        
+        position.collateralAmount -= amount;
+        totalLPCollateral -= amount;
+
+        reserveToken.transfer(address(assetPool), amount);
+    }
+
+    /**
      * @notice Resolves an LP request after a rebalance cycle
      * @dev This should be called after a rebalance to clear pending request flags
      * @param lp Address of the LP

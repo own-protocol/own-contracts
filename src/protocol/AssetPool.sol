@@ -589,8 +589,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Deducts interest from the pool and transfers it to the liquidity manager
      * @param lp Address of the LP to whom interest is owed
      * @param amount Amount of interest to deduct
+     * @param isSettle Boolean If the function is called during settlement
      */
-    function deductInterest(address lp, uint256 amount) external onlyPoolCycleManager {
+    function deductInterest(address lp, uint256 amount, bool isSettle) external onlyPoolCycleManager {
         if (amount == 0) revert InvalidAmount();
 
         // Check if we have enough reserve tokens for the interest
@@ -598,24 +599,32 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
         if(reserveBalance < amount) revert InsufficientBalance();
 
-        // Calculate and deduct protocol fee
-        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
-        if (protocolFee > 0) {
-            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
-            emit FeeDeducted(lp, protocolFee);
-        }
-        
-        uint256 lpCycleInterest = amount - protocolFee;
-
         uint256 cycleIndex = poolCycleManager.cycleIndex();
+        // Protocol fee recipient address
+        address feeRecipient = poolStrategy.getFeeRecipient();
 
-        // Transfer interest to liquidity manager
-        reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
-
-        poolLiquidityManager.addToInterest(lp, lpCycleInterest);
+       if (isSettle) {
+            // During settlement, all interest goes to the protocol as penalty
+            reserveToken.transfer(feeRecipient, amount);
+            emit FeeDeducted(lp, amount);
+        } else {
+            // Normal rebalance case - calculate and deduct protocol fee
+            uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
+            uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
             
-        emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
+            if (protocolFee > 0) {
+                reserveToken.transfer(feeRecipient, protocolFee);
+                emit FeeDeducted(lp, protocolFee);
+            }
+            
+            uint256 lpCycleInterest = amount - protocolFee;
+
+            // Transfer remaining interest to liquidity manager for the LP
+            reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
+            poolLiquidityManager.addToInterest(lp, lpCycleInterest);
+            
+            emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
+        }
     }
 
     /**

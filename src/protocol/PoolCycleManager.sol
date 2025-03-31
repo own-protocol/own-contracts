@@ -246,7 +246,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
         // Deduct interest from the pool and add to LP's collateral
         if (lpCycleInterest > 0) {
-            assetPool.deductInterest(lp, lpCycleInterest);
+            assetPool.deductInterest(lp, lpCycleInterest, false);
         }
         
         poolLiquidityManager.resolveRequest(lp);
@@ -259,30 +259,77 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            uint256 price = cycleWeightedSum / (totalLiquidity * reserveToAssetDecimalFactor);
-            cycleRebalancePrice[cycleIndex] = price;
-            int256 finalRebalanceAmount = calculateRebalanceAmount(price);
-
-            assetPool.updateCycleData(price, finalRebalanceAmount);
-            poolLiquidityManager.updateCycleData();
-
             _startNewCycle();
         }
     }
 
     /**
-     * @notice Settle an lp if the rebalance window has expired and the LP has not rebalanced
-     * @param lp Address of the LP to settle
+     * @notice Rebalance an lp if the rebalance window has expired and the LP has not rebalanced
+     * @dev This is also called the settlement step
+     * @dev For transferRebalanceAmount & deductInterest isSettle is true,
+     * @dev as we are settling the rebalance amount from the LP's collateral  
+     * @param lp Address of the LP to rebalance
      */
-    function settleLP(address lp) external {
+    function rebalanceLP(address lp) external {
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
+        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+
+        // Calculate the settlement price (average of high and low)
+        uint256 settlementPrice = (cyclePriceHigh + cyclePriceLow) / 2;
+
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
+
+        // Calculate the LP's share of the rebalance amount
+        uint256 amount = 0;
+        bool isDeposit = false;
+        int256 rebalanceAmount = calculateRebalanceAmount(settlementPrice);
         
-        // assetPool.updateCycleData(price, finalRebalanceAmount);
-        // poolLiquidityManager.updateCycleData();
-        _startNewCycle();
+        if (rebalanceAmount > 0) {
+            // Positive rebalance amount means Pool needs to withdraw from LP collateral
+            amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            isDeposit = true;
+            
+            if (amount > 0) {
+                // Use LP's collateral to settle
+                poolLiquidityManager.deductFromCollateral(lp, amount);
+            }
+        } else if (rebalanceAmount < 0) {
+            // Negative rebalance amount means Pool needs to add to LP liquidity
+            amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            
+            if (amount > 0) {
+                // Transfer funds to the LP
+                assetPool.transferRebalanceAmount(lp, amount, true);
+            }
+        }
+
+        // Calculate interest for the LP's liquidity commitment
+        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
+        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+        
+        // Deduct interest from the pool and add to LP's collateral
+        if (lpCycleInterest > 0) {
+            assetPool.deductInterest(lp, lpCycleInterest, true);
+        }
+        
+        // Resolve any pending requests for the LP
+        poolLiquidityManager.resolveRequest(lp);
+        
+        // Update cycle stats
+        cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
+        lastRebalancedCycle[lp] = cycleIndex;
+        rebalancedLPs++;
+        
+        emit Rebalanced(lp, settlementPrice, amount, isDeposit, cycleIndex);
+        
+        // If all LPs have rebalanced, start next cycle
+        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
+            _startNewCycle();
+        }
     }
 
     // --------------------------------------------------------------------------------
@@ -349,6 +396,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @notice Starts a new cycle after all LPs have rebalanced.
      */
     function _startNewCycle() internal {
+
+        uint256 price = cycleWeightedSum / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
+        cycleRebalancePrice[cycleIndex] = price;
+        int256 finalRebalanceAmount = calculateRebalanceAmount(price);
+
+        assetPool.updateCycleData(price, finalRebalanceAmount);
+        poolLiquidityManager.updateCycleData();
 
         cycleIndex++;
         cycleState = CycleState.POOL_ACTIVE;

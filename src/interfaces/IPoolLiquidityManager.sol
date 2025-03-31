@@ -150,6 +150,7 @@ interface IPoolLiquidityManager {
      * @notice Error when caller is not the pool cycle manager
      */
     error NotPoolCycleManager();
+
     /**
      * @notice Error when caller is not the asset pool
      */
@@ -262,6 +263,14 @@ interface IPoolLiquidityManager {
      * @param amount Amount to add
      */
     function addToCollateral(address lp, uint256 amount) external;
+
+    /**
+     * @notice Deduct collateral from LP's position
+     * @dev This is used to deduct collateral during lp settlement
+     * @param lp Address of the LP
+     * @param amount Amount to deduct
+     */
+    function deductFromCollateral(address lp, uint256 amount) external;
 
     /**
      * @notice Resolves an LP request after a rebalance cycle
