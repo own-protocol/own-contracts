@@ -352,12 +352,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         
         // Get the rebalance price from the pool cycle manager
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
+        uint256 poolInterest = poolCycleManager.cyclePoolInterest(requestCycle);
         
         // Clear request
         delete userRequests[user];
 
         UserPosition storage position = userPositions[user];
-        uint256 poolInterest = poolCycleManager.cumulativePoolInterest();
         
         uint256 assetAmount = Math.mulDiv(
             amount, 
@@ -400,7 +400,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         UserPosition storage position = userPositions[user];
         
         (uint256 reserveAmount, uint256 collateral, uint256 scaledAssetAmount, uint256 interestDebt) = 
-            _calculateRedemptionValues(user, amount, rebalancePrice);
+            _calculateRedemptionValues(user, amount, rebalancePrice, requestCycle);
 
         uint256 totalAmount = 0;
         if(position.assetAmount - amount == 0) {
@@ -439,16 +439,17 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     /**
      * @notice Calculate interest debt for a user (in asset tokens)
      * @param user User address
+     * @param cycle Cycle index
      * @return interestDebt Amount of interest debt in reserve tokens
      */
-    function getInterestDebt(address user) public view returns (uint256 interestDebt) {
+    function getInterestDebt(address user, uint256 cycle) public view returns (uint256 interestDebt) {
         UserPosition storage position = userPositions[user];
         uint256 assetAmount = position.assetAmount;
         uint256 scaledAssetAmount = scaledAssetBalance[user];
 
         if (assetAmount == 0) return 0;
 
-        uint256 interest = poolCycleManager.cumulativePoolInterest();
+        uint256 interest = poolCycleManager.cyclePoolInterest(cycle);
         uint256 debt = Math.mulDiv(scaledAssetAmount, interest, PRECISION) - assetAmount;
 
         return debt;
@@ -523,9 +524,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      */
     function getCycleUtilisedLiquidity() public view returns (uint256) {      
         (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
+        uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
+        uint256 price = poolCycleManager.cycleRebalancePrice(prevCycle); 
         uint256 totalRatio = BPS + healthyRatio;
         uint256 utilisedLiquidity = getUtilisedLiquidity();
-        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, assetOracle.assetPrice(), PRECISION * reserveToAssetDecimalFactor);
+        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, price, PRECISION * reserveToAssetDecimalFactor);
         uint256 nettChange = 0;
         uint256 cycleUtilisedLiquidity = 0;
         if (cycleTotalDeposits > cycleRedemtionsInReserveToken) {
@@ -546,8 +549,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @return value Pool value in reserve tokens
      */
     function getPoolValue() public view returns (uint256 value) {
+        uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
         uint256 assetSupply = assetToken.totalSupply();
-        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 assetPrice = poolCycleManager.cycleRebalancePrice(prevCycle);
 
         return Math.mulDiv(assetSupply, assetPrice, PRECISION * reserveToAssetDecimalFactor);
     }
@@ -649,7 +653,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
      * @return collateralAmount Amount of collateral in position
-     * @return interestDebt Amount of interest debt in reserve tokens
+     * @return interestDebt Amount of interest debt in asset tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
@@ -659,7 +663,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         UserPosition storage position = userPositions[user];
         assetAmount = position.assetAmount;
         collateralAmount = position.collateralAmount;
-        interestDebt = getInterestDebt(user);
+        interestDebt = getInterestDebt(user, poolCycleManager.cycleIndex());
     }
 
     /**
@@ -685,6 +689,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param user Address of the user
      * @param assetAmount Amount of asset tokens to redeem
      * @param rebalancePrice Price at which redemption occurs
+     * @param requestCycle Cycle when the request was made
      * @return reserveAmount Equivalent reserve tokens for the asset amount
      * @return collateralAmount Collateral amount to return
      * @return scaledAssetAmount Asset amount scaled by pool interest
@@ -693,7 +698,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     function _calculateRedemptionValues(
         address user,
         uint256 assetAmount,
-        uint256 rebalancePrice
+        uint256 rebalancePrice,
+        uint256 requestCycle
     ) internal view returns (
         uint256 reserveAmount,
         uint256 collateralAmount,
@@ -713,7 +719,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         collateralAmount = position.collateralAmount;
         scaledAssetAmount = scaledAssetBalance[user];
         
-        interestDebt = getInterestDebt(user);
+        interestDebt = getInterestDebt(user, requestCycle);
         // Calculate interest debt in reserve tokens
         interestDebt = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         

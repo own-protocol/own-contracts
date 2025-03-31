@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -17,7 +18,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @title PoolLiquidityManager
  * @notice Manages LP liquidity requirements and registry for the asset pool
  */
-contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
+contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard, Multicall {
     
     // Total liquidity committed by LPs
     uint256 public totalLPLiquidityCommited;
@@ -370,7 +371,84 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (totalLPLiquidityCommited == 0) return 0;
         return Math.mulDiv(lpPositions[lp].liquidityCommitment, PRECISION, totalLPLiquidityCommited);
     }
+
+    /**
+     * @notice Get LP's current asset share of the pool
+     * @param lp Address of the LP
+     */
+    function getLPAssetShare(address lp) public view returns (uint256) {
+        if (!registeredLPs[lp]) return 0;
+        // If no total liquidity, return 0
+        if (totalLPLiquidityCommited == 0) return 0;
+        uint256 assetSupply = assetToken.totalSupply();
+        return Math.mulDiv(assetSupply, lpPositions[lp].liquidityCommitment, totalLPLiquidityCommited);
+    }
     
+    /**
+     * @notice Get LP's projected asset share after the current cycle completes based on expected rebalance price
+     * @param lp Address of the LP
+     * @param expectedRebalancePrice The expected rebalance price provided by the LP
+     * @return LP's projected share of the asset supply after cycle completion
+     */
+    function getLPCycleAssetShare(address lp, uint256 expectedRebalancePrice) public view returns (uint256) {
+        // If not a registered LP or no request pending, return current share
+        if (!registeredLPs[lp]) return 0;
+        // If rebalance price is zero, revert
+        if (expectedRebalancePrice == 0) revert InvalidAmount();
+        
+        // Calculate the projected total liquidity after the cycle
+        uint256 cycleTotalLiquidity = getCycleTotalLiquidityCommited();
+        if (cycleTotalLiquidity == 0) return 0;
+        
+        // Calculate the LP's projected liquidity commitment after the cycle
+        uint256 lpCycleLiquidity = lpPositions[lp].liquidityCommitment;
+        LPRequest storage request = lpRequests[lp];
+        
+        // Adjust the LP's liquidity based on their pending request
+        if (request.requestType == RequestType.ADD_LIQUIDITY) {
+            lpCycleLiquidity += request.requestAmount;
+        } else if (request.requestType == RequestType.REDUCE_LIQUIDITY || 
+                request.requestType == RequestType.LIQUIDATE) {
+            lpCycleLiquidity -= request.requestAmount;
+        }
+        
+        // If LP will have zero liquidity after the cycle, return 0
+        if (lpCycleLiquidity == 0) return 0;
+        
+        // Calculate the projected asset supply after the cycle
+        // Need to consider both the current asset supply and cycle changes
+        uint256 currentAssetSupply = assetToken.totalSupply();
+        
+        // Get deposits and redemptions from the asset pool
+        uint256 cycleDeposits = assetPool.cycleTotalDeposits();
+        uint256 cycleRedemptions = assetPool.cycleTotalRedemptions();
+        
+        // Convert deposits to asset tokens using the expected rebalance price
+        uint256 depositAssetAmount = 0;
+        if (cycleDeposits > 0 && expectedRebalancePrice > 0) {
+            depositAssetAmount = Math.mulDiv(
+                cycleDeposits, 
+                PRECISION * reserveToAssetDecimalFactor, 
+                expectedRebalancePrice
+            );
+        }
+        
+        // Calculate projected asset supply
+        uint256 projectedAssetSupply = currentAssetSupply + depositAssetAmount - cycleRedemptions;
+        
+        // Calculate the LP's share of the projected asset supply
+        return Math.mulDiv(projectedAssetSupply, lpCycleLiquidity, cycleTotalLiquidity);
+    }
+
+    /**
+     * @notice Get LP's projected asset share after the current cycle completes based on current oracle price
+     * @param lp Address of the LP
+     * @return LP's projected share of the asset supply after cycle completion
+     */
+    function getLPCycleAssetShare(address lp) public view returns (uint256) {
+        return getLPCycleAssetShare(lp, assetOracle.assetPrice());
+    }
+
     /**
      * @notice Get LP's current liquidity position
      * @param lp Address of the LP

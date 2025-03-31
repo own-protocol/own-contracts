@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -18,7 +19,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -64,9 +65,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     uint256 private cycleWeightedSum;
 
     /**
-     * @notice Cumulative pool interest accrued over time (in Precision units).
+     * @notice Cumulative pool interest accrued over time (in Precision units) as of the current cycle.
      */
-    uint256 public cumulativePoolInterest;
+    mapping (uint256 => uint256) public cyclePoolInterest;
 
     /**
      * @notice Total interest accrued in the current cycle (in terms of asset).
@@ -76,12 +77,12 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     /**
      * @notice Asset price high for the current cycle
      */
-    uint256 public assetPriceHigh;
+    uint256 public cyclePriceHigh;
 
     /**
      * @notice Asset price low for the current cycle
      */
-    uint256 public assetPriceLow;
+    uint256 public cyclePriceLow;
 
     /**
      * @notice Timestamp of the last interest accrual
@@ -127,7 +128,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
-        cumulativePoolInterest = 1;
+        cyclePoolInterest[cycleIndex] = 1;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
     }
@@ -178,7 +179,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         bool isMarketOpen = assetOracle.isMarketOpen();
         if (isMarketOpen) revert MarketOpen();
 
-        (,assetPriceHigh, assetPriceLow, ,) = assetOracle.getOHLCData();
+        (,cyclePriceHigh, cyclePriceLow, ,) = assetOracle.getOHLCData();
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -188,8 +189,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
         emit RebalanceInitiated(
             cycleIndex,
-            assetPriceHigh,
-            assetPriceLow
+            cyclePriceHigh,
+            cyclePriceLow
         );
     }
 
@@ -209,7 +210,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         _validateRebalancingPrice(rebalancePrice);
 
         uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
-        if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
+        if (lpLiquidityHealth < 3) revert InsufficientLPLiquidity();
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
 
@@ -288,7 +289,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
 
     /**
      * @notice Accrues interest based on the current rate, time elapsed, and cycle/rebalance periods
-     * @dev Updates cumulativePoolInterest
+     * @dev Updates cyclePoolInterest
      */
     function _accrueInterest() internal {
         uint256 currentTimestamp = block.timestamp;
@@ -306,15 +307,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         // Calculate interest for the elapsed time
         // Formula: interest = rate * timeElapsed / secondsPerYear
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
-        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION);
         
         // Add interest to cumulative total
-        cumulativePoolInterest += interest;
+        cyclePoolInterest[cycleIndex] += interest;
+        // Calculate the interest amount in terms of asset
+        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION);
         
         // Update last accrual timestamp
         lastInterestAccrualTimestamp = currentTimestamp;
         
-        emit InterestAccrued(interest, cumulativePoolInterest, currentTimestamp);
+        emit InterestAccrued(interest, cyclePoolInterest[cycleIndex], currentTimestamp);
     }
 
     // --------------------------------------------------------------------------------
@@ -336,7 +338,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @param rebalancePrice Price at which the LP is rebalancing.
      */
     function _validateRebalancingPrice(uint256 rebalancePrice) internal view {
-        if (rebalancePrice < assetPriceLow || rebalancePrice > assetPriceHigh) {
+        if (rebalancePrice < cyclePriceLow || rebalancePrice > cyclePriceHigh) {
             revert InvalidRebalancePrice();
         }
     }
@@ -353,7 +355,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
         lastCycleActionDateTime = block.timestamp;
         poolAssetBalance = assetToken.totalSupply();
         cycleInterestAmount = 0;
-
+        cyclePoolInterest[cycleIndex] = cyclePoolInterest[cycleIndex - 1];
+        cyclePriceHigh = 0;
+        cyclePriceLow = 0;
+        
         emit CycleStarted(cycleIndex, block.timestamp);
     }
     
@@ -403,7 +408,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
      * @notice Returns information about the pool.
      * @return _cycleState Current state of the pool.
      * @return _cycleIndex Current cycle index.
-     * @return _assetPrice Current price of the asset.
+     * @return _assetPrice Last pool rebalance price of the asset.
      * @return _lastCycleActionDateTime Timestamp of the last cycle action.
      * @return _reserveBalance Reserve token balance of the pool.
      * @return _assetBalance Asset token balance of the pool.
@@ -422,7 +427,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage {
     ) {
         _cycleState = cycleState;
         _cycleIndex = cycleIndex;
-        _assetPrice = assetOracle.assetPrice();
+        _assetPrice = cycleRebalancePrice[cycleIndex - 1];
         _lastCycleActionDateTime = lastCycleActionDateTime;
         _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();
