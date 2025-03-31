@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -18,7 +19,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------

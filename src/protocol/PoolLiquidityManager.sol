@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -17,7 +18,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @title PoolLiquidityManager
  * @notice Manages LP liquidity requirements and registry for the asset pool
  */
-contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
+contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard, Multicall {
     
     // Total liquidity committed by LPs
     uint256 public totalLPLiquidityCommited;
