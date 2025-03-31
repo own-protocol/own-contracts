@@ -291,9 +291,10 @@ interface IAssetPool {
     /**
      * @notice Calculate interest debt for a user
      * @param user User address
+     * @param cycle Cycle index
      * @return interestDebt Amount of interest debt in reserve tokens
      */
-    function getInterestDebt(address user) external view returns (uint256 interestDebt);
+    function getInterestDebt(address user, uint256 cycle) external view returns (uint256 interestDebt);
 
     /**
      * @notice Get a user's collateral amount
@@ -307,7 +308,7 @@ interface IAssetPool {
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
      * @return collateralAmount Amount of collateral in position
-     * @return interestDebt Amount of interest debt in reserve tokens
+     * @return interestDebt Amount of interest debt in asset tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,

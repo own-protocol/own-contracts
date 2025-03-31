@@ -55,13 +55,13 @@ interface IPoolCycleManager {
     /**
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
-     * @param assetPriceHigh Highest price of the asset during the rebalance
-     * @param assetPriceLow Lowest price of the asset during the rebalance
+     * @param cyclePriceHigh Highest price of the asset during the rebalance
+     * @param cyclePriceLow Lowest price of the asset during the rebalance
      */
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
-        uint256 assetPriceHigh,
-        uint256 assetPriceLow
+        uint256 cyclePriceHigh,
+        uint256 cyclePriceLow
     );
 
     /**
@@ -219,9 +219,10 @@ interface IPoolCycleManager {
     function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
 
     /**
-     * @notice Returns the cumulative interest percent accrued in the pool
+     * @notice Returns the cumulative interest percent accrued in the pool as of the current cycle
+     * @param cycle Cycle index to query
      */
-    function cumulativePoolInterest() external view returns (uint256);
+    function cyclePoolInterest(uint256 cycle) external view returns (uint256);
 
     /**
      * @notice Returns the interest amount accrued in the current cycle (interms of asset)
@@ -236,11 +237,11 @@ interface IPoolCycleManager {
     /**
      * @notice Asset price high for the current cycle
      */
-    function assetPriceHigh() external view returns (uint256);
+    function cyclePriceHigh() external view returns (uint256);
 
     /**
      * @notice Asset price low for the current cycle
      */
-    function assetPriceLow() external view returns (uint256);
+    function cyclePriceLow() external view returns (uint256);
 
 }
