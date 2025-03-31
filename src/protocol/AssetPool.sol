@@ -524,9 +524,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      */
     function getCycleUtilisedLiquidity() public view returns (uint256) {      
         (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
+        uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
+        uint256 price = poolCycleManager.cycleRebalancePrice(prevCycle); 
         uint256 totalRatio = BPS + healthyRatio;
         uint256 utilisedLiquidity = getUtilisedLiquidity();
-        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, assetOracle.assetPrice(), PRECISION * reserveToAssetDecimalFactor);
+        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, price, PRECISION * reserveToAssetDecimalFactor);
         uint256 nettChange = 0;
         uint256 cycleUtilisedLiquidity = 0;
         if (cycleTotalDeposits > cycleRedemtionsInReserveToken) {
@@ -547,8 +549,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @return value Pool value in reserve tokens
      */
     function getPoolValue() public view returns (uint256 value) {
+        uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
         uint256 assetSupply = assetToken.totalSupply();
-        uint256 assetPrice = assetOracle.assetPrice();
+        uint256 assetPrice = poolCycleManager.cycleRebalancePrice(prevCycle);
 
         return Math.mulDiv(assetSupply, assetPrice, PRECISION * reserveToAssetDecimalFactor);
     }

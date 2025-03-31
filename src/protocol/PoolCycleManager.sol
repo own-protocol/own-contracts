@@ -408,7 +408,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @notice Returns information about the pool.
      * @return _cycleState Current state of the pool.
      * @return _cycleIndex Current cycle index.
-     * @return _assetPrice Current price of the asset.
+     * @return _assetPrice Last pool rebalance price of the asset.
      * @return _lastCycleActionDateTime Timestamp of the last cycle action.
      * @return _reserveBalance Reserve token balance of the pool.
      * @return _assetBalance Asset token balance of the pool.
@@ -427,7 +427,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     ) {
         _cycleState = cycleState;
         _cycleIndex = cycleIndex;
-        _assetPrice = assetOracle.assetPrice();
+        _assetPrice = cycleRebalancePrice[cycleIndex - 1];
         _lastCycleActionDateTime = lastCycleActionDateTime;
         _reserveBalance = assetPool.poolReserveBalance();
         _assetBalance = assetToken.totalSupply();

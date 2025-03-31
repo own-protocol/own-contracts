@@ -159,7 +159,7 @@ interface IPoolCycleManager {
      * @notice Returns information about the pool
      * @return _cycleState Current state of the pool
      * @return _cycleIndex Current operational cycle index
-     * @return _assetPrice Current price of the asset
+     * @return _assetPrice Last pool rebalance price of the asset
      * @return _lastCycleActionDateTime Timestamp of the last cycle action
      * @return _reserveBalance Reserve token balance of the pool
      * @return _assetBalance Asset token balance of the pool
