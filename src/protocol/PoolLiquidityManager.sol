@@ -191,27 +191,29 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
     /**
      * @notice Add additional collateral beyond the minimum
+     * @param lp Address of the LP
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(uint256 amount) external nonReentrant onlyRegisteredLP {
+    function addCollateral(address lp, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         
-        reserveToken.transferFrom(msg.sender, address(this), amount);
-        lpPositions[msg.sender].collateralAmount += amount;
+        reserveToken.transferFrom(lp, address(this), amount);
+        lpPositions[lp].collateralAmount += amount;
 
         totalLPCollateral += amount;
-        uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
-        if (liquidityHealth == 1) revert InsufficientCollateralHealth(liquidityHealth);
 
-        emit CollateralAdded(msg.sender, amount);
+        emit CollateralAdded(lp, amount);
 
-        LPRequest storage request = lpRequests[msg.sender];
+        LPRequest storage request = lpRequests[lp];
         if (request.requestType == RequestType.LIQUIDATE && _isCycleActive()) {
-            // Position is no longer liquidatable, cancel the liquidation request
-            cycleTotalReduceLiquidityAmount -= request.requestAmount;
-            delete liquidationInitiators[msg.sender];
-            request.requestType = RequestType.NONE;
-            emit LiquidationCancelled(msg.sender);
+            uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
+            if (liquidityHealth > 2) {
+                // Position is no longer liquidatable, cancel the liquidation request
+                cycleTotalReduceLiquidityAmount -= request.requestAmount;
+                delete liquidationInitiators[lp];
+                request.requestType = RequestType.NONE;
+                emit LiquidationCancelled(lp);
+            }
         }
     }
 
@@ -602,6 +604,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function _removeLP(address lp) internal {
         LPPosition storage position = lpPositions[lp];
+
+        if (position.collateralAmount > 0) {
+            uint256 collateralAmount = position.collateralAmount;
+            position.collateralAmount = 0;
+            totalLPCollateral -= collateralAmount;
+
+            reserveToken.transfer(lp, collateralAmount);
+
+            emit CollateralReduced(lp, collateralAmount);
+        }
         
         // Transfer any remaining interest
         if (position.interestAccrued > 0) {
