@@ -140,6 +140,13 @@ interface IPoolCycleManager {
      */
     function rebalanceLP(address lp) external;
 
+    /**
+     * @notice Force rebalance an lp if the pool halt threshold window has reached and the LP has not rebalanced
+     * @dev This is also called the forced settlement step and once settled by all LPs, the pool is halted
+     * @param lp Address of the LP to rebalance
+     */
+    function forceRebalanceLP(address lp) external;
+
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
     // --------------------------------------------------------------------------------

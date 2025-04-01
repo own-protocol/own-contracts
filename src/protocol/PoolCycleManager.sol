@@ -259,7 +259,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            _startNewCycle();
+            _startNewCycle(CycleState.POOL_ACTIVE);
         }
     }
 
@@ -272,8 +272,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function rebalanceLP(address lp) external {
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
-        (uint256 rebalanceLength, , ) = poolStrategy.getCycleParams();
+        (uint256 rebalanceLength, ,uint256 haltThreshold ) = poolStrategy.getCycleParams();
         if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
+        if (block.timestamp > lastCycleActionDateTime + haltThreshold) revert RebalancingExpired();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (!poolLiquidityManager.isLP(lp)) revert NotLP();
 
@@ -328,9 +329,62 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
-            _startNewCycle();
+            _startNewCycle(CycleState.POOL_ACTIVE);
         }
     }
+
+    /**
+     * @notice Force rebalance an lp if the pool halt threshold window has reached and the LP has not rebalanced
+     * @dev This is also called the forced settlement step and once settled by all LPs, the pool is halted
+     * @dev The pool is halted because the pool is being rebalanced with a deviation
+     * @param lp Address of the LP to rebalance
+     */
+    function forceRebalanceLP(address lp) external {
+        if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
+        (, ,uint256 haltThreshold ) = poolStrategy.getCycleParams();
+        if (block.timestamp < lastCycleActionDateTime + haltThreshold) revert InvalidCycleState();
+        if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
+        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+
+        uint256 lpCollateral = poolLiquidityManager.getLPCollateral(lp);
+        bool isDeposit = false;
+
+        if (lpCollateral > 0) {
+            // Use LP's balance collateral to settle as much as possible
+            poolLiquidityManager.deductFromCollateral(lp, lpCollateral);
+            isDeposit = true;
+        }
+
+        uint256 settlementPrice = calculateRebalancePriceForAmount(int256(lpCollateral));
+
+        uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
+
+        // Calculate interest for the LP's liquidity commitment
+        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
+        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+        
+        // Deduct interest from the pool and add to LP's collateral
+        if (lpCycleInterest > 0) {
+            assetPool.deductInterest(lp, lpCycleInterest, true);
+        }
+        
+        // Resolve any pending requests for the LP
+        poolLiquidityManager.resolveRequest(lp);
+        
+        // Update cycle stats
+        cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
+        lastRebalancedCycle[lp] = cycleIndex;
+        rebalancedLPs++;
+        
+        emit Rebalanced(lp, settlementPrice, lpCollateral, isDeposit, cycleIndex);
+        
+        // If all LPs have rebalanced, start next cycle
+        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
+            _startNewCycle(CycleState.POOL_HALTED);
+        }
+    }
+
 
     // --------------------------------------------------------------------------------
     //                          INTEREST CALCULATION LOGIC
@@ -374,12 +428,31 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
 
     /**
      * @notice Calculates the rebalance amount based on the asset price.
+     * @dev If assetPrice is prevCyclePrice, the pool is in equilibrium.
+     * @dev If assetPrice is greater than prevCyclePrice, the pool is in deficit.
+     * @dev If assetPrice is less than prevCyclePrice, the pool is in surplus.
      * @param assetPrice rebalance price of the asset.
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 poolReserveValue = assetPool.poolReserveBalance();
         return int256(poolAssetValue - poolReserveValue);
+    }
+
+    /**
+     * @notice Calculates the rebalance price for a given amount.
+     * @param rebalanceAmount Amount to be rebalanced.
+     * @return The calculated rebalance price.
+     */
+    function calculateRebalancePriceForAmount(int256 rebalanceAmount) internal view returns (uint256) {
+        uint256 poolReserveValue = assetPool.poolReserveBalance();
+        int256 targetAssetValue = rebalanceAmount + int256(poolReserveValue);
+
+        return Math.mulDiv(
+            uint256(targetAssetValue),
+            PRECISION * reserveToAssetDecimalFactor,
+            poolAssetBalance
+        );
     }
 
     /**
@@ -395,7 +468,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     /**
      * @notice Starts a new cycle after all LPs have rebalanced.
      */
-    function _startNewCycle() internal {
+    function _startNewCycle(CycleState newCycleState) internal {
 
         uint256 price = cycleWeightedSum / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
         cycleRebalancePrice[cycleIndex] = price;
@@ -405,7 +478,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         poolLiquidityManager.updateCycleData();
 
         cycleIndex++;
-        cycleState = CycleState.POOL_ACTIVE;
+        cycleState = newCycleState;
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;

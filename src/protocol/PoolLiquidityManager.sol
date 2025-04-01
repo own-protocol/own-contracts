@@ -494,15 +494,23 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Get LP's current liquidity position
      * @param lp Address of the LP
      */
-    function getLPPosition(address lp) external view returns (LPPosition memory) {
+    function getLPPosition(address lp) public view returns (LPPosition memory) {
         return lpPositions[lp];
+    }
+
+    /**
+     * @notice Get LP's current collateral amount
+     * @param lp Address of the LP
+     */
+    function getLPCollateral(address lp) public view returns (uint256) {
+        return lpPositions[lp].collateralAmount;
     }
 
     /**
      * @notice Get LP's current request
      * @param lp Address of the LP
      */
-    function getLPRequest(address lp) external view returns (LPRequest memory) {
+    function getLPRequest(address lp) public view returns (LPRequest memory) {
         return lpRequests[lp];
     }
 
@@ -510,7 +518,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Get LP's current liquidation initiator
      * @param lp Address of the LP
      */
-    function getLPLiquidationIntiator(address lp) external view returns (address) {
+    function getLPLiquidationIntiator(address lp) public view returns (address) {
         return liquidationInitiators[lp];
     }
 
@@ -519,7 +527,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp The address to check
      * @return bool True if the address is a registered LP
      */
-    function isLP(address lp) external view returns (bool) {
+    function isLP(address lp) public view returns (bool) {
         return registeredLPs[lp];
     }
     
@@ -527,7 +535,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Returns the number of LPs registered
      * @return uint256 The number of registered LPs
      */
-    function getLPCount() external view returns (uint256) {
+    function getLPCount() public view returns (uint256) {
         return lpCount;
     }
     
@@ -536,14 +544,14 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp The address of the LP
      * @return uint256 The current liquidity amount
      */
-    function getLPLiquidityCommitment(address lp) external view returns (uint256) {
+    function getLPLiquidityCommitment(address lp) public view returns (uint256) {
         return lpPositions[lp].liquidityCommitment;
     }
 
     /**
      * @notice Returns the reserve to asset decimal factor
      */
-    function getReserveToAssetDecimalFactor() external view returns (uint256) {
+    function getReserveToAssetDecimalFactor() public view returns (uint256) {
         return reserveToAssetDecimalFactor;
     }
 

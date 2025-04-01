@@ -331,6 +331,12 @@ interface IPoolLiquidityManager {
     function getLPPosition(address lp) external view returns (LPPosition memory);
 
     /**
+     * @notice Get LP's current collateral amount
+     * @param lp Address of the LP
+     */
+    function getLPCollateral(address lp) external view returns (uint256);
+
+    /**
      * @notice Get LP's current request
      * @param lp Address of the LP
      */
