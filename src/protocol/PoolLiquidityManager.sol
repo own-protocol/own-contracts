@@ -207,7 +207,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPRequest storage request = lpRequests[lp];
         if (request.requestType == RequestType.LIQUIDATE && _isCycleActive()) {
             uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
-            if (liquidityHealth > 2) {
+            if (liquidityHealth == 3) {
                 // Position is no longer liquidatable, cancel the liquidation request
                 cycleTotalReduceLiquidityAmount -= request.requestAmount;
                 delete liquidationInitiators[lp];

@@ -243,16 +243,17 @@ interface IAssetPool {
     function claimReserve(address user) external;
 
     /**
-     * @notice Allows users to deposit additional collateral
+     * @notice Deposit additional collateral beyond the minimum
+     * @param user Address of the user to whom the collateral is being deposited
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(uint256 amount) external;
+    function addCollateral(address user, uint256 amount) external;
 
     /**
      * @notice Allows users to withdraw excess collateral
      * @param amount Amount of collateral to withdraw
      */
-    function withdrawCollateral(uint256 amount) external;
+    function reduceCollateral(uint256 amount) external;
 
     /**
      * @notice Initiates a liquidation request for an underwater position

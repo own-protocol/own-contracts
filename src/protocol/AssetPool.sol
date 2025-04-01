@@ -135,48 +135,47 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
     /**
      * @notice Allows users to deposit additional collateral
+     * @param user Address of the user
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(uint256 amount) external nonReentrant onlyActiveCycle {
+    function addCollateral(address user, uint256 amount) external nonReentrant onlyActiveCycle {
         if (amount == 0) revert InvalidAmount();
 
-        UserPosition storage position = userPositions[msg.sender];
+        UserPosition storage position = userPositions[user];
         
         // Transfer collateral from user to this contract
-        reserveToken.transferFrom(msg.sender, address(this), amount);
+        reserveToken.transferFrom(user, address(this), amount);
         
         // Update user's position
         position.collateralAmount += amount;
 
-        uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), msg.sender);
-        if (collateralHealth < 3)  revert InsufficientCollateral();
+        UserRequest storage request = userRequests[user];
+        if (request.requestType == RequestType.LIQUIDATE && request.requestCycle == poolCycleManager.cycleIndex()) {
 
-        UserRequest storage request = userRequests[msg.sender];
-        if (request.requestType == RequestType.LIQUIDATE) {
+            uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
+            if (collateralHealth == 3) {
+                uint256 requestAmount = request.amount;
+                address liquidationInitiator = liquidationInitiators[user];
+                // Cancel liquidation request if collateral is added
+                cycleTotalRedemptions -= requestAmount;
+                // Refund the liquidator's tokens
+                assetToken.transfer(liquidationInitiators[user], requestAmount);
 
-            if (request.requestCycle != poolCycleManager.cycleIndex()) revert NothingToCancel();
+                delete userRequests[user];
+                delete liquidationInitiators[user];
 
-            uint256 requestAmount = request.amount;
-            address liquidationInitiator = liquidationInitiators[msg.sender];
-            // Cancel liquidation request if collateral is added
-            cycleTotalRedemptions -= requestAmount;
-            // Refund the liquidator's tokens
-            assetToken.transfer(liquidationInitiators[msg.sender], requestAmount);
-
-            delete userRequests[msg.sender];
-            delete liquidationInitiators[msg.sender];
-
-            emit LiquidationCancelled(msg.sender, liquidationInitiator, requestAmount);
+                emit LiquidationCancelled(user, liquidationInitiator, requestAmount);
+            }
         }
         
-        emit CollateralDeposited(msg.sender, amount);
+        emit CollateralDeposited(user, amount);
     }
 
     /**
      * @notice Allows users to withdraw excess collateral
      * @param amount Amount of collateral to withdraw
      */
-    function withdrawCollateral(uint256 amount) external nonReentrant {
+    function reduceCollateral(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
         
         UserPosition storage position = userPositions[msg.sender];

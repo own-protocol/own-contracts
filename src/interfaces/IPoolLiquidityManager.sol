@@ -225,9 +225,10 @@ interface IPoolLiquidityManager {
 
     /**
      * @notice Deposit additional collateral beyond the minimum
+     * @param lp Address of the LP
      * @param amount Amount of collateral to add
      */
-    function addCollateral(uint256 amount) external;
+    function addCollateral(address lp, uint256 amount) external;
 
     /**
      * @notice Withdraw excess collateral if above minimum requirements
