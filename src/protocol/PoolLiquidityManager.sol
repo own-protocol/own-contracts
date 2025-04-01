@@ -328,12 +328,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (request.requestType == RequestType.ADD_LIQUIDITY) {
             // Update LP position
             position.liquidityCommitment += request.requestAmount;
-            
             emit LiquidityAdded(lp, request.requestAmount);
+            
         } else if (request.requestType == RequestType.REDUCE_LIQUIDITY) {
             // Update LP position
             position.liquidityCommitment -= request.requestAmount;
-
             emit LiquidityReduced(lp, request.requestAmount);
 
             if(position.liquidityCommitment == 0) {
@@ -345,13 +344,12 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             // Transfer liquidation reward to liquidator
             uint256 liquidationAmount = request.requestAmount;
             uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
-
             position.liquidityCommitment -= liquidationAmount;
-            position.collateralAmount -= rewardAmount;
-            totalLPCollateral -= rewardAmount;
-
-            reserveToken.transfer(liquidationInitiators[lp], rewardAmount);
-
+            if (position.collateralAmount >= rewardAmount){
+                position.collateralAmount -= rewardAmount;
+                totalLPCollateral -= rewardAmount;
+                reserveToken.transfer(liquidationInitiators[lp], rewardAmount);
+            }
             emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, rewardAmount);
 
             if(position.liquidityCommitment == 0) {
