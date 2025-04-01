@@ -21,8 +21,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     // cycle parameters
-    uint256 public rebalanceLength;      // length of onchain rebalancing period (default: 3 hours)
-    uint256 public oracleUpdateThreshold; // Threshold for oracle update (15 minutes)
+    uint256 public rebalanceLength;       // length of onchain rebalancing period (default: 3 hours)
+    uint256 public oracleUpdateThreshold; // Threshold for oracle update (default: 15 minutes)
+    uint256 public haltThreshold;        // Threshold for halting the pool (default: 5 days)
     
     // Asset interest rate parameters
     uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
@@ -68,15 +69,18 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the cycle parameters
      * @param _rebalanceLength Length of rebalancing period in seconds
      * @param _oracleUpdateThreshold Threshold for oracle update
+
      */
     function setCycleParams(
         uint256 _rebalanceLength,
-        uint256 _oracleUpdateThreshold
+        uint256 _oracleUpdateThreshold,
+        uint256 _haltThreshold
     ) external onlyOwner {
         rebalanceLength = _rebalanceLength;
         oracleUpdateThreshold = _oracleUpdateThreshold;
+        haltThreshold = _haltThreshold;
 
-        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold);
+        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold, _haltThreshold);
     }
     
     /**
@@ -193,12 +197,14 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Returns the cycle parameters
      * @return rebalancePeriod Length of rebalancing period in seconds
      * @return oracleThreshold Threshold for oracle update
+     * @return poolHaltThreshold Threshold for halting the pool
      */
     function getCycleParams() external view returns (
         uint256 rebalancePeriod,
-        uint256 oracleThreshold
+        uint256 oracleThreshold,
+        uint256 poolHaltThreshold
     ) {
-        return (rebalanceLength, oracleThreshold);
+        return (rebalanceLength, oracleUpdateThreshold, haltThreshold);
     }
     
     // --------------------------------------------------------------------------------

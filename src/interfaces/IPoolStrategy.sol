@@ -20,7 +20,8 @@ interface IPoolStrategy {
      */
     event CycleParamsUpdated(
         uint256 rebalancePeriod,
-        uint256 OracleUpdateThreshold
+        uint256 oracleUpdateThreshold,
+        uint256 poolHaltThreshold
     );
 
     /**
@@ -67,10 +68,12 @@ interface IPoolStrategy {
      * @notice Sets the cycle parameters
      * @param rebalancePeriod Length of rebalancing period in seconds
      * @param oracleUpdateThreshold Threshold for Oracle update
+     * @param haltThreshold Threshold for halting the pool
      */
     function setCycleParams(
         uint256 rebalancePeriod,
-        uint256 oracleUpdateThreshold
+        uint256 oracleUpdateThreshold,
+        uint256 haltThreshold
     ) external;
     
     /**
@@ -127,12 +130,14 @@ interface IPoolStrategy {
 
     /**
      * @notice Returns the cycle parameters
-     * @return rebalanceLength Length of rebalancing period in seconds
-     * @return oracleUpdateThreshold Threshold for Oracle update
+     * @return rebalancePeriod Length of rebalancing period in seconds
+     * @return oracleThreshold Threshold for Oracle update
+     * @return poolHaltThreshold Threshold for halting the pool
      */
     function getCycleParams() external view returns (
-        uint256 rebalanceLength, 
-        uint256 oracleUpdateThreshold
+        uint256 rebalancePeriod, 
+        uint256 oracleThreshold,
+        uint256 poolHaltThreshold
     );
     
     // --------------------------------------------------------------------------------
