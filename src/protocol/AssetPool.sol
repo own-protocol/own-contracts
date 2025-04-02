@@ -453,33 +453,34 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
     /**
      * @notice When pool is halted exit the pool
-     * @param user Address of the user
+     * @param amount Amount of the asset tokens to burn
      */
-    function exitPool(address user) external nonReentrant onlyHaltedPool {
+    function exitPool(uint256 amount) external nonReentrant onlyHaltedPool {
         if (requestType != RequestType.NONE) revert RequestPending();
+        UserPosition storage position = userPositions[msg.sender];
+        if (position.assetAmount < amount) revert InvalidRedemptionRequest();
+        
+        uint256 userBalance = assetToken.balanceOf(msg.sender);
+        if (userBalance < amount) revert InsufficientBalance();
 
         uint256 cycle = poolCycleManager.cycleIndex() - 1;
         // Get the rebalance price from the pool cycle manager
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(cycle);
 
-        UserPosition storage position = userPositions[user];
-        uint256 amount = position.assetAmount;
-        uint256 collateral = position.collateralAmount;
-        
-        // Convert asset to reserve using rebalance price
-        uint256 reserveAmount = Math.mulDiv(
-            assetAmount, 
-            rebalancePrice, 
-            PRECISION * reserveToAssetDecimalFactor
-        );
-        uint256 interestDebt = getInterestDebt(user, requestCycle);
-        // Calculate interest debt in reserve tokens
-        interestDebt = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+        (uint256 reserveAmount, uint256 collateral, uint256 scaledAssetAmount, uint256 interestDebt) = 
+            _calculateRedemptionValues(user, amount, rebalancePrice, cycle);
 
-        position.assetAmount = 0;
-        position.collateralAmount = 0;
-        scaledAssetBalance[user] = 0;
-        uint256 totalAmount = reserveAmount + collateral - interestDebt;
+        uint256 totalAmount = 0;
+        if(position.assetAmount - amount == 0) {
+            position.assetAmount = 0;
+            position.collateralAmount = 0;
+            scaledAssetBalance[user] = 0;
+        } else {
+            position.assetAmount -= amount;
+            position.collateralAmount -= collateral;
+            scaledAssetBalance[user] -= scaledAssetAmount;
+        }
+        totalAmount = reserveAmount + collateral - interestDebt;
 
         reserveToken.transfer(user, totalAmount);
         

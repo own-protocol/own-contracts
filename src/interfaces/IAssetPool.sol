@@ -244,9 +244,9 @@ interface IAssetPool {
 
     /**
      * @notice When pool is halted exit the pool
-     * @param user Address of the user
+     * @param amount Amount of asset tokens to burn
      */
-    function exitPool(address user) external;
+    function exitPool(uint256 amount) external;
 
     /**
      * @notice Deposit additional collateral beyond the minimum
