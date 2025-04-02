@@ -89,10 +89,30 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     /**
      * @dev Ensures the cycle state is active
      */
-    modifier onlyActiveCycle() {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Cycle not active");
+    modifier onlyActivePool() {
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Pool not active");
         _;
     }
+
+    /**
+     * @dev Ensures the cycle state is halted
+     */
+    modifier onlyHaltedPool() {
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_HALTED) revert("Pool not halted");
+        _;
+    }
+
+    /**
+     * @dev Ensures the cycle state is active or halted
+     */
+    modifier onlyActiveOrHaltedPool() {
+        CycleState state = poolCycleManager.cycleState();
+        if (state != CycleState.POOL_ACTIVE && state != CycleState.POOL_HALTED) {
+            revert("Pool not active or halted");
+        }
+        _;
+    }
+
 
     // --------------------------------------------------------------------------------
     //                                 INITIALIZER
@@ -138,7 +158,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param user Address of the user
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(address user, uint256 amount) external nonReentrant onlyActiveCycle {
+    function addCollateral(address user, uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
         UserPosition storage position = userPositions[user];
@@ -150,7 +170,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         position.collateralAmount += amount;
 
         UserRequest storage request = userRequests[user];
-        if (request.requestType == RequestType.LIQUIDATE && request.requestCycle == poolCycleManager.cycleIndex()) {
+        if (request.requestType == RequestType.LIQUIDATE 
+            && poolCycleManager.cycleState == IPoolCycleManager.CycleState.POOL_ACTIVE) {
 
             uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
             if (collateralHealth == 3) {
@@ -209,7 +230,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActiveCycle {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActivePool {
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
         
@@ -248,7 +269,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Process a redemption request
      * @param amount Amount of asset tokens to redeem
      */
-    function redemptionRequest(uint256 amount) external nonReentrant onlyActiveCycle {
+    function redemptionRequest(uint256 amount) external nonReentrant onlyActivePool {
         if (amount == 0) revert InvalidAmount();
 
         UserPosition memory position = userPositions[msg.sender];
@@ -278,7 +299,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param user Address of the user whose position is to be liquidated
      * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
      */
-    function liquidationRequest(address user, uint256 amount) external nonReentrant onlyActiveCycle {
+    function liquidationRequest(address user, uint256 amount) external nonReentrant onlyActivePool {
         // Basic validations
         if (user == address(0) || user == msg.sender) revert InvalidLiquidationRequest();
         if (amount == 0) revert InvalidAmount();
@@ -339,7 +360,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Claim asset tokens after a deposit request
      * @param user Address of the user
      */
-    function claimAsset(address user) external nonReentrant onlyActiveCycle {
+    function claimAsset(address user) external nonReentrant onlyActiveOrHaltedPool {
         UserRequest storage request = userRequests[user];
         RequestType requestType = request.requestType;
         uint256 amount = request.amount;
@@ -381,7 +402,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Claim reserve tokens after a redemption request or liquidation request
      * @param user Address of the user
      */
-    function claimReserve(address user) external nonReentrant onlyActiveCycle {
+    function claimReserve(address user) external nonReentrant onlyActiveOrHaltedPool {
         UserRequest storage request = userRequests[user];
         RequestType requestType = request.requestType;
         uint256 amount = request.amount;
@@ -428,6 +449,41 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
         
         emit ReserveWithdrawn(user, reserveAmount, requestCycle);
+    }
+
+    /**
+     * @notice When pool is halted exit the pool
+     * @param user Address of the user
+     */
+    function exitPool(address user) external nonReentrant onlyHaltedPool {
+        if (requestType != RequestType.NONE) revert RequestPending();
+
+        uint256 cycle = poolCycleManager.cycleIndex() - 1;
+        // Get the rebalance price from the pool cycle manager
+        uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(cycle);
+
+        UserPosition storage position = userPositions[user];
+        uint256 amount = position.assetAmount;
+        uint256 collateral = position.collateralAmount;
+        
+        // Convert asset to reserve using rebalance price
+        uint256 reserveAmount = Math.mulDiv(
+            assetAmount, 
+            rebalancePrice, 
+            PRECISION * reserveToAssetDecimalFactor
+        );
+        uint256 interestDebt = getInterestDebt(user, requestCycle);
+        // Calculate interest debt in reserve tokens
+        interestDebt = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+
+        position.assetAmount = 0;
+        position.collateralAmount = 0;
+        scaledAssetBalance[user] = 0;
+        uint256 totalAmount = reserveAmount + collateral - interestDebt;
+
+        reserveToken.transfer(user, totalAmount);
+        
+        emit ReserveWithdrawn(user, reserveAmount, cycle);
     }
 
 

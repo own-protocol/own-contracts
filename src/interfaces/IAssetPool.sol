@@ -243,6 +243,12 @@ interface IAssetPool {
     function claimReserve(address user) external;
 
     /**
+     * @notice When pool is halted exit the pool
+     * @param user Address of the user
+     */
+    function exitPool(address user) external;
+
+    /**
      * @notice Deposit additional collateral beyond the minimum
      * @param user Address of the user to whom the collateral is being deposited
      * @param amount Amount of collateral to deposit
