@@ -106,8 +106,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @dev Ensures the cycle state is active or halted
      */
     modifier onlyActiveOrHaltedPool() {
-        CycleState state = poolCycleManager.cycleState();
-        if (state != CycleState.POOL_ACTIVE && state != CycleState.POOL_HALTED) {
+        IPoolCycleManager.CycleState state = poolCycleManager.cycleState();
+        if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
             revert("Pool not active or halted");
         }
         _;
@@ -171,7 +171,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
         UserRequest storage request = userRequests[user];
         if (request.requestType == RequestType.LIQUIDATE 
-            && poolCycleManager.cycleState == IPoolCycleManager.CycleState.POOL_ACTIVE) {
+            && poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE) {
 
             uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
             if (collateralHealth == 3) {
@@ -456,7 +456,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param amount Amount of the asset tokens to burn
      */
     function exitPool(uint256 amount) external nonReentrant onlyHaltedPool {
-        if (requestType != RequestType.NONE) revert RequestPending();
+        UserRequest memory request = userRequests[msg.sender];
+        if (request.requestType != RequestType.NONE) revert RequestPending();
         UserPosition storage position = userPositions[msg.sender];
         if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
@@ -468,23 +469,23 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(cycle);
 
         (uint256 reserveAmount, uint256 collateral, uint256 scaledAssetAmount, uint256 interestDebt) = 
-            _calculateRedemptionValues(user, amount, rebalancePrice, cycle);
+            _calculateRedemptionValues(msg.sender, amount, rebalancePrice, cycle);
 
         uint256 totalAmount = 0;
         if(position.assetAmount - amount == 0) {
             position.assetAmount = 0;
             position.collateralAmount = 0;
-            scaledAssetBalance[user] = 0;
+            scaledAssetBalance[msg.sender] = 0;
         } else {
             position.assetAmount -= amount;
             position.collateralAmount -= collateral;
-            scaledAssetBalance[user] -= scaledAssetAmount;
+            scaledAssetBalance[msg.sender] -= scaledAssetAmount;
         }
         totalAmount = reserveAmount + collateral - interestDebt;
 
-        reserveToken.transfer(user, totalAmount);
+        reserveToken.transfer(msg.sender, totalAmount);
         
-        emit ReserveWithdrawn(user, reserveAmount, cycle);
+        emit ReserveWithdrawn(msg.sender, reserveAmount, cycle);
     }
 
 
