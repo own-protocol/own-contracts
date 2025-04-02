@@ -124,7 +124,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function addLiquidity(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
-        if (!_isCycleActive()) revert InvalidCycleState();
+        if (!_isPoolActive()) revert InvalidCycleState();
 
         (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         // Calculate additional required collateral
@@ -163,7 +163,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function reduceLiquidity(uint256 amount) external nonReentrant onlyRegisteredLP {
         if (amount == 0) revert InvalidAmount();
 
-        if (!_isCycleActive()) revert InvalidCycleState();
+        if (!_isPoolActive()) revert InvalidCycleState();
 
         LPRequest storage request = lpRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
@@ -205,7 +205,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         emit CollateralAdded(lp, amount);
 
         LPRequest storage request = lpRequests[lp];
-        if (request.requestType == RequestType.LIQUIDATE && _isCycleActive()) {
+        if (request.requestType == RequestType.LIQUIDATE && _isPoolActive()) {
             uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
             if (liquidityHealth == 3) {
                 // Position is no longer liquidatable, cancel the liquidation request
@@ -273,6 +273,19 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
+     * @notice When the pool is halted exit pool
+     */
+    function exitPool() external nonReentrant onlyRegisteredLP {
+
+        if (!_isPoolHalted()) revert InvalidCycleState();
+
+        LPPosition storage position = lpPositions[msg.sender];
+        position.liquidityCommitment = 0;
+
+        _removeLP(msg.sender);
+    }
+
+    /**
      * @notice Add interest amount to LP's position
      * @param lp Address of the LP
      * @param amount Amount to add
@@ -329,7 +342,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             // Update LP position
             position.liquidityCommitment += request.requestAmount;
             emit LiquidityAdded(lp, request.requestAmount);
-            
+
         } else if (request.requestType == RequestType.REDUCE_LIQUIDITY) {
             // Update LP position
             position.liquidityCommitment -= request.requestAmount;
@@ -557,8 +570,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Check if the current cycle is active
      * @return True if the cycle is active, false otherwise
     */
-    function _isCycleActive() internal view returns (bool) {
+    function _isPoolActive() internal view returns (bool) {
         return poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE;
+    }
+
+    /**
+     * @notice Check if the pool is halted
+     * @return True if the pool is halted, false otherwisw
+    */
+    function _isPoolHalted() internal view returns (bool) {
+        return poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_HALTED;
     }
 
     /**

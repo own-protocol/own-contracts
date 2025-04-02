@@ -249,6 +249,11 @@ interface IPoolLiquidityManager {
     function liquidateLP(address lp, uint256 liquidationAmount) external;
 
     /**
+     * @notice When the pool is halted exit pool
+     */
+    function exitPool() external;
+
+    /**
      * @notice Add interest amount to LP's position
      * @dev Can be called only by the asset pool contract
      * @param lp Address of the LP
