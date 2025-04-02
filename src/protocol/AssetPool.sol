@@ -281,7 +281,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         UserRequest storage request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
         
-        // Transfer asset tokens from user to poolCycleManager
+        // Transfer asset tokens from user to pool
         assetToken.transferFrom(msg.sender, address(this), amount);
         
         // Update request state
@@ -448,7 +448,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
             emit LiquidationClaimed(user, liquidator, amount, totalAmount, collateral);
         }
         
-        emit ReserveWithdrawn(user, reserveAmount, requestCycle);
+        emit ReserveWithdrawn(user, totalAmount, requestCycle);
     }
 
     /**
@@ -456,13 +456,20 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @param amount Amount of the asset tokens to burn
      */
     function exitPool(uint256 amount) external nonReentrant onlyHaltedPool {
+        if (amount == 0) revert InvalidAmount();
         UserRequest memory request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
         UserPosition storage position = userPositions[msg.sender];
         if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
+        uint256 reserveBalance = assetToken.reserveBalanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
+        if (amount < userBalance) {
+            reserveBalance = Math.mulDiv(reserveBalance, amount, userBalance);
+        }
+
+        assetToken.burn(msg.sender, amount, reserveBalance);
 
         uint256 cycle = poolCycleManager.cycleIndex() - 1;
         // Get the rebalance price from the pool cycle manager
@@ -484,8 +491,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         totalAmount = reserveAmount + collateral - interestDebt;
 
         reserveToken.transfer(msg.sender, totalAmount);
-        
-        emit ReserveWithdrawn(msg.sender, reserveAmount, cycle);
+
+        emit ReserveWithdrawn(msg.sender, totalAmount, cycle);
     }
 
 
