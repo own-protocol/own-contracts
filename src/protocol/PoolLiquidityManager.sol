@@ -279,9 +279,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         if (!_isPoolHalted()) revert InvalidCycleState();
 
-        LPPosition storage position = lpPositions[msg.sender];
-        position.liquidityCommitment = 0;
-
         _removeLP(msg.sender);
     }
 
