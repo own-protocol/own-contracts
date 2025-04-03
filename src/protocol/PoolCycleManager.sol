@@ -198,7 +198,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @notice Once LPs have traded off-chain, they deposit or withdraw stablecoins accordingly.
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
-     * ToDo: When rebalancing we need to ensure LPs have enough collateral to cover the new pool asset value
      */
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
         if (lp != msg.sender) revert UnauthorizedCaller();
