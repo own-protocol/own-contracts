@@ -393,7 +393,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         scaledAssetBalance[user] += scaledAssetAmount;
         
         // Mint tokens
-        assetToken.mint(user, assetAmount, amount);
+        assetToken.mint(user, assetAmount);
         
         emit AssetClaimed(user, assetAmount, requestCycle);
     }
@@ -463,13 +463,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
-        uint256 reserveBalance = assetToken.reserveBalanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
-        if (amount < userBalance) {
-            reserveBalance = Math.mulDiv(reserveBalance, amount, userBalance);
-        }
 
-        assetToken.burn(msg.sender, amount, reserveBalance);
+        assetToken.burn(msg.sender, amount);
 
         uint256 cycle = poolCycleManager.cycleIndex() - 1;
         // Get the rebalance price from the pool cycle manager
@@ -696,7 +692,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external onlyPoolCycleManager {
         uint256 assetBalance = assetToken.balanceOf(address(this));
-        uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
         poolReserveBalance = poolReserveBalance 
             + cycleTotalDeposits
             - Math.mulDiv(cycleTotalRedemptions, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
@@ -708,7 +703,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
 
         if (assetBalance > 0) {
-            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            assetToken.burn(address(this), assetBalance);
         }
 
         cycleTotalDeposits = 0;

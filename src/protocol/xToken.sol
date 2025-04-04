@@ -25,12 +25,6 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Price precision constant
     uint256 private constant PRECISION = 1e18;
 
-    /// @notice Mapping of reserve balances for each account
-    mapping(address => uint256) private _reserveBalances;
-    
-    /// @notice Total supply in reserve balance terms
-    uint256 private _totalReserveSupply;
-
     /**
      * @notice Ensures the caller is a pool contract
      */
@@ -48,36 +42,15 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         pool = msg.sender;
     }
 
-     /**
-     * @notice Returns the reserve balance of an account
-     * @dev This balance is independent of the asset price and represents the user's share of the reserve tokens in the pool
-     * @param account The address of the account
-     * @return The reserve balance of the account
-     */
-    function reserveBalanceOf(address account) public view returns (uint256) {
-        return _reserveBalances[account];
-    }
-
-    /**
-     * @notice Returns the total reserve supply
-     * @return The total reserve supply of tokens
-     */
-    function totalReserveSupply() public view returns (uint256) {
-        return _totalReserveSupply;
-    }
-
     /**
      * @notice Mints new tokens to an account
      * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens to mint (in 18 decimal precision)
-     * @param reserve The amount of reserve tokens which is backing the minted xTokens
      */
-    function mint(address account, uint256 amount, uint256 reserve) external onlyPool {
-        _reserveBalances[account] += reserve;
-        _totalReserveSupply += reserve;
+    function mint(address account, uint256 amount) external onlyPool {
         _mint(account, amount);
-        emit Mint(account, amount, reserve);
+        emit Mint(account, amount);
     }
 
     /**
@@ -85,17 +58,12 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev Only callable by the pool contract
      * @param account The address to burn tokens from
      * @param amount The amount of tokens to burn (in 18 decimal precision)
-     * @param reserve The amount of reserve tokens to burn
      */
-    function burn(address account, uint256 amount, uint256 reserve) external onlyPool {
+    function burn(address account, uint256 amount) external onlyPool {
         uint256 balance = balanceOf(account);
-        uint256 reserveBalance = _reserveBalances[account];
         if (balance < amount) revert InsufficientBalance();
-        if (reserveBalance < reserve) revert InsufficientBalance();
-        _reserveBalances[account] -= reserve;
-        _totalReserveSupply -= reserve;
         _burn(account, amount);
-        emit Burn(account, amount, reserve);
+        emit Burn(account, amount);
     }
 
     /**
@@ -108,12 +76,6 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         if (recipient == address(0)) revert ZeroAddress();
         uint256 balance = balanceOf(msg.sender);
         if (balance < amount) revert InsufficientBalance();
-
-        uint256 reserveBalance = _reserveBalances[msg.sender];
-        uint256 reserveBalanceToTransfer = Math.mulDiv(reserveBalance, amount, balance);
-        
-        _reserveBalances[msg.sender] -= reserveBalanceToTransfer;
-        _reserveBalances[recipient] += reserveBalanceToTransfer;
 
         _transfer(msg.sender, recipient, amount);
         
@@ -139,11 +101,6 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         uint256 balance = balanceOf(sender);
         if (balance < amount) revert InsufficientBalance();
 
-        uint256 reserveBalance = _reserveBalances[sender];
-        uint256 reserveBalanceToTransfer = Math.mulDiv(reserveBalance, amount, balance);
-
-        _reserveBalances[sender] -= reserveBalanceToTransfer;
-        _reserveBalances[recipient] += reserveBalanceToTransfer;
         _approve(sender, msg.sender, currentAllowance - amount);
 
         _transfer(sender, recipient, amount);
