@@ -37,9 +37,14 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     uint256 public cycleTotalRedemptions;
 
     /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
+     * @notice Amount of reserve tokens backing the asset token
      */
     uint256 public poolReserveBalance;
+
+    /**
+     * @notice Combined reserve balance of the pool (including collateral, interestDebt).
+     */
+    uint256 public combinedReserveBalance;
 
     /**
      * @notice Mapping of user addresses to their positions
@@ -168,6 +173,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         
         // Update user's position
         position.collateralAmount += amount;
+        combinedReserveBalance += amount;
 
         UserRequest storage request = userRequests[user];
         if (request.requestType == RequestType.LIQUIDATE 
@@ -214,6 +220,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         
         // Update user's position
         position.collateralAmount -= amount;
+        combinedReserveBalance -= amount;
         
         // Transfer collateral to user
         reserveToken.transfer(msg.sender, amount);
@@ -261,6 +268,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         request.collateralAmount = collateralAmount;
         request.requestCycle = poolCycleManager.cycleIndex();
         cycleTotalDeposits += amount;
+        combinedReserveBalance += totalDeposit;
         
         emit DepositRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -433,6 +441,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
             scaledAssetBalance[user] -= scaledAssetAmount;
         }
         totalAmount = reserveAmount + collateral - interestDebt;
+        combinedReserveBalance -= totalAmount;
     
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
@@ -485,6 +494,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
             scaledAssetBalance[msg.sender] -= scaledAssetAmount;
         }
         totalAmount = reserveAmount + collateral - interestDebt;
+        combinedReserveBalance -= totalAmount;
 
         reserveToken.transfer(msg.sender, totalAmount);
 
@@ -632,6 +642,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         // Check if we have enough reserve tokens for the transfer
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
         if (reserveBalance < amount) revert InsufficientBalance();
+        combinedReserveBalance -= amount;
 
         if (isSettle) {
             // Transfer the rebalance amount to the liquidity manager
@@ -662,6 +673,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         uint256 cycleIndex = poolCycleManager.cycleIndex();
         // Protocol fee recipient address
         address feeRecipient = poolStrategy.getFeeRecipient();
+        combinedReserveBalance -= amount;
 
        if (isSettle) {
             // During settlement, all interest goes to the protocol as penalty
@@ -698,8 +710,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
         if (rebalanceAmount > 0) {
             poolReserveBalance += uint256(rebalanceAmount);
+            combinedReserveBalance += uint256(rebalanceAmount);
         } else if (rebalanceAmount < 0) {
             poolReserveBalance -= uint256(-rebalanceAmount);
+            combinedReserveBalance -= uint256(-rebalanceAmount);
         }
 
         if (assetBalance > 0) {

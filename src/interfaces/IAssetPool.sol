@@ -359,9 +359,14 @@ interface IAssetPool {
     function cycleTotalRedemptions() external view returns (uint256);
 
     /**
-     * @notice Returns reserve token balance of the pool (excluding new deposits).
+     * @notice Returns Amount of reserve token backing the asset tokens
      */
     function poolReserveBalance() external view returns (uint256);
+
+    /**
+     * @notice Combined reserve balance of the pool (including collateral, interestDebt).
+     */
+    function combinedReserveBalance() external view returns (uint256);
 
     /**
      * @notice Calculate current interest rate based on pool utilization

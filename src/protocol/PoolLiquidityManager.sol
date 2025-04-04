@@ -25,6 +25,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
     // Total lp collateral
     uint256 public totalLPCollateral;
+
+    // Combined reserve balance of the liquidity manager (including collateral and interest)
+    uint256 public combinedReserveBalance;
     
     // Number of registered LPs
     uint256 public lpCount;
@@ -150,6 +153,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         position.collateralAmount += requiredCollateral; 
         cycleTotalAddLiquidityAmount += amount;
         totalLPCollateral += requiredCollateral;
+        combinedReserveBalance += requiredCollateral;
 
         _createRequest(msg.sender, RequestType.ADD_LIQUIDITY, amount);
 
@@ -201,6 +205,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         lpPositions[lp].collateralAmount += amount;
 
         totalLPCollateral += amount;
+        combinedReserveBalance += amount;
 
         emit CollateralAdded(lp, amount);
 
@@ -233,6 +238,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
+        combinedReserveBalance -= amount;
         reserveToken.transfer(msg.sender, amount);
         
         emit CollateralReduced(msg.sender, amount);
@@ -247,6 +253,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (interestAccrued == 0) revert NoInterestAccrued();
         
         position.interestAccrued = 0;
+        combinedReserveBalance -= interestAccrued;
         reserveToken.transfer(msg.sender, interestAccrued);
         
         emit InterestClaimed(msg.sender, interestAccrued);
@@ -291,6 +298,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (!registeredLPs[lp]) revert NotRegisteredLP();
         
         lpPositions[lp].interestAccrued += amount;
+        combinedReserveBalance += amount;
     }
 
     /**
@@ -304,6 +312,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         lpPositions[lp].collateralAmount += amount;
         totalLPCollateral += amount;
+        combinedReserveBalance += amount;
     }
 
     /**
@@ -320,6 +329,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
+        combinedReserveBalance -= amount;
 
         reserveToken.transfer(address(assetPool), amount);
     }
@@ -358,6 +368,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             if (position.collateralAmount >= rewardAmount){
                 position.collateralAmount -= rewardAmount;
                 totalLPCollateral -= rewardAmount;
+                combinedReserveBalance -= rewardAmount;
                 reserveToken.transfer(liquidationInitiators[lp], rewardAmount);
             }
             emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, rewardAmount);
@@ -633,7 +644,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             uint256 collateralAmount = position.collateralAmount;
             position.collateralAmount = 0;
             totalLPCollateral -= collateralAmount;
-
+            combinedReserveBalance -= collateralAmount;
             reserveToken.transfer(lp, collateralAmount);
 
             emit CollateralReduced(lp, collateralAmount);
@@ -643,6 +654,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (position.interestAccrued > 0) {
             uint256 interestAmount = position.interestAccrued;
             position.interestAccrued = 0;
+            combinedReserveBalance -= interestAmount;
             reserveToken.transfer(lp, interestAmount);
 
             emit InterestClaimed(lp, interestAmount);
