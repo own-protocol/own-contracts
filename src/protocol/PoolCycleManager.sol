@@ -434,7 +434,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 poolReserveValue = assetPool.poolReserveBalance();
+        uint256 poolReserveValue = assetPool.reserveBackingAsset();
         return int256(poolAssetValue - poolReserveValue);
     }
 
@@ -444,7 +444,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @return The calculated rebalance price.
      */
     function calculateRebalancePriceForAmount(int256 rebalanceAmount) internal view returns (uint256) {
-        uint256 poolReserveValue = assetPool.poolReserveBalance();
+        uint256 poolReserveValue = assetPool.reserveBackingAsset();
         int256 targetAssetValue = rebalanceAmount + int256(poolReserveValue);
 
         return Math.mulDiv(
@@ -538,7 +538,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @return _cycleIndex Current cycle index.
      * @return _assetPrice Last pool rebalance price of the asset.
      * @return _lastCycleActionDateTime Timestamp of the last cycle action.
-     * @return _reserveBalance Reserve token balance of the pool.
+     * @return _reserveBackingAsset Amount of reserve token backing the assets.
      * @return _assetBalance Asset token balance of the pool.
      * @return _totalDepositRequests Total deposit requests in the current cycle.
      * @return _totalRedemptionRequests Total redemption requests in the current cycle.
@@ -548,7 +548,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         uint256 _cycleIndex,
         uint256 _assetPrice,
         uint256 _lastCycleActionDateTime,
-        uint256 _reserveBalance,
+        uint256 _reserveBackingAsset,
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests
@@ -557,7 +557,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         _cycleIndex = cycleIndex;
         _assetPrice = cycleRebalancePrice[cycleIndex - 1];
         _lastCycleActionDateTime = lastCycleActionDateTime;
-        _reserveBalance = assetPool.poolReserveBalance();
+        _reserveBackingAsset = assetPool.reserveBackingAsset();
         _assetBalance = assetToken.totalSupply();
         _totalDepositRequests = assetPool.cycleTotalDeposits();
         _totalRedemptionRequests = assetPool.cycleTotalRedemptions();
