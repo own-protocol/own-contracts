@@ -128,7 +128,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
-        cyclePoolInterest[cycleIndex] = 1;
+        cyclePoolInterest[cycleIndex] = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
     }
