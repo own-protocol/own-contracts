@@ -767,18 +767,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
     }
 
-    function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
-        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
-            
-        if (protocolFee > 0) {   
-            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
-            emit FeeDeducted(user, protocolFee);
-        }
-
-        return amount - protocolFee;
-    }
-
     /**
      * @notice Update cycle data at the end of a cycle
      */
@@ -906,12 +894,15 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     }
 
     /**
-    * @dev Calculate the amount with reserve yield
+    * @notice Calculate the amount with reserve yield
+    * @param user Address of the user
+    * @param position Position of the user
+    * @param amount Amount for which the yied need to be calculated
     */
     function _calculateAmountWithReserveYield(
         address user,
-        UserPosition storage position,
-        uint256 totalAmount
+        UserPosition memory position,
+        uint256 amount
     ) internal returns (uint256) {
         reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
             aggregatePoolReserves, 
@@ -921,17 +912,34 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         
         uint256 scaledBalance = Math.mulDiv(
             scaledReserveBalance[user], 
-            totalAmount, 
+            amount, 
             position.depositAmount + position.collateralAmount
         );
         
         // Update scaled reserve balance for interest calculation
         scaledReserveBalance[user] -= scaledBalance;
         
-        uint256 reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - totalAmount;
+        uint256 reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - amount;
         reserveYield = _deductProtocolFee(user, reserveYield);
         
-        return totalAmount + reserveYield;
+        return amount + reserveYield;
+    }
+
+    /**
+     * @notice Deduct protocol fee
+     * @param user Address of the user
+     * @param amount Amount on which the fee needs to be deducted
+     */
+    function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
+        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
+        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+            
+        if (protocolFee > 0) {   
+            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
+            emit FeeDeducted(user, protocolFee);
+        }
+
+        return amount - protocolFee;
     }
 
     /**

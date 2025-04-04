@@ -709,6 +709,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         emit LPRemoved(lp);
     }
 
+    /**
+     * @notice Update scaled reserve balance
+     * @param lp Address of the lp
+     * @param amount Unscaled amount
+     */
     function _updateScaledReserveBalance(address lp, uint256 amount) internal {
         reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
             aggregatePoolReserves, 
@@ -719,6 +724,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         scaledReserveBalance[lp] += Math.mulDiv(amount, PRECISION, reserveYieldAccrued);
     }
 
+    /**
+     * @notice Calculate reserve yield & update scaled reserve balance
+     * @param lp Address of the lp
+     * @param amount Unscaled amount
+     */
     function _calculateReserveYield(address lp, uint256 amount) internal returns (uint256) {
         uint256 reserveYield = 0;
         LPPosition memory position = lpPositions[lp];
@@ -742,6 +752,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         return reserveYield;
     }
 
+    /**
+     * @notice Deduct protocol fee
+     * @param lp Address of the lp
+     * @param amount Amount on which the fee needs to be deducted
+     */
     function _deductProtocolFee(address lp, uint256 amount) internal returns (uint256) {
         uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
         uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
