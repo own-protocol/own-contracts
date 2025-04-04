@@ -60,6 +60,14 @@ interface IPoolStrategy {
         uint256 liquidationReward
     );
 
+    /**
+     * @notice Emitted when the yield-generating reserve status is updated
+     * @param isYieldBearing True if the reserve is yield-generating, false otherwise
+     */
+    event IsYieldBearingUpdated(
+        bool isYieldBearing
+    );
+
     // --------------------------------------------------------------------------------
     //                             CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
@@ -123,6 +131,11 @@ interface IPoolStrategy {
         uint256 liquidationThreshold,
         uint256 liquidationReward
     ) external;
+
+    /**
+     * @notice Sets the yield generating reserve flag
+     */
+    function setIsYieldBearing() external;
 
     // --------------------------------------------------------------------------------
     //                             CYCLE FUNCTIONS
@@ -245,4 +258,28 @@ interface IPoolStrategy {
      * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
      */
     function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health);
+
+    // --------------------------------------------------------------------------------
+    //                             YIELD FUNCTIONS
+    // --------------------------------------------------------------------------------
+    /**
+     * @notice Returns the yield-bearing status of the reserve
+     * @return True if the reserve is yield-bearing, false otherwise
+     */
+    function isYieldBearing() external view returns (bool);
+
+    /**
+     * @notice Calculates the reserve yield based on initial and current amounts
+     * @param prevAmount Previous amount of tokens
+     * @param currentAmount Current amount of tokens
+     * @param depositAmount Amount of tokens deposited
+     * @return yield The calculated yield (scaled by PRECISION)
+     * @dev The yield is calculated as (currentAmount - initialAmount) / depositAmount
+     * @dev The result is scaled by a precision factor (e.g., 1e18) to maintain accuracy
+     */
+    function calculateYieldAccrued(
+        uint256 prevAmount, 
+        uint256 currentAmount,
+        uint256 depositAmount
+    ) external pure returns (uint256 yield);
 }
