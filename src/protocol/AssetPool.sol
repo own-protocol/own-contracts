@@ -244,6 +244,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
         
         if (amount > excessCollateral) revert ExcessiveWithdrawal();
+
         uint256 reserveYield = 0;
         if (poolStrategy.isYieldBearing()) {
             reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
@@ -259,7 +260,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
             );
             scaledReserveBalance[msg.sender] -= scaledBalance;
             reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - amount;
-            reserveYield = deductProtocolFee(msg.sender, reserveYield);
+            reserveYield = _deductProtocolFee(msg.sender, reserveYield);
         }
         
         // Update user's position
@@ -757,7 +758,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
             reserveToken.transfer(feeRecipient, amount);
             emit FeeDeducted(lp, amount);
         } else {
-            uint256 lpCycleInterest = deductProtocolFee(lp, amount);
+            uint256 lpCycleInterest = _deductProtocolFee(lp, amount);
             // Transfer remaining interest to liquidity manager for the LP
             reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
             poolLiquidityManager.addToInterest(lp, lpCycleInterest);
@@ -766,7 +767,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
     }
 
-    function deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
+    function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
         uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
         uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
             
@@ -928,7 +929,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         scaledReserveBalance[user] -= scaledBalance;
         
         uint256 reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - totalAmount;
-        reserveYield = deductProtocolFee(user, reserveYield);
+        reserveYield = _deductProtocolFee(user, reserveYield);
         
         return totalAmount + reserveYield;
     }

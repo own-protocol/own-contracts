@@ -383,6 +383,11 @@ interface IAssetPool {
     function aggregatePoolReserves() external view returns (uint256);
 
     /**
+     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     */
+    function reserveYieldAccrued() external view returns (uint256);
+
+    /**
      * @notice Calculate current interest rate based on pool utilization
      * @return rate Current interest rate (scaled by 10000)
      */
