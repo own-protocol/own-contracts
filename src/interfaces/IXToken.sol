@@ -28,18 +28,31 @@ interface IXToken is IERC20Metadata {
     error InsufficientAllowance();
 
     /**
-     * @dev Emitted after the mint action
+     * @dev Thrown when an invalid token split ratio is provided
+     */
+    error InvalidSplitRatio();
+
+    /**
+     * @dev Emitted after new tokens are minted
      * @param account The address receiving the minted tokens
-     * @param value The amount being minted
+     * @param value The amount of tokens minted (this is the visible amount after applying token split multiplier)
      **/
     event Mint(address indexed account, uint256 value);
 
     /**
-     * @dev Emitted after xTokens are burned
-     * @param account The owner of the xTokens, getting burned
-     * @param value The amount being burned
+     * @dev Emitted after tokens are burned
+     * @param account The owner of the tokens that were burned
+     * @param value The amount of tokens burned (this is the visible amount after applying token split multiplier)
      **/
     event Burn(address indexed account, uint256 value);
+
+    /**
+     * @dev Emitted when a token split is applied to adjust token balances
+     * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
+     * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
+     * @param newSplitMultiplier The new split multiplier value that will be applied to all balances
+     **/
+    event StockSplitApplied(uint256 splitRatio, uint256 splitDenominator, uint256 newSplitMultiplier);
 
     /**
      * @dev Returns the version of the xToken implementation
@@ -53,10 +66,23 @@ interface IXToken is IERC20Metadata {
      **/
     function pool() external view returns (address);
 
+
+
     /**
-     * @dev Mints `amount` xTokens to `account`
-     * @param account The address receiving the minted tokens
-     * @param amount The amount of tokens getting minted
+     * @dev Returns the current split multiplier used to adjust balances for token splits
+     * @return The current split multiplier value (scaled by PRECISION)
+     * @dev A value of PRECISION (1e18) means no split adjustment
+     * @dev A value of 2*PRECISION means all balances appear doubled (2:1 split) 
+     * @dev A value of PRECISION/2 means all balances appear halved (1:2 reverse split)
+     **/
+    function splitMultiplier() external view returns (uint256);
+
+    /**
+     * @dev Mints new tokens to the specified account
+     * @param account The address that will receive the minted tokens
+     * @param amount The amount of tokens to mint (visible amount, after applying split multiplier)
+     * @dev Only the pool contract can call this function
+     * @dev The actual storage amount will be calculated by dividing by the split multiplier
      */
     function mint(
         address account,
@@ -64,12 +90,28 @@ interface IXToken is IERC20Metadata {
     ) external;
 
     /**
-     * @dev Burns xTokens from `account`
-     * @param account The owner of the xTokens, getting burned
-     * @param amount The amount being burned
+     * @dev Burns tokens from the specified account
+     * @param account The address from which tokens will be burned
+     * @param amount The amount of tokens to burn (visible amount, after applying split multiplier)
+     * @dev Only the pool contract can call this function
+     * @dev The actual storage amount will be calculated by dividing by the split multiplier
      **/
     function burn(
         address account,
         uint256 amount
+    ) external;
+
+    /**
+     * @dev Applies a token split to adjust token balances
+     * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
+     * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
+     * @dev Only the pool contract can call this function
+     * @dev This function updates the split multiplier which affects all balances without changing storage
+     * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
+     * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
+     */
+    function applySplit(
+        uint256 splitRatio,
+        uint256 splitDenominator
     ) external;
 }

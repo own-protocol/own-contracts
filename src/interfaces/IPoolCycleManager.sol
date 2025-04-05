@@ -112,6 +112,8 @@ interface IPoolCycleManager {
     error MarketClosed();
     /// @notice Thrown when the market is open
     error MarketOpen();
+    /// @notice Thrown when the asset price deviation is too high
+    error PriceDeviationHigh();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS

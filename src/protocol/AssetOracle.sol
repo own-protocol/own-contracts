@@ -3,6 +3,7 @@
 
 pragma solidity ^0.8.20;
 
+import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import { FunctionsClient } from "@chainlink/contracts/v0.8/functions/v1_0_0/FunctionsClient.sol";
 import { ConfirmedOwner } from "@chainlink/contracts/v0.8/shared/access/ConfirmedOwner.sol";
 import { FunctionsRequest } from "@chainlink/contracts/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
@@ -33,12 +34,21 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     
     /// @notice Current price of the asset in 18 decimal format
     uint256 public assetPrice;
+
+    /// @notice Indicates if a split has been detected
+    bool public splitDetected;
+
+    /// @notice Previous price of the asset before split in 18 decimal format
+    uint256 public preSplitPrice;
     
     /// @notice Timestamp of the last price update
     uint256 public lastUpdated;
 
     /// @notice Maximum time difference (in seconds) to consider market open
     uint256 private constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
+
+    /// @notice Precision factor for price calculations
+    uint256 internal constant PRECISION = 1e18;
     
     /// @notice OHLC data structure for the asset
     struct OHLCData {
@@ -127,6 +137,13 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
                 revert InvalidPrice();
             }
             
+            // Check if a split has occurred
+            if (assetPrice != 0 && _isPriceDeviationHigh(assetPrice, openPrice)) {
+                splitDetected = true;
+                preSplitPrice = assetPrice;
+                emit SplitDetected(assetPrice, openPrice, block.timestamp);
+            }
+    
             // Update asset price
             assetPrice = closePrice;
             
@@ -205,5 +222,57 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         // Compare lastUpdated timestamp with the oracle's last update time
         // If the difference is less than threshold, market is considered open
         return (lastUpdated - dataTimestamp) <= MARKET_OPEN_THRESHOLD;
+    }
+
+    /**
+     * @notice Checks if a split has likely occurred based on price change
+     * @param expectedRatio Expected split ratio
+     * @param expectedDenominator Expected split denominator
+     * @return true if a split matching the expected ratio appears to have occurred
+     */
+    function verifySplit(uint256 expectedRatio, uint256 expectedDenominator) external view returns (bool) {
+        if ( preSplitPrice == 0 || ohlcData.open == 0) return false;
+        
+        // Calculate the actual price ratio (scaled by PRECISION)
+        uint256 priceRatio = Math.mulDiv(preSplitPrice, PRECISION, ohlcData.open);
+        
+        // Calculate the expected price ratio
+        uint256 expectedPriceRatio = Math.mulDiv(expectedRatio, PRECISION, expectedDenominator);
+        
+        // Allow for some small deviation (perhaps within 5%)
+        uint256 lowerBound = Math.mulDiv(expectedPriceRatio, 95, 100);
+        uint256 upperBound = Math.mulDiv(expectedPriceRatio, 105, 100);
+        
+        return priceRatio >= lowerBound && priceRatio <= upperBound;
+    }
+
+    /**
+     * @notice Checks if the price deviation is high
+     * @param prevPrice The previous price of the asset
+     * @param currentPrice The current price of the asset
+     * @return bool True if the price deviation is above the threshold, false otherwise
+     */
+    function _isPriceDeviationHigh(uint256 prevPrice, uint256 currentPrice) internal pure returns (bool) {
+        uint256 threshold = 45; // 45% threshold for price deviation
+        if (prevPrice == 0 || currentPrice == 0) return false;
+        
+        // Calculate the absolute price difference
+        uint256 priceDifference = currentPrice > prevPrice
+            ? currentPrice - prevPrice
+            : prevPrice - currentPrice;
+        
+        // Calculate the percentage deviation
+        uint256 percentageDeviation = Math.mulDiv(priceDifference, 100, prevPrice);
+        
+        return percentageDeviation > threshold;
+    }
+
+    /**
+     * @notice Resets the split detection state
+     * @dev Can only be called by the contract owner
+     */
+    function resetSplitDetection() external onlyOwner {
+        splitDetected = false;
+        preSplitPrice = 0;
     }
 }
