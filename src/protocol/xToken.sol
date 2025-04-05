@@ -25,6 +25,11 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Price precision constant
     uint256 private constant PRECISION = 1e18;
 
+
+
+    /// @notice Split multiplier to adjust balances for stock splits
+    uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
+
     /**
      * @notice Ensures the caller is a pool contract
      */
@@ -43,13 +48,64 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     }
 
     /**
+     * @notice Returns the current split multiplier used to adjust balances for stock splits
+     * @return The current split multiplier value (scaled by PRECISION)
+     * @dev A value of PRECISION (1e18) means no split adjustment
+     * @dev A value of 2*PRECISION means all balances appear doubled (2:1 split)
+     * @dev A value of PRECISION/2 means all balances appear halved (1:2 reverse split)
+     */
+    function splitMultiplier() public view returns (uint256) {
+        return _splitMultiplier;
+    }
+
+
+
+    /**
+     * @notice Override of balanceOf to apply the split multiplier
+     * @param account The address to query the balance of
+     * @return The balance adjusted by the split multiplier
+     * @dev The raw storage value is multiplied by the split multiplier to get the displayed balance
+     * @dev This allows all balances to be adjusted during a stock split without updating storage
+     */
+    function balanceOf(address account) public view override(ERC20, IERC20) returns (uint256) {
+        return Math.mulDiv(super.balanceOf(account), _splitMultiplier, PRECISION);
+    }
+
+    /**
+     * @notice Override of totalSupply to apply the split multiplier
+     * @return The total supply adjusted by the split multiplier
+     * @dev The raw storage value is multiplied by the split multiplier to get the displayed total supply
+     * @dev This allows the total supply to be adjusted during a stock split without updating storage
+     */
+    function totalSupply() public view override(ERC20, IERC20) returns (uint256) {
+        return Math.mulDiv(super.totalSupply(), _splitMultiplier, PRECISION);
+    }
+
+    /**
+     * @notice Override of allowance to apply the split multiplier
+     * @param owner The address that owns the tokens
+     * @param spender The address that is approved to spend the tokens
+     * @return The allowance adjusted by the split multiplier
+     * @dev The raw storage value is multiplied by the split multiplier to get the displayed allowance
+     * @dev This ensures allowances are adjusted proportionally during stock splits
+     */
+    function allowance(address owner, address spender) public view override(ERC20, IERC20) returns (uint256) {
+        return Math.mulDiv(super.allowance(owner, spender), _splitMultiplier, PRECISION);
+    }
+
+    /**
      * @notice Mints new tokens to an account
      * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
-     * @param amount The amount of tokens to mint (in 18 decimal precision)
+     * @param amount The amount of tokens to mint (visible amount with split multiplier applied)
+     * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
+     * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), 50 tokens are stored
      */
     function mint(address account, uint256 amount) external onlyPool {
-        _mint(account, amount);
+        // Convert the visible amount to raw storage amount
+        uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
+        
+        _mint(account, rawAmount);
         emit Mint(account, amount);
     }
 
@@ -57,54 +113,135 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Burns tokens from an account
      * @dev Only callable by the pool contract
      * @param account The address to burn tokens from
-     * @param amount The amount of tokens to burn (in 18 decimal precision)
+     * @param amount The amount of tokens to burn (visible amount with split multiplier applied)
+     * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
+     * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), 50 tokens are burned from storage
      */
     function burn(address account, uint256 amount) external onlyPool {
-        uint256 balance = balanceOf(account);
-        if (balance < amount) revert InsufficientBalance();
-        _burn(account, amount);
+        // Convert the visible amount to raw storage amount
+        uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
+        
+        uint256 balance = super.balanceOf(account);
+        if (balance < rawAmount) revert InsufficientBalance();
+        
+        _burn(account, rawAmount);
         emit Burn(account, amount);
+    }
+
+    /**
+     * @notice Applies a stock split to adjust token balances
+     * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
+     * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
+     * @dev Only callable by the pool contract
+     * @dev Updates the split multiplier to affect all balances without changing storage values
+     * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
+     * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
+     */
+    function applyStockSplit(uint256 splitRatio, uint256 splitDenominator) external onlyPool {
+        if (splitRatio == 0 || splitDenominator == 0) revert InvalidSplitRatio();
+        
+        // Update the split multiplier
+        uint256 adjustmentRatio = Math.mulDiv(splitRatio, PRECISION, splitDenominator);
+        _splitMultiplier = Math.mulDiv(_splitMultiplier, adjustmentRatio, PRECISION);
+        
+        emit StockSplitApplied(splitRatio, splitDenominator, _splitMultiplier);
     }
 
     /**
      * @notice Transfers tokens to a recipient
      * @param recipient The address receiving the tokens 
-     * @param amount The amount of tokens to transfer (in 18 decimal precision)
+     * @param amount The amount of tokens to transfer (visible amount with split multiplier applied)
      * @return success True if the transfer succeeded
+     * @dev The actual storage amount transferred is calculated by dividing the visible amount by the split multiplier
+     * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), 50 tokens are transferred in storage
      */
     function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
         if (recipient == address(0)) revert ZeroAddress();
-        uint256 balance = balanceOf(msg.sender);
-        if (balance < amount) revert InsufficientBalance();
-
-        _transfer(msg.sender, recipient, amount);
         
-        return true;
+        // Convert the visible amount to raw storage amount
+        uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
+
+        uint256 balance = super.balanceOf(msg.sender);
+        if (balance < rawAmount) revert InsufficientBalance();
+
+        // Call the parent implementation with the raw amount
+        // This will handle the balance and allowance checks correctly
+        return super.transfer(recipient, rawAmount);
     }
 
     /**
      * @notice Transfers tokens from one address to another using the allowance mechanism
      * @param sender The address to transfer tokens from
      * @param recipient The address receiving the tokens
-     * @param amount The amount of tokens to transfer (in 18 decimal precision)
+     * @param amount The amount of tokens to transfer (visible amount with split multiplier applied)
      * @return success True if the transfer succeeded
+     * @dev The actual storage amount transferred is calculated by dividing the visible amount by the split multiplier
+     * @dev The allowance is also decreased by the raw storage amount, not the visible amount
+     * @dev Example: If amount=100 and splitMultiplier=2*PRECISION, 50 tokens are transferred and 50 deducted from allowance
      */
     function transferFrom(
         address sender,
         address recipient,
         uint256 amount
     ) public override(ERC20, IERC20) returns (bool) {
+        
         if (recipient == address(0)) revert ZeroAddress();
-        uint256 currentAllowance = allowance(sender, msg.sender);
-        if (currentAllowance < amount) revert InsufficientAllowance();
+        
+        // Convert the visible amount to raw storage amount
+        uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
+        
+        uint256 currentAllowance = super.allowance(sender, msg.sender);
+        if (currentAllowance < rawAmount) revert InsufficientAllowance();
 
-        uint256 balance = balanceOf(sender);
-        if (balance < amount) revert InsufficientBalance();
+        uint256 balance = super.balanceOf(sender);
+        if (balance < rawAmount) revert InsufficientBalance();
+        
+        // Update allowance with raw amount
+        _approve(sender, msg.sender, currentAllowance - rawAmount);
 
-        _approve(sender, msg.sender, currentAllowance - amount);
-
-        _transfer(sender, recipient, amount);
+        _transfer(sender, recipient, rawAmount);
 
         return true;
+    }
+
+    /**
+     * @notice Approves the spender to spend a specified amount of tokens
+     * @param spender The address that will be allowed to spend the tokens
+     * @param amount The amount of tokens to approve (visible amount with split multiplier applied)
+     * @return success True if the approval succeeded
+     * @dev The actual storage amount approved is calculated by dividing the visible amount by the split multiplier
+     * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), an allowance of 50 tokens is stored
+     */
+    function approve(address spender, uint256 amount) public override(ERC20, IERC20) returns (bool) {
+        // Convert the visible amount to raw storage amount
+        uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
+        return super.approve(spender, rawAmount);
+    }
+
+    /**
+     * @notice Override the permit function to convert the amount parameter
+     * @dev Users sign the visible amount, but we need to store the raw amount
+     * @param owner The address of the token owner
+     * @param spender The address of the spender
+     * @param value The amount of tokens to approve (visible amount)
+     * @param deadline The deadline timestamp for the signature
+     * @param v The recovery ID for the signature
+     * @param r The R component of the signature
+     * @param s The S component of the signature
+     */
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public override {
+        // Convert the visible amount to raw storage amount
+        uint256 rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
+        
+        // Call the parent implementation with the raw value
+        super.permit(owner, spender, rawValue, deadline, v, r, s);
     }
 }

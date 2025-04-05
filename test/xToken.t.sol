@@ -20,6 +20,10 @@ contract MockPool {
     function burn(address account, uint256 amount) external {
         token.burn(account, amount);
     }
+    
+    function applyStockSplit(uint256 splitRatio, uint256 splitDenominator) external {
+        token.applyStockSplit(splitRatio, splitDenominator);
+    }
 }
 
 contract xTokenTest is Test {
@@ -30,8 +34,11 @@ contract xTokenTest is Test {
     address public bob = address(0x2);
     address public charlie = address(0x3);
     
+    uint256 constant PRECISION = 1e18;
+    
     event Mint(address indexed account, uint256 amount);
     event Burn(address indexed account, uint256 amount);
+    event StockSplitApplied(uint256 splitRatio, uint256 splitDenominator, uint256 newSplitMultiplier);
     
     function setUp() public {
         pool = new MockPool("Test xToken", "xTST");
@@ -51,6 +58,7 @@ contract xTokenTest is Test {
         assertEq(xtoken.pool(), address(pool));
         assertEq(xtoken.XTOKEN_VERSION(), 0x1);
         assertEq(xtoken.totalSupply(), 0);
+        assertEq(xtoken.splitMultiplier(), PRECISION); // Default split multiplier should be 1.0 (PRECISION)
     }
     
     // ============ Mint Tests ============
@@ -92,12 +100,6 @@ contract xTokenTest is Test {
         xtoken.mint(alice, 1000 * 1e18);
     }
     
-    function test_MintRevert_NotPool() public {
-        vm.prank(alice);
-        vm.expectRevert(IXToken.NotPool.selector);
-        xtoken.mint(alice, 1000 * 1e18);
-    }
-    
     // ============ Burn Tests ============
     
     function test_Burn() public {
@@ -129,17 +131,6 @@ contract xTokenTest is Test {
         xtoken.burn(alice, 500 * 1e18);
     }
     
-    function test_BurnRevert_NotPool() public {
-        // Mint tokens first
-        vm.prank(address(pool));
-        xtoken.mint(alice, 1000 * 1e18);
-        
-        // Try to burn as non-pool
-        vm.prank(alice);
-        vm.expectRevert(IXToken.NotPool.selector);
-        xtoken.burn(alice, 500 * 1e18);
-    }
-    
     function test_BurnRevert_InsufficientBalance() public {
         // Mint tokens first
         vm.prank(address(pool));
@@ -151,4 +142,175 @@ contract xTokenTest is Test {
         xtoken.burn(alice, 1500 * 1e18);
     }
     
+    // ============ Transfer Tests ============
+    
+    function test_Transfer() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        
+        // Transfer from alice to bob
+        vm.prank(alice);
+        xtoken.transfer(bob, 400 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 600 * 1e18);
+        assertEq(xtoken.balanceOf(bob), 400 * 1e18);
+    }
+    
+    function test_TransferFrom() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        
+        // Approve bob to spend alice's tokens
+        vm.prank(alice);
+        xtoken.approve(bob, 500 * 1e18);
+        
+        // Bob transfers from alice to charlie
+        vm.prank(bob);
+        xtoken.transferFrom(alice, charlie, 300 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 700 * 1e18);
+        assertEq(xtoken.balanceOf(charlie), 300 * 1e18);
+        assertEq(xtoken.allowance(alice, bob), 200 * 1e18);
+    }
+    
+    // ============ Stock Split Tests ============
+    
+    function test_ForwardStockSplit() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        vm.prank(address(pool));
+        xtoken.mint(bob, 2000 * 1e18);
+        
+        // Apply a 2:1 stock split (double tokens)
+        vm.expectEmit(false, false, false, true);
+        emit StockSplitApplied(2, 1, 2 * PRECISION);
+        
+        vm.prank(address(pool));
+        pool.applyStockSplit(2, 1);
+        
+        // Check that balances are doubled
+        assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
+        assertEq(xtoken.balanceOf(bob), 4000 * 1e18);
+        assertEq(xtoken.totalSupply(), 6000 * 1e18);
+        assertEq(xtoken.splitMultiplier(), 2 * PRECISION);
+        
+        // Check post-split transfers work correctly
+        vm.prank(alice);
+        xtoken.transfer(charlie, 500 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 1500 * 1e18);
+        assertEq(xtoken.balanceOf(charlie), 500 * 1e18);
+        
+        // Check post-split minting and burning
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 2500 * 1e18);
+        
+        vm.prank(address(pool));
+        xtoken.burn(alice, 500 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
+    }
+    
+    function test_ReverseStockSplit() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        vm.prank(address(pool));
+        xtoken.mint(bob, 2000 * 1e18);
+        
+        // Apply a 1:2 reverse stock split (halve tokens)
+        vm.expectEmit(false, false, false, true);
+        emit StockSplitApplied(1, 2, PRECISION / 2);
+        
+        vm.prank(address(pool));
+        pool.applyStockSplit(1, 2);
+        
+        // Check that balances are halved
+        assertEq(xtoken.balanceOf(alice), 500 * 1e18);
+        assertEq(xtoken.balanceOf(bob), 1000 * 1e18);
+        assertEq(xtoken.totalSupply(), 1500 * 1e18);
+        assertEq(xtoken.splitMultiplier(), PRECISION / 2);
+        
+        // Check post-split transfers work correctly
+        vm.prank(alice);
+        xtoken.transfer(charlie, 300 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 200 * 1e18);
+        assertEq(xtoken.balanceOf(charlie), 300 * 1e18);
+    }
+    
+    function test_MultipleStockSplits() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        
+        // Apply a 2:1 stock split (double tokens)
+        vm.prank(address(pool));
+        pool.applyStockSplit(2, 1);
+        
+        assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
+        assertEq(xtoken.splitMultiplier(), 2 * PRECISION);
+        
+        // Apply another 2:1 stock split
+        vm.prank(address(pool));
+        pool.applyStockSplit(2, 1);
+        
+        // Balance should now be 4x the original
+        assertEq(xtoken.balanceOf(alice), 4000 * 1e18);
+        assertEq(xtoken.splitMultiplier(), 4 * PRECISION);
+        
+        // Apply a 1:2 reverse split
+        vm.prank(address(pool));
+        pool.applyStockSplit(1, 2);
+        
+        // Balance should now be 2x the original
+        assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
+        assertEq(xtoken.splitMultiplier(), 2 * PRECISION);
+    }
+    
+    function test_StockSplit_Allowances() public {
+        // Mint tokens first
+        vm.prank(address(pool));
+        xtoken.mint(alice, 1000 * 1e18);
+        
+        // Alice approves bob to spend half her tokens
+        vm.prank(alice);
+        xtoken.approve(bob, 500 * 1e18);
+        
+        // Apply a 2:1 stock split
+        vm.prank(address(pool));
+        pool.applyStockSplit(2, 1);
+        
+        // Allowance should be doubled
+        assertEq(xtoken.allowance(alice, bob), 1000 * 1e18);
+        
+        // Bob uses the allowance
+        vm.prank(bob);
+        xtoken.transferFrom(alice, charlie, 800 * 1e18);
+        
+        assertEq(xtoken.balanceOf(alice), 1200 * 1e18);
+        assertEq(xtoken.balanceOf(charlie), 800 * 1e18);
+        assertEq(xtoken.allowance(alice, bob), 200 * 1e18);
+    }
+    
+    function test_RevertWhen_InvalidSplitRatio() public {
+        vm.prank(address(pool));
+        vm.expectRevert(IXToken.InvalidSplitRatio.selector);
+        pool.applyStockSplit(0, 1);
+        
+        vm.prank(address(pool));
+        vm.expectRevert(IXToken.InvalidSplitRatio.selector);
+        pool.applyStockSplit(1, 0);
+    }
+    
+    function test_RevertWhen_StockSplitNotPool() public {
+        vm.prank(alice);
+        vm.expectRevert(IXToken.NotPool.selector);
+        xtoken.applyStockSplit(2, 1);
+    }
 }
