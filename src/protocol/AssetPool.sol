@@ -37,9 +37,29 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
     uint256 public cycleTotalRedemptions;
 
     /**
-     * @notice Reserve token balance of the pool (excluding new deposits).
+     * @notice Total active user deposits
      */
-    uint256 public poolReserveBalance;
+    uint256 public totalUserDeposits;
+
+    /**
+     * @notice Total active user collateral
+     */
+    uint256 public totalUserCollateral;
+
+    /**
+     * @notice Amount of reserve tokens backing the asset token
+     */
+    uint256 public reserveBackingAsset;
+
+    /**
+     * @notice Current reserve balance of the pool (including rebalance amount, collateral, interestDebt).
+     */
+    uint256 public aggregatePoolReserves;
+
+    /**
+     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     */
+    uint256 public reserveYieldAccrued;
 
     /**
      * @notice Mapping of user addresses to their positions
@@ -145,6 +165,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         poolStrategy = IPoolStrategy(_poolStrategy);
+        reserveYieldAccrued = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
     }
@@ -165,9 +186,21 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         
         // Transfer collateral from user to this contract
         reserveToken.transferFrom(user, address(this), amount);
-        
+
+        if (poolStrategy.isYieldBearing()) {
+            reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
+                aggregatePoolReserves, 
+                reserveToken.balanceOf(address(this)),
+                totalUserDeposits + totalUserCollateral
+            );
+            // Update scaled reserve balance for interest calculation
+            scaledReserveBalance[user] += Math.mulDiv(amount, PRECISION, reserveYieldAccrued);
+        }
+
         // Update user's position
         position.collateralAmount += amount;
+        totalUserCollateral += amount;
+        aggregatePoolReserves += amount;
 
         UserRequest storage request = userRequests[user];
         if (request.requestType == RequestType.LIQUIDATE 
@@ -211,14 +244,34 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
         
         if (amount > excessCollateral) revert ExcessiveWithdrawal();
+
+        uint256 reserveYield = 0;
+        if (poolStrategy.isYieldBearing()) {
+            reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
+                aggregatePoolReserves, 
+                reserveToken.balanceOf(address(this)),
+                totalUserDeposits + totalUserCollateral
+            );
+            // Update scaled reserve balance for interest calculation
+            uint256 scaledBalance = Math.mulDiv(
+                scaledReserveBalance[msg.sender], 
+                amount, 
+                position.depositAmount + position.collateralAmount
+            );
+            scaledReserveBalance[msg.sender] -= scaledBalance;
+            reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - amount;
+            reserveYield = _deductProtocolFee(msg.sender, reserveYield);
+        }
         
         // Update user's position
         position.collateralAmount -= amount;
+        totalUserCollateral -= amount;
+        aggregatePoolReserves -= amount;
         
         // Transfer collateral to user
-        reserveToken.transfer(msg.sender, amount);
+        reserveToken.transfer(msg.sender, amount + reserveYield);
         
-        emit CollateralWithdrawn(msg.sender, amount);
+        emit CollateralWithdrawn(msg.sender, amount + reserveYield);
     }
 
     // --------------------------------------------------------------------------------
@@ -261,6 +314,21 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         request.collateralAmount = collateralAmount;
         request.requestCycle = poolCycleManager.cycleIndex();
         cycleTotalDeposits += amount;
+
+        if (poolStrategy.isYieldBearing()) {
+            reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
+                aggregatePoolReserves, 
+                reserveToken.balanceOf(address(this)),
+                totalUserDeposits + totalUserCollateral
+            );
+            // Update scaled reserve balance for interest calculation
+            scaledReserveBalance[msg.sender] += Math.mulDiv(totalDeposit, PRECISION, reserveYieldAccrued);
+        }
+
+        // Update total user deposits and collateral
+        totalUserDeposits += amount;
+        totalUserCollateral += collateralAmount;
+        aggregatePoolReserves += totalDeposit;
         
         emit DepositRequested(msg.sender, amount, poolCycleManager.cycleIndex());
     }
@@ -389,11 +457,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
 
         // Update user's position
         position.assetAmount += assetAmount;
+        position.depositAmount += amount;
         position.collateralAmount += collateralAmount;
         scaledAssetBalance[user] += scaledAssetAmount;
         
         // Mint tokens
-        assetToken.mint(user, assetAmount, amount);
+        assetToken.mint(user, assetAmount);
         
         emit AssetClaimed(user, assetAmount, requestCycle);
     }
@@ -422,17 +491,28 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         (uint256 reserveAmount, uint256 collateral, uint256 scaledAssetAmount, uint256 interestDebt) = 
             _calculateRedemptionValues(user, amount, rebalancePrice, requestCycle);
 
-        uint256 totalAmount = 0;
-        if(position.assetAmount - amount == 0) {
-            position.assetAmount = 0;
-            position.collateralAmount = 0;
+        uint256 totalAmount = reserveAmount + collateral;
+
+        if (poolStrategy.isYieldBearing()) {
+            totalAmount = _calculateAmountWithReserveYield(user, position, totalAmount);
+        }
+
+        if(position.assetAmount == amount) {
+            delete userPositions[user];
             scaledAssetBalance[user] = 0;
         } else {
             position.assetAmount -= amount;
+            position.depositAmount -= amount;
             position.collateralAmount -= collateral;
             scaledAssetBalance[user] -= scaledAssetAmount;
         }
-        totalAmount = reserveAmount + collateral - interestDebt;
+
+        totalAmount -= interestDebt;
+
+        // Update total user deposits and collateral
+        totalUserDeposits -= amount;
+        totalUserCollateral -= collateral;
+        aggregatePoolReserves -= totalAmount;
     
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
@@ -463,13 +543,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         if (position.assetAmount < amount) revert InvalidRedemptionRequest();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
-        uint256 reserveBalance = assetToken.reserveBalanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
-        if (amount < userBalance) {
-            reserveBalance = Math.mulDiv(reserveBalance, amount, userBalance);
-        }
 
-        assetToken.burn(msg.sender, amount, reserveBalance);
+        assetToken.burn(msg.sender, amount);
 
         uint256 cycle = poolCycleManager.cycleIndex() - 1;
         // Get the rebalance price from the pool cycle manager
@@ -478,17 +554,25 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         (uint256 reserveAmount, uint256 collateral, uint256 scaledAssetAmount, uint256 interestDebt) = 
             _calculateRedemptionValues(msg.sender, amount, rebalancePrice, cycle);
 
-        uint256 totalAmount = 0;
-        if(position.assetAmount - amount == 0) {
-            position.assetAmount = 0;
-            position.collateralAmount = 0;
+        uint256 totalAmount = reserveAmount + collateral;
+        if (poolStrategy.isYieldBearing()) {
+            totalAmount = _calculateAmountWithReserveYield(msg.sender, position, totalAmount);
+        }
+
+        if(position.assetAmount == amount) {
+            delete userPositions[msg.sender];
             scaledAssetBalance[msg.sender] = 0;
         } else {
             position.assetAmount -= amount;
+            position.depositAmount -= amount;
             position.collateralAmount -= collateral;
             scaledAssetBalance[msg.sender] -= scaledAssetAmount;
         }
-        totalAmount = reserveAmount + collateral - interestDebt;
+        // Update total user deposits and collateral
+        totalUserDeposits -= amount;
+        totalUserCollateral -= collateral;
+        totalAmount -= interestDebt;
+        aggregatePoolReserves -= totalAmount;
 
         reserveToken.transfer(msg.sender, totalAmount);
 
@@ -636,6 +720,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         // Check if we have enough reserve tokens for the transfer
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
         if (reserveBalance < amount) revert InsufficientBalance();
+        aggregatePoolReserves -= amount;
 
         if (isSettle) {
             // Transfer the rebalance amount to the liquidity manager
@@ -666,23 +751,14 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         uint256 cycleIndex = poolCycleManager.cycleIndex();
         // Protocol fee recipient address
         address feeRecipient = poolStrategy.getFeeRecipient();
+        aggregatePoolReserves -= amount;
 
        if (isSettle) {
             // During settlement, all interest goes to the protocol as penalty
             reserveToken.transfer(feeRecipient, amount);
             emit FeeDeducted(lp, amount);
         } else {
-            // Normal rebalance case - calculate and deduct protocol fee
-            uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
-            uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
-            
-            if (protocolFee > 0) {
-                reserveToken.transfer(feeRecipient, protocolFee);
-                emit FeeDeducted(lp, protocolFee);
-            }
-            
-            uint256 lpCycleInterest = amount - protocolFee;
-
+            uint256 lpCycleInterest = _deductProtocolFee(lp, amount);
             // Transfer remaining interest to liquidity manager for the LP
             reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
             poolLiquidityManager.addToInterest(lp, lpCycleInterest);
@@ -696,19 +772,20 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external onlyPoolCycleManager {
         uint256 assetBalance = assetToken.balanceOf(address(this));
-        uint256 reserveBalanceInAssetToken = assetToken.reserveBalanceOf(address(this));
-        poolReserveBalance = poolReserveBalance 
+        reserveBackingAsset = reserveBackingAsset 
             + cycleTotalDeposits
             - Math.mulDiv(cycleTotalRedemptions, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
         if (rebalanceAmount > 0) {
-            poolReserveBalance += uint256(rebalanceAmount);
+            reserveBackingAsset += uint256(rebalanceAmount);
+            aggregatePoolReserves += uint256(rebalanceAmount);
         } else if (rebalanceAmount < 0) {
-            poolReserveBalance -= uint256(-rebalanceAmount);
+            reserveBackingAsset -= uint256(-rebalanceAmount);
+            aggregatePoolReserves -= uint256(-rebalanceAmount);
         }
 
         if (assetBalance > 0) {
-            assetToken.burn(address(this), assetBalance, reserveBalanceInAssetToken);
+            assetToken.burn(address(this), assetBalance);
         }
 
         cycleTotalDeposits = 0;
@@ -732,16 +809,19 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
+     * @return depositAmount Amount of reserve tokens in position
      * @return collateralAmount Amount of collateral in position
      * @return interestDebt Amount of interest debt in asset tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
+        uint256 depositAmount,
         uint256 collateralAmount,
         uint256 interestDebt
     ) {
         UserPosition storage position = userPositions[user];
         assetAmount = position.assetAmount;
+        depositAmount = position.depositAmount;
         collateralAmount = position.collateralAmount;
         interestDebt = getInterestDebt(user, poolCycleManager.cycleIndex());
     }
@@ -811,6 +891,55 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall {
         }
         
         return (reserveAmount, collateralAmount, scaledAssetAmount, interestDebt);
+    }
+
+    /**
+    * @notice Calculate the amount with reserve yield
+    * @param user Address of the user
+    * @param position Position of the user
+    * @param amount Amount for which the yied need to be calculated
+    */
+    function _calculateAmountWithReserveYield(
+        address user,
+        UserPosition memory position,
+        uint256 amount
+    ) internal returns (uint256) {
+        reserveYieldAccrued += poolStrategy.calculateYieldAccrued(
+            aggregatePoolReserves, 
+            reserveToken.balanceOf(address(this)),
+            totalUserDeposits + totalUserCollateral
+        );
+        
+        uint256 scaledBalance = Math.mulDiv(
+            scaledReserveBalance[user], 
+            amount, 
+            position.depositAmount + position.collateralAmount
+        );
+        
+        // Update scaled reserve balance for interest calculation
+        scaledReserveBalance[user] -= scaledBalance;
+        
+        uint256 reserveYield = Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION) - amount;
+        reserveYield = _deductProtocolFee(user, reserveYield);
+        
+        return amount + reserveYield;
+    }
+
+    /**
+     * @notice Deduct protocol fee
+     * @param user Address of the user
+     * @param amount Amount on which the fee needs to be deducted
+     */
+    function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
+        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
+        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+            
+        if (protocolFee > 0) {   
+            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
+            emit FeeDeducted(user, protocolFee);
+        }
+
+        return amount - protocolFee;
     }
 
     /**

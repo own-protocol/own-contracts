@@ -4,7 +4,6 @@
 pragma solidity ^0.8.20;
 
 import {IERC20Metadata} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol';
-import {IAssetOracle} from './IAssetOracle.sol';
 
 interface IXToken is IERC20Metadata {
     
@@ -32,17 +31,15 @@ interface IXToken is IERC20Metadata {
      * @dev Emitted after the mint action
      * @param account The address receiving the minted tokens
      * @param value The amount being minted
-     * @param reserve The amount of reserve tokens which is backing the minted xTokens
      **/
-    event Mint(address indexed account, uint256 value, uint256 reserve);
+    event Mint(address indexed account, uint256 value);
 
     /**
      * @dev Emitted after xTokens are burned
      * @param account The owner of the xTokens, getting burned
      * @param value The amount being burned
-     * @param reserve The amount of reserve tokens
      **/
-    event Burn(address indexed account, uint256 value, uint256 reserve);
+    event Burn(address indexed account, uint256 value);
 
     /**
      * @dev Returns the version of the xToken implementation
@@ -56,40 +53,23 @@ interface IXToken is IERC20Metadata {
      **/
     function pool() external view returns (address);
 
-     /**
-     * @dev Returns the reserve balance of the user that is backing the xTokens.
-     * @param user The user whose balance is calculated
-     * @return The reserve balance of the user
-     **/
-    function reserveBalanceOf(address user) external view returns (uint256);
-
-    /**
-     * @dev Returns the reserve total supply of the token.
-     * @return The reserve total supply
-     **/
-    function totalReserveSupply() external view returns (uint256);
-
     /**
      * @dev Mints `amount` xTokens to `account`
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens getting minted
-     * @param reserve The amount of reserve tokens which is backing the minted xTokens
      */
     function mint(
         address account,
-        uint256 amount,
-        uint256 reserve
+        uint256 amount
     ) external;
 
     /**
      * @dev Burns xTokens from `account`
      * @param account The owner of the xTokens, getting burned
      * @param amount The amount being burned
-     * @param reserve The amount of reserve tokens
      **/
     function burn(
         address account,
-        uint256 amount,
-        uint256 reserve
+        uint256 amount
     ) external;
 }

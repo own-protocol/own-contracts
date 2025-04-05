@@ -167,7 +167,7 @@ interface IPoolCycleManager {
      * @return _cycleIndex Current operational cycle index
      * @return _assetPrice Last pool rebalance price of the asset
      * @return _lastCycleActionDateTime Timestamp of the last cycle action
-     * @return _reserveBalance Reserve token balance of the pool
+     * @return _reserveBackingAsset Amount of reserve token backing the assets.
      * @return _assetBalance Asset token balance of the pool
      * @return _totalDepositRequests Total deposit requests for the cycle
      * @return _totalRedemptionRequests Total redemption requests for the cycle
@@ -177,7 +177,7 @@ interface IPoolCycleManager {
         uint256 _cycleIndex,
         uint256 _assetPrice,
         uint256 _lastCycleActionDateTime,
-        uint256 _reserveBalance,
+        uint256 _reserveBackingAsset,
         uint256 _assetBalance,
         uint256 _totalDepositRequests,
         uint256 _totalRedemptionRequests

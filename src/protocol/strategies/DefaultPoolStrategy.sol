@@ -21,33 +21,36 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     // cycle parameters
-    uint256 public rebalanceLength;       // length of onchain rebalancing period (default: 3 hours)
-    uint256 public oracleUpdateThreshold; // Threshold for oracle update (default: 15 minutes)
-    uint256 public haltThreshold;        // Threshold for halting the pool (default: 5 days)
+    uint256 public rebalanceLength;             // length of onchain rebalancing period (default: 3 hours)
+    uint256 public oracleUpdateThreshold;       // Threshold for oracle update (default: 15 minutes)
+    uint256 public haltThreshold;               // Threshold for halting the pool (default: 5 days)
     
     // Asset interest rate parameters
-    uint256 public baseInterestRate;      // Base interest rate (e.g., 9%)
-    uint256 public interestRate1;         // Tier 1 interest rate (e.g., 18%)
-    uint256 public maxInterestRate;       // Maximum interest rate (e.g., 72%)
-    uint256 public utilizationTier1;      // First utilization tier (e.g., 65%)
-    uint256 public utilizationTier2;      // Second utilization tier (e.g., 85%)
+    uint256 public baseInterestRate;            // Base interest rate (e.g., 9%)
+    uint256 public interestRate1;               // Tier 1 interest rate (e.g., 18%)
+    uint256 public maxInterestRate;             // Maximum interest rate (e.g., 72%)
+    uint256 public utilizationTier1;            // First utilization tier (e.g., 65%)
+    uint256 public utilizationTier2;            // Second utilization tier (e.g., 85%)
     
     // Fee parameters
-    uint256 public protocolFeePercentage; // Fee on interest (e.g., 10.0%)
-    address public feeRecipient;          // Address to receive fees
+    uint256 public protocolFeePercentage;       // Fee on interest (e.g., 10.0%)
+    address public feeRecipient;                // Address to receive fees
     
     // User collateral parameters 
-    uint256 public userHealthyCollateralRatio;    // Healthy ratio (e.g., 20%)
-    uint256 public userLiquidationThreshold;      // Liquidation threshold (e.g., 12.5%)
+    uint256 public userHealthyCollateralRatio;  // Healthy ratio (e.g., 20%)
+    uint256 public userLiquidationThreshold;    // Liquidation threshold (e.g., 12.5%)
     
     // LP liquidity parameters 
-    uint256 public lpHealthyLiquidityRatio;      // Healthy ratio (e.g., 30%)
-    uint256 public lpLiquidationThreshold;        // Liquidatiom threshold (e.g., 20%) 
-    uint256 public lpLiquidationReward;           // Liquidation reward (e.g., 0.5%)
+    uint256 public lpHealthyLiquidityRatio;     // Healthy ratio (e.g., 30%)
+    uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%) 
+    uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
+
+    // Yield generating reserve
+    bool public isYieldBearing;       // Flag to indicate if the reserve is yield generating
     
     // Constants
-    uint256 private constant BPS = 100_00;  // 100% in basis points (10000)
-    uint256 private constant PRECISION = 1e18; // Precision for calculations
+    uint256 private constant BPS = 100_00;      // 100% in basis points (10000)
+    uint256 private constant PRECISION = 1e18;  // Precision for calculations
     
     // --------------------------------------------------------------------------------
     //                                  CONSTRUCTOR
@@ -186,6 +189,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             healthyRatio,
             liquidationThreshold,
             liquidationReward
+        );
+    }
+
+    /**
+     * @notice Sets the yield generating reserve flag
+     */
+    function setIsYieldBearing() external onlyOwner {
+        isYieldBearing = !isYieldBearing;
+        
+        emit IsYieldBearingUpdated(
+            isYieldBearing
         );
     }
 
@@ -328,7 +342,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
-        (uint256 assetAmount, , uint256 interestDebt) = pool.userPosition(user);
+        (uint256 assetAmount , , , uint256 interestDebt) = pool.userPosition(user);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
         
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
@@ -358,8 +372,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IAssetPool pool = IAssetPool(assetPool);
         IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
         
-        ( uint256 assetAmount,
-          uint256 collateralAmount, 
+        ( uint256 assetAmount, ,
+          uint256 collateralAmount,
           uint256 interestDebt
         ) = pool.userPosition(user);
 
@@ -408,5 +422,22 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         } else {
             return 1; // Liquidatable
         }
+    }
+
+    // --------------------------------------------------------------------------------
+    //                             YIELD FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    function calculateYieldAccrued(
+        uint256 prevAmount, 
+        uint256 currentAmount, 
+        uint256 depositAmount
+    ) external pure returns (uint256) {  
+        if (depositAmount == 0) {
+            return 0; // No yield if no previous amount
+        }      
+        // Calculate yield
+        uint256 yield = Math.mulDiv(currentAmount - prevAmount, PRECISION, depositAmount);
+        return yield;
     }
 }

@@ -107,6 +107,13 @@ interface IPoolLiquidityManager {
     event LPRemoved(address indexed lp);
 
     /**
+     * @notice Emitted when fee is deducted from user
+     * @param user Address of the user
+     * @param amount Amount of fee deducted
+     */
+    event FeeDeducted(address indexed user, uint256 amount);
+
+    /**
      * @notice Error when zero amount is provided
      */
     error ZeroAmount();
@@ -205,6 +212,11 @@ interface IPoolLiquidityManager {
      * @notice Total lp collateral
      */
     function totalLPCollateral() external view returns (uint256);
+
+    /**
+     * @notice Combined reserve balance of the liquidity manager (including collateral and interest)
+     */
+    function aggregatePoolReserves() external view returns (uint256);
     
     /**
      * @notice Number of registered LPs
@@ -340,6 +352,11 @@ interface IPoolLiquidityManager {
      * @param lp Address of the LP
      */
     function getLPCollateral(address lp) external view returns (uint256);
+
+    /**
+     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     */
+    function reserveYieldAccrued() external view returns (uint256);
 
     /**
      * @notice Get LP's current request

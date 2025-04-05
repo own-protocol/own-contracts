@@ -44,10 +44,12 @@ interface IAssetPool {
     /**
      * @notice User position in the protocol
      * @param assetAmount Amount of asset tokens held
-     * @param collateralAmount Amount of collateral provided
+     * @param depositAmount Amount of reserve tokens deposited
+     * @param collateralAmount Amount of reserve tokens deposited as collateral
      */
     struct UserPosition {
         uint256 assetAmount;
+        uint256 depositAmount;
         uint256 collateralAmount;
     }
 
@@ -316,11 +318,13 @@ interface IAssetPool {
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens in position
+     * @return depositAmount Amount of reserve tokens in position
      * @return collateralAmount Amount of collateral in position
      * @return interestDebt Amount of interest debt in asset tokens
      */
     function userPosition(address user) external view returns (
         uint256 assetAmount,
+        uint256 depositAmount,
         uint256 collateralAmount,
         uint256 interestDebt
     );
@@ -359,9 +363,29 @@ interface IAssetPool {
     function cycleTotalRedemptions() external view returns (uint256);
 
     /**
-     * @notice Returns reserve token balance of the pool (excluding new deposits).
+     * @notice Total active user deposits 
      */
-    function poolReserveBalance() external view returns (uint256);
+    function totalUserDeposits() external view returns (uint256);
+
+    /**
+     * @notice Total active user collateral
+     */
+    function totalUserCollateral() external view returns (uint256);
+
+    /**
+     * @notice Returns Amount of reserve token backing the asset tokens
+     */
+    function reserveBackingAsset() external view returns (uint256);
+
+    /**
+     * @notice Combined reserve balance of the pool (including rebalance amount, collateral, interestDebt).
+     */
+    function aggregatePoolReserves() external view returns (uint256);
+
+    /**
+     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     */
+    function reserveYieldAccrued() external view returns (uint256);
 
     /**
      * @notice Calculate current interest rate based on pool utilization
