@@ -45,6 +45,18 @@ interface IAssetOracle {
     );
 
     /**
+     * @notice Emitted when a split is detected
+     * @param prevPrice The price before the split
+     * @param newPrice The new price after the split
+     * @param timestamp The timestamp when the split was detected
+     */
+    event SplitDetected(
+        uint256 prevPrice,
+        uint256 newPrice,
+        uint256 timestamp
+    );
+
+    /**
      * @notice Thrown when received requestId doesn't match the expected one
      * @param requestId The unexpected requestId received
      */
@@ -93,6 +105,16 @@ interface IAssetOracle {
     function assetPrice() external view returns (uint256);
 
     /**
+     * @notice Checks if a split has been detected
+     */
+    function splitDetected() external view returns (bool);
+
+    /**
+     * @notice Returns the price before the last split
+     */
+    function preSplitPrice() external view returns (uint256);
+
+    /**
      * @notice Returns the timestamp of the last price update
      * @return The timestamp of the last update
      */
@@ -139,4 +161,18 @@ interface IAssetOracle {
      * @return bool True if the market is open, false otherwise
      */
     function isMarketOpen() external view returns (bool);
+
+    /**
+     * @notice Checks if a split has likely occurred based on price change
+     * @param expectedRatio Expected split ratio
+     * @param expectedDenominator Expected split denominator
+     * @return true if a split matching the expected ratio appears to have occurred
+     */
+    function verifySplit(uint256 expectedRatio, uint256 expectedDenominator) external view returns (bool);
+
+    /**
+     * @notice Resets the split detection state
+     * @dev Can only be called by the contract owner
+     */
+    function resetSplitDetection() external;
 }
