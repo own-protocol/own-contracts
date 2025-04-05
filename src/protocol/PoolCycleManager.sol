@@ -157,8 +157,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         (, uint256 oracleUpdateThreshold, ) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
-        bool isMarketOpen = assetOracle.isMarketOpen();
-        if (!isMarketOpen) revert MarketClosed();
+        if (!assetOracle.isMarketOpen()) revert MarketClosed();
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -176,8 +175,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         (, uint256 oracleUpdateThreshold, ) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
-        bool isMarketOpen = assetOracle.isMarketOpen();
-        if (isMarketOpen) revert MarketOpen();
+        if (assetOracle.isMarketOpen()) revert MarketOpen();
+        if (assetOracle.splitDetected()) {
+            if (assetPool.isPriceDeviationValid()) {
+                assetPool.updateIsPriceDeviationValid();
+            } else {
+                revert PriceDeviationHigh();
+            }
+        }
 
         (,cyclePriceHigh, cyclePriceLow, ,) = assetOracle.getOHLCData();
 

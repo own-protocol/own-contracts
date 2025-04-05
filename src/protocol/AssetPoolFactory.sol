@@ -73,13 +73,16 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         // Clones a new pool liquidity manager contract instance.
         address liquidityManager = Clones.clone(poolLiquidityManager);
 
+        address owner = owner();
+
         AssetPool(pool).initialize(
             depositToken,
             assetSymbol,
             oracle,
             cycleManager,
             liquidityManager,
-            poolStrategy
+            poolStrategy,
+            owner
         );
 
         IXToken assetToken = AssetPool(pool).assetToken();
