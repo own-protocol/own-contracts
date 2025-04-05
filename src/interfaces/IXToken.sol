@@ -28,26 +28,26 @@ interface IXToken is IERC20Metadata {
     error InsufficientAllowance();
 
     /**
-     * @dev Thrown when an invalid stock split ratio is provided
+     * @dev Thrown when an invalid token split ratio is provided
      */
     error InvalidSplitRatio();
 
     /**
      * @dev Emitted after new tokens are minted
      * @param account The address receiving the minted tokens
-     * @param value The amount of tokens minted (this is the visible amount after applying stock split multiplier)
+     * @param value The amount of tokens minted (this is the visible amount after applying token split multiplier)
      **/
     event Mint(address indexed account, uint256 value);
 
     /**
      * @dev Emitted after tokens are burned
      * @param account The owner of the tokens that were burned
-     * @param value The amount of tokens burned (this is the visible amount after applying stock split multiplier)
+     * @param value The amount of tokens burned (this is the visible amount after applying token split multiplier)
      **/
     event Burn(address indexed account, uint256 value);
 
     /**
-     * @dev Emitted when a stock split is applied to adjust token balances
+     * @dev Emitted when a token split is applied to adjust token balances
      * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
      * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
      * @param newSplitMultiplier The new split multiplier value that will be applied to all balances
@@ -69,7 +69,7 @@ interface IXToken is IERC20Metadata {
 
 
     /**
-     * @dev Returns the current split multiplier used to adjust balances for stock splits
+     * @dev Returns the current split multiplier used to adjust balances for token splits
      * @return The current split multiplier value (scaled by PRECISION)
      * @dev A value of PRECISION (1e18) means no split adjustment
      * @dev A value of 2*PRECISION means all balances appear doubled (2:1 split) 
@@ -102,7 +102,7 @@ interface IXToken is IERC20Metadata {
     ) external;
 
     /**
-     * @dev Applies a stock split to adjust token balances
+     * @dev Applies a token split to adjust token balances
      * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
      * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
      * @dev Only the pool contract can call this function
@@ -110,7 +110,7 @@ interface IXToken is IERC20Metadata {
      * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
      * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
      */
-    function applyStockSplit(
+    function applySplit(
         uint256 splitRatio,
         uint256 splitDenominator
     ) external;

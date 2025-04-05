@@ -27,7 +27,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
 
 
 
-    /// @notice Split multiplier to adjust balances for stock splits
+    /// @notice Split multiplier to adjust balances for token splits
     uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
 
     /**
@@ -48,7 +48,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     }
 
     /**
-     * @notice Returns the current split multiplier used to adjust balances for stock splits
+     * @notice Returns the current split multiplier used to adjust balances for token splits
      * @return The current split multiplier value (scaled by PRECISION)
      * @dev A value of PRECISION (1e18) means no split adjustment
      * @dev A value of 2*PRECISION means all balances appear doubled (2:1 split)
@@ -65,7 +65,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @param account The address to query the balance of
      * @return The balance adjusted by the split multiplier
      * @dev The raw storage value is multiplied by the split multiplier to get the displayed balance
-     * @dev This allows all balances to be adjusted during a stock split without updating storage
+     * @dev This allows all balances to be adjusted during a token split without updating storage
      */
     function balanceOf(address account) public view override(ERC20, IERC20) returns (uint256) {
         return Math.mulDiv(super.balanceOf(account), _splitMultiplier, PRECISION);
@@ -75,7 +75,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Override of totalSupply to apply the split multiplier
      * @return The total supply adjusted by the split multiplier
      * @dev The raw storage value is multiplied by the split multiplier to get the displayed total supply
-     * @dev This allows the total supply to be adjusted during a stock split without updating storage
+     * @dev This allows the total supply to be adjusted during a token split without updating storage
      */
     function totalSupply() public view override(ERC20, IERC20) returns (uint256) {
         return Math.mulDiv(super.totalSupply(), _splitMultiplier, PRECISION);
@@ -87,7 +87,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @param spender The address that is approved to spend the tokens
      * @return The allowance adjusted by the split multiplier
      * @dev The raw storage value is multiplied by the split multiplier to get the displayed allowance
-     * @dev This ensures allowances are adjusted proportionally during stock splits
+     * @dev This ensures allowances are adjusted proportionally during token splits
      */
     function allowance(address owner, address spender) public view override(ERC20, IERC20) returns (uint256) {
         return Math.mulDiv(super.allowance(owner, spender), _splitMultiplier, PRECISION);
@@ -129,7 +129,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     }
 
     /**
-     * @notice Applies a stock split to adjust token balances
+     * @notice Applies a split to adjust token balances
      * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
      * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
      * @dev Only callable by the pool contract
@@ -137,7 +137,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
      * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
      */
-    function applyStockSplit(uint256 splitRatio, uint256 splitDenominator) external onlyPool {
+    function applySplit(uint256 splitRatio, uint256 splitDenominator) external onlyPool {
         if (splitRatio == 0 || splitDenominator == 0) revert InvalidSplitRatio();
         
         // Update the split multiplier
@@ -157,7 +157,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      */
     function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
         if (recipient == address(0)) revert ZeroAddress();
-        
+
         // Convert the visible amount to raw storage amount
         uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
 

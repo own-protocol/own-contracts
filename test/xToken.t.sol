@@ -21,8 +21,8 @@ contract MockPool {
         token.burn(account, amount);
     }
     
-    function applyStockSplit(uint256 splitRatio, uint256 splitDenominator) external {
-        token.applyStockSplit(splitRatio, splitDenominator);
+    function applySplit(uint256 splitRatio, uint256 splitDenominator) external {
+        token.applySplit(splitRatio, splitDenominator);
     }
 }
 
@@ -189,7 +189,7 @@ contract xTokenTest is Test {
         emit StockSplitApplied(2, 1, 2 * PRECISION);
         
         vm.prank(address(pool));
-        pool.applyStockSplit(2, 1);
+        pool.applySplit(2, 1);
         
         // Check that balances are doubled
         assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
@@ -228,7 +228,7 @@ contract xTokenTest is Test {
         emit StockSplitApplied(1, 2, PRECISION / 2);
         
         vm.prank(address(pool));
-        pool.applyStockSplit(1, 2);
+        pool.applySplit(1, 2);
         
         // Check that balances are halved
         assertEq(xtoken.balanceOf(alice), 500 * 1e18);
@@ -251,14 +251,14 @@ contract xTokenTest is Test {
         
         // Apply a 2:1 stock split (double tokens)
         vm.prank(address(pool));
-        pool.applyStockSplit(2, 1);
+        pool.applySplit(2, 1);
         
         assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
         assertEq(xtoken.splitMultiplier(), 2 * PRECISION);
         
         // Apply another 2:1 stock split
         vm.prank(address(pool));
-        pool.applyStockSplit(2, 1);
+        pool.applySplit(2, 1);
         
         // Balance should now be 4x the original
         assertEq(xtoken.balanceOf(alice), 4000 * 1e18);
@@ -266,7 +266,7 @@ contract xTokenTest is Test {
         
         // Apply a 1:2 reverse split
         vm.prank(address(pool));
-        pool.applyStockSplit(1, 2);
+        pool.applySplit(1, 2);
         
         // Balance should now be 2x the original
         assertEq(xtoken.balanceOf(alice), 2000 * 1e18);
@@ -284,7 +284,7 @@ contract xTokenTest is Test {
         
         // Apply a 2:1 stock split
         vm.prank(address(pool));
-        pool.applyStockSplit(2, 1);
+        pool.applySplit(2, 1);
         
         // Allowance should be doubled
         assertEq(xtoken.allowance(alice, bob), 1000 * 1e18);
@@ -301,16 +301,16 @@ contract xTokenTest is Test {
     function test_RevertWhen_InvalidSplitRatio() public {
         vm.prank(address(pool));
         vm.expectRevert(IXToken.InvalidSplitRatio.selector);
-        pool.applyStockSplit(0, 1);
+        pool.applySplit(0, 1);
         
         vm.prank(address(pool));
         vm.expectRevert(IXToken.InvalidSplitRatio.selector);
-        pool.applyStockSplit(1, 0);
+        pool.applySplit(1, 0);
     }
     
     function test_RevertWhen_StockSplitNotPool() public {
         vm.prank(alice);
         vm.expectRevert(IXToken.NotPool.selector);
-        xtoken.applyStockSplit(2, 1);
+        xtoken.applySplit(2, 1);
     }
 }
