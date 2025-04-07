@@ -258,7 +258,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         
         poolLiquidityManager.resolveRequest(lp);
         lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        
+
         cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
         rebalancedLPs++;
@@ -483,7 +483,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
 
         poolLiquidityManager.updateCycleData();
 
-        uint256 price = cycleWeightedSum / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
+        uint256 price = (cycleWeightedSum * PRECISION) / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
         cycleRebalancePrice[cycleIndex] = price;
         int256 finalRebalanceAmount = calculateRebalanceAmount(price);
 
