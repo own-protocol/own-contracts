@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import 'openzeppelin-contracts/contracts/access/Ownable.sol';
 import 'openzeppelin-contracts/contracts/proxy/Clones.sol';
 import {IAssetPoolFactory} from '../interfaces/IAssetPoolFactory.sol';
+import {IProtocolRegistry} from '../interfaces/IProtocolRegistry.sol';
 import {AssetPool} from "../protocol/AssetPool.sol";
 import {PoolLiquidityManager} from '../protocol/PoolLiquidityManager.sol';
 import {PoolCycleManager} from '../protocol/PoolCycleManager.sol';
@@ -24,21 +25,44 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
     address public poolCycleManager;
     /// @notice Address to the pool liquidity manager contract.
     address public poolLiquidityManager;
+    /// @notice Address of the protocol registry contract.
+    address public protocolRegistry;
 
     /**
      * @dev Constructor to initialize the PoolFactory contract.
      * @param _assetPool Address of the AssetPool contract.
      * @param _poolCycleManager Address of the Pool Cycle Manager contract.
      * @param _poolLiquidityManager Address of the LP Registry contract.
+     * @param _protocolRegistry Address of the Protocol Registry contract.
      */
-    constructor(address _assetPool, address _poolCycleManager, address _poolLiquidityManager) Ownable(msg.sender) {
+    constructor(
+        address _assetPool,
+        address _poolCycleManager, 
+        address _poolLiquidityManager,
+        address _protocolRegistry
+    ) Ownable(msg.sender) {
         if (_assetPool == address(0)) revert ZeroAddress();
         if (_poolCycleManager == address(0)) revert ZeroAddress();
         if (_poolLiquidityManager == address(0)) revert ZeroAddress();
+        if (_protocolRegistry == address(0)) revert ZeroAddress();
 
         assetPool = _assetPool;
         poolCycleManager = _poolCycleManager;
         poolLiquidityManager = _poolLiquidityManager;
+        protocolRegistry = _protocolRegistry;
+    }
+
+    /**
+     * @dev Updates the protocol registry address
+     * @param _protocolRegistry Address of the new protocol registry
+     */
+    function updateRegistry(address _protocolRegistry) external onlyOwner {
+        if (_protocolRegistry == address(0)) revert ZeroAddress();
+        
+        address oldRegistry = protocolRegistry;
+        protocolRegistry = _protocolRegistry;
+        
+        emit RegistryUpdated(oldRegistry, _protocolRegistry);
     }
 
     /**
@@ -46,6 +70,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * Only callable by the owner of the contract.
      * Reverts if:
      * - Any address parameter is zero.
+     * - The strategy or oracle is not verified in the registry.
      * 
      * @param depositToken Address of the token used for deposits.
      * @param assetSymbol Symbol of the token representing the asset.
@@ -65,6 +90,11 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             poolStrategy == address(0) ||
             bytes(assetSymbol).length == 0
         ) revert InvalidParams();
+
+        // Verify that the strategy and oracle are verified in the registry
+        IProtocolRegistry registry = IProtocolRegistry(protocolRegistry);
+        if (!registry.isStrategyVerified(poolStrategy)) revert NotVerified();
+        if (!registry.isOracleVerified(oracle)) revert NotVerified();
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);

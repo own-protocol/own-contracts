@@ -24,6 +24,13 @@ interface IAssetPoolFactory {
     );
 
     /**
+     * @dev Emitted when the protocol registry is updated
+     * @param oldRegistry Address of the old registry
+     * @param newRegistry Address of the new registry
+     */
+    event RegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
+
+    /**
      * @dev Reverts when provided parameters are invalid.
      */
     error InvalidParams();
@@ -32,6 +39,11 @@ interface IAssetPoolFactory {
      * @dev Reverts when a zero address is provided where a valid address is required.
      */
     error ZeroAddress();
+
+    /**
+     * @dev Reverts when a strategy or oracle is not verified in the registry
+     */
+    error NotVerified();
 
     /**
      * @return address The address of the asset pool contract.
@@ -47,6 +59,17 @@ interface IAssetPoolFactory {
      * @return address The address of the pool liquidity manager contract.
      */
     function poolLiquidityManager() external view returns (address);
+
+    /**
+     * @return address The address of the protocol registry contract.
+     */
+    function protocolRegistry() external view returns (address);
+
+    /**
+     * @dev Updates the protocol registry address
+     * @param _registry Address of the new protocol registry
+     */
+    function updateRegistry(address _registry) external;
 
     /**
      * @dev Creates a new asset pool with the specified parameters.
