@@ -245,12 +245,15 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         }
         // If rebalanceAmount is 0, no action needed
 
-        // Calculate interest for the LP's liquidity commitment
-        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, rebalancePrice, PRECISION);
-        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-        // Deduct interest from the pool and add to LP's collateral
-        if (lpCycleInterest > 0) {
-            assetPool.deductInterest(lp, lpCycleInterest, false);
+        if (totalLiquidity > 0) {
+            // Calculate interest for the LP's liquidity commitment
+            uint256 interestAmount = Math.mulDiv(cycleInterestAmount, rebalancePrice, PRECISION);
+            // Calculate the LP's share of the interest amount
+            uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+            // Deduct interest from the pool and add to LP's collateral
+            if (lpCycleInterest > 0) {
+                assetPool.deductInterest(lp, lpCycleInterest, false);
+            }
         }
         
         poolLiquidityManager.resolveRequest(lp);
@@ -312,14 +315,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
             }
         }
 
-        // Calculate interest for the LP's liquidity commitment
-        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
-        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-        
-        // Deduct interest from the pool and add to LP's collateral
-        if (lpCycleInterest > 0) {
-            assetPool.deductInterest(lp, lpCycleInterest, true);
+        if (totalLiquidity > 0) {
+            // Calculate interest for the LP's liquidity commitment
+            uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
+            uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+            // Deduct interest from the pool and add to LP's collateral
+            if (lpCycleInterest > 0) {
+                assetPool.deductInterest(lp, lpCycleInterest, false);
+            }
         }
+        
         
         // Resolve any pending requests for the LP
         poolLiquidityManager.resolveRequest(lp);
@@ -364,13 +369,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
 
-        // Calculate interest for the LP's liquidity commitment
-        uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
-        uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-        
-        // Deduct interest from the pool and add to LP's collateral
-        if (lpCycleInterest > 0) {
-            assetPool.deductInterest(lp, lpCycleInterest, true);
+        if (totalLiquidity > 0) {
+            // Calculate interest for the LP's liquidity commitment
+            uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
+            uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+            // Deduct interest from the pool and add to LP's collateral
+            if (lpCycleInterest > 0) {
+                assetPool.deductInterest(lp, lpCycleInterest, true);
+            }
         }
         
         // Resolve any pending requests for the LP
