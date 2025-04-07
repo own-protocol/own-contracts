@@ -23,6 +23,11 @@ interface IProtocolRegistry {
     event OracleVerificationUpdated(address indexed oracle, bool isVerified);
 
     /**
+     * @dev Thrown when zero address is provided where it's not allowed
+     */
+    error ZeroAddress();
+
+    /**
      * @notice Emitted when a pool is added to or removed from the registry
      * @param pool Address of the pool
      * @param isVerified New verification status

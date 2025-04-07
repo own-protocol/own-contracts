@@ -14,11 +14,8 @@ contract DeployProtocolRegistryScript is Script {
         // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
 
-        // Get the deployer address
-        address deployer = vm.addr(deployerPrivateKey);
-
         // Deploy the ProtocolRegistry contract
-        ProtocolRegistry registry = new ProtocolRegistry(deployer);
+        ProtocolRegistry registry = new ProtocolRegistry();
         console.log("ProtocolRegistry deployed at:", address(registry));
 
         // Stop broadcasting transactions

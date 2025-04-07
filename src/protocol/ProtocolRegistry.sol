@@ -23,9 +23,8 @@ contract ProtocolRegistry is IProtocolRegistry, Ownable {
 
     /**
      * @notice Constructs the ProtocolRegistry contract
-     * @param initialOwner Address of the initial owner
      */
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor() Ownable(msg.sender) {}
 
     /**
      * @notice Sets the verification status of a strategy
@@ -33,7 +32,7 @@ contract ProtocolRegistry is IProtocolRegistry, Ownable {
      * @param isVerified New verification status
      */
     function setStrategyVerification(address strategy, bool isVerified) external onlyOwner {
-        if (strategy == address(0)) revert("Zero address");
+        if (strategy == address(0)) revert ZeroAddress();
         
         verifiedStrategies[strategy] = isVerified;
         
@@ -46,7 +45,7 @@ contract ProtocolRegistry is IProtocolRegistry, Ownable {
      * @param isVerified New verification status
      */
     function setOracleVerification(address oracle, bool isVerified) external onlyOwner {
-        if (oracle == address(0)) revert("Zero address");
+        if (oracle == address(0)) revert ZeroAddress();
         
         verifiedOracles[oracle] = isVerified;
         
@@ -59,7 +58,7 @@ contract ProtocolRegistry is IProtocolRegistry, Ownable {
      * @param isVerified New verification status
      */
     function setPoolVerification(address pool, bool isVerified) external onlyOwner {
-        if (pool == address(0)) revert("Zero address");
+        if (pool == address(0)) revert ZeroAddress();
         
         verifiedPools[pool] = isVerified;
         
