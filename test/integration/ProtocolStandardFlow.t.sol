@@ -6,11 +6,11 @@ import "../utils/ProtocolTestUtils.sol";
 import "../mocks/MockPoolStrategy.sol";
 
 /**
- * @title ProtocolFlowTest
+ * @title ProtocolStandardFlowTest
  * @notice Comprehensive integration tests for the Own Protocol
  * @dev Tests multiple scenarios including price changes and different reserve token decimals
  */
-contract ProtocolFlowTest is ProtocolTestUtils {
+contract ProtocolStandardFlowTest is ProtocolTestUtils {
     // Base amounts (will be adjusted based on token decimals)
     uint256 constant INITIAL_PRICE = 100 * 1e18; // $100.00 per asset (always 18 decimals)
     uint256 constant USER_INITIAL_BALANCE = 100_000; 
