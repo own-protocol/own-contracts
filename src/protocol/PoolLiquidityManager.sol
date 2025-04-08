@@ -448,7 +448,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         uint256 poolValue = assetPool.getPoolValue();
         uint256 lpShare = getLPLiquidityShare(lp);
 
-        uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue * reserveToAssetDecimalFactor, PRECISION);
+        uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue, PRECISION);
         
         return lpAssetHolding;
     }
