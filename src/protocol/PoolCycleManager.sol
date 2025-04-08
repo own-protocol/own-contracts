@@ -40,11 +40,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     uint256 public lastCycleActionDateTime;
 
     /**
-     * @notice Asset token balance of the pool.
-     */
-    uint256 public poolAssetBalance;
-
-    /**
      * @notice Count of LPs who have completed rebalancing in the current cycle.
      */
     uint256 public rebalancedLPs;
@@ -425,7 +420,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         // Add interest to cumulative total
         cyclePoolInterest[cycleIndex] += interest;
         // Calculate the interest amount in terms of asset
-        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION);
+        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION * reserveToAssetDecimalFactor);
         
         // Update last accrual timestamp
         lastInterestAccrualTimestamp = currentTimestamp;
@@ -445,7 +440,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @param assetPrice rebalance price of the asset.
      */
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
-        uint256 poolAssetValue = Math.mulDiv(poolAssetBalance, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        uint256 poolAssetValue = Math.mulDiv(assetToken.totalSupply(), assetPrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 poolReserveValue = assetPool.reserveBackingAsset();
         return int256(poolAssetValue - poolReserveValue);
     }
@@ -462,7 +457,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         return Math.mulDiv(
             uint256(targetAssetValue),
             PRECISION * reserveToAssetDecimalFactor,
-            poolAssetBalance
+            assetToken.totalSupply()
         );
     }
 
@@ -494,7 +489,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
-        poolAssetBalance = assetToken.totalSupply();
         cycleInterestAmount = 0;
         cyclePoolInterest[cycleIndex] = cyclePoolInterest[cycleIndex - 1];
         cyclePriceHigh = 0;

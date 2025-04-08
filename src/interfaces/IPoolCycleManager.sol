@@ -205,11 +205,6 @@ interface IPoolCycleManager {
     function lastCycleActionDateTime() external view returns (uint256);
 
     /**
-     * @notice Returns the asset token balance of the pool
-     */
-    function poolAssetBalance() external view returns (uint256);
-
-    /**
      * @notice Returns the number of LPs that have completed rebalancing
      */
     function rebalancedLPs() external view returns (uint256);
