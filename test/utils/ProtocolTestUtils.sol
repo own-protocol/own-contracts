@@ -10,10 +10,10 @@ import "../../src/protocol/AssetPool.sol";
 import "../../src/protocol/PoolCycleManager.sol";
 import "../../src/protocol/PoolLiquidityManager.sol";
 import "../../src/protocol/xToken.sol";
-import "../../src/protocol/strategies/DefaultPoolStrategy.sol";
 import "../../src/protocol/AssetOracle.sol";
 import "../mocks/MockFunctionsRouter.sol";
 import "../mocks/MockAssetOracle.sol";
+import "../mocks/MockPoolStrategy.sol";
 import "../mocks/MockERC20.sol";
 
 /**
@@ -91,7 +91,7 @@ contract ProtocolTestUtils is Test {
         );
         
         // Deploy strategy
-        poolStrategy = new DefaultPoolStrategy();
+        poolStrategy = new MockPoolStrategy();
 
         // Deploy implementation contracts
         AssetPool assetPoolImpl = new AssetPool();
@@ -199,20 +199,19 @@ contract ProtocolTestUtils is Test {
         vm.startPrank(owner);
         // Market should be open for offchain rebalance
         assetOracle.setMarketOpen(true);
+        updateOraclePrice(_initialPrice);
         cycleManager.initiateOffchainRebalance();
         vm.warp(block.timestamp + REBALANCE_LENGTH);
-        updateOraclePrice(_initialPrice);
         
         // Market should be closed for onchain rebalance
         assetOracle.setMarketOpen(false);
+        updateOraclePrice(_initialPrice);
         cycleManager.initiateOnchainRebalance();
         vm.stopPrank();
         
         // LPs rebalance their positions
         vm.startPrank(liquidityProvider1);
         (uint256 rebalanceAmount, bool isDeposit) = cycleManager.calculateLPRebalanceAmount(liquidityProvider1, _initialPrice);
-        console.log("LP1 rebalance amount:", rebalanceAmount);
-        console.log("LP1 is deposit:", isDeposit);
         cycleManager.rebalancePool(liquidityProvider1, _initialPrice);
         vm.stopPrank();
         
@@ -239,12 +238,13 @@ contract ProtocolTestUtils is Test {
         vm.startPrank(owner);
         // Market should be open for offchain rebalance
         assetOracle.setMarketOpen(true);
+        updateOraclePrice(_initialPrice);
         cycleManager.initiateOffchainRebalance();
         vm.warp(block.timestamp + REBALANCE_LENGTH);
-        updateOraclePrice(_initialPrice);
         
         // Market should be closed for onchain rebalance
         assetOracle.setMarketOpen(false);
+        updateOraclePrice(_initialPrice);
         cycleManager.initiateOnchainRebalance();
         vm.stopPrank();
         
@@ -273,8 +273,8 @@ contract ProtocolTestUtils is Test {
     }
     
     /**
-     * @notice Simulates an oracle price update
-     * @param _price New price to set (in 18 decimals)
+     * @notice Simulates an oracle price update with full OHLC data
+     * @param _price New price to set (in 18 decimals, used as close price)
      */
     function updateOraclePrice(uint256 _price) public {
         // Request a price update
@@ -288,8 +288,55 @@ contract ProtocolTestUtils is Test {
         bytes32 requestId = assetOracle.s_lastRequestId();
         vm.stopPrank();
         
-        // Encode the price as the response
-        bytes memory response = abi.encode(_price);
+        // Set OHLC data with some reasonable variation
+        // Open: 99% of close
+        // High: 103% of close
+        // Low: 97% of close
+        // Close: provided price
+        uint256 openPrice = (_price * 99) / 100;
+        uint256 highPrice = (_price * 103) / 100;
+        uint256 lowPrice = (_price * 97) / 100;
+        uint256 closePrice = _price;
+        uint256 timestamp = block.timestamp;
+        
+        // Encode the OHLC data as the response
+        bytes memory response = abi.encode(openPrice, highPrice, lowPrice, closePrice, timestamp);
+        bytes memory error = "";
+        
+        // Fulfill the request
+        assetOracle.mockFulfillRequest(
+            requestId,
+            response,
+            error
+        );
+    }
+
+    /**
+     * @notice Simulates an oracle price update with custom OHLC data
+     * @param _open Open price
+     * @param _high High price
+     * @param _low Low price
+     * @param _close Close price
+     */
+    function updateOraclePriceWithOHLC(
+        uint256 _open,
+        uint256 _high,
+        uint256 _low,
+        uint256 _close
+    ) public {
+        // Request a price update
+        vm.startPrank(owner);
+        assetOracle.requestAssetPrice(
+            DEFAULT_SOURCE_CODE,
+            SUBSCRIPTION_ID,
+            GAS_LIMIT,
+            DON_ID
+        );
+        bytes32 requestId = assetOracle.s_lastRequestId();
+        vm.stopPrank();
+        
+        // Encode the OHLC data as the response
+        bytes memory response = abi.encode(_open, _high, _low, _close, block.timestamp);
         bytes memory error = "";
         
         // Fulfill the request
@@ -447,15 +494,14 @@ contract ProtocolTestUtils is Test {
         // Setup liquidity providers with initial price
         setupLiquidityProviders(lpLiquidity, _initialPrice);
         
-        // // Verify pool is active and setup was successful
-        // bool isActive = (cycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE);
+        // Verify pool is active and setup was successful
+        bool isActive = (cycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE);
         
-        // // Verify LP positions are properly set up
-        // IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
-        // bool hasLiquidity = position.liquidityCommitment > 0;
+        // Verify LP positions are properly set up
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        bool hasLiquidity = position.liquidityCommitment > 0;
         
-        // return isActive && hasLiquidity;
-        return true;
+        return isActive && hasLiquidity;
     }
     
     /**
@@ -477,7 +523,7 @@ contract ProtocolTestUtils is Test {
         vm.stopPrank();
         
         // Verify request state
-        (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = assetPool.userRequest(_user);
+         (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = assetPool.userRequests(_user);
         
         return (
             reqType == IAssetPool.RequestType.DEPOSIT &&
@@ -506,7 +552,7 @@ contract ProtocolTestUtils is Test {
         vm.stopPrank();
         
         // Verify request state
-        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = assetPool.userRequest(_user);
+        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = assetPool.userRequests(_user);
         
         return (
             reqType == IAssetPool.RequestType.REDEEM &&
@@ -593,6 +639,8 @@ contract ProtocolTestUtils is Test {
         // Set market open and start offchain rebalance
         vm.startPrank(owner);
         assetOracle.setMarketOpen(true);
+        // Update oracle price to the new price
+        updateOraclePrice(_newPrice);
         cycleManager.initiateOffchainRebalance();
         vm.stopPrank();
         
