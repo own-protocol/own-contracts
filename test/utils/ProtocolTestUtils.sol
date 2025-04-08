@@ -171,12 +171,12 @@ contract ProtocolTestUtils is Test {
         
         vm.startPrank(liquidityProvider1);
         reserveToken.approve(address(liquidityManager), type(uint256).max);
-        reserveToken.approve(address(assetPool), type(uint256).max);
+        reserveToken.approve(address(cycleManager), type(uint256).max);
         vm.stopPrank();
         
         vm.startPrank(liquidityProvider2);
         reserveToken.approve(address(liquidityManager), type(uint256).max);
-        reserveToken.approve(address(assetPool), type(uint256).max);
+        reserveToken.approve(address(cycleManager), type(uint256).max);
         vm.stopPrank();
     }
     
