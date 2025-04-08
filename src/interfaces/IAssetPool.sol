@@ -53,6 +53,17 @@ interface IAssetPool {
         uint256 collateralAmount;
     }
 
+    /**
+     *@notice redemption struct used during redemption
+     */
+    struct RedemptionValues {
+        uint256 reserveAmount;
+        uint256 depositAmount;
+        uint256 collateralAmount;
+        uint256 scaledAssetAmount;
+        uint256 interestDebt;
+    }
+
     // --------------------------------------------------------------------------------
     //                                     EVENTS
     // --------------------------------------------------------------------------------
@@ -346,27 +357,25 @@ interface IAssetPool {
     /**
      * @notice Get a user's position details
      * @param user Address of the user
-     * @return assetAmount Amount of asset tokens in position
-     * @return depositAmount Amount of reserve tokens in position
-     * @return collateralAmount Amount of collateral in position
-     * @return interestDebt Amount of interest debt in asset tokens
+     * @return assetAmount Amount of asset tokens held
+     * @return depositAmount Amount of reserve tokens deposited
+     * @return collateralAmount Amount of reserve tokens deposited as collateral
      */
-    function userPosition(address user) external view returns (
+    function userPositions(address user) external view returns (
         uint256 assetAmount,
         uint256 depositAmount,
-        uint256 collateralAmount,
-        uint256 interestDebt
+        uint256 collateralAmount
     );
 
     /**
      * @notice Get a user's pending request
      * @param user Address of the user
      * @return requestType Type of request
-     * @return amount Amount involved in the request
-     * @return collateralAmount Collateral locked in the request
+     * @return amount Amount of tokens in the request
+     * @return collateralAmount Amount of collateral locked with the request
      * @return requestCycle Cycle when request was made
      */
-    function userRequest(address user) external view returns (
+    function userRequests(address user) external view returns (
         RequestType requestType,
         uint256 amount,
         uint256 collateralAmount,
