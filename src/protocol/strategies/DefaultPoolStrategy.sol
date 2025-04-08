@@ -342,8 +342,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
-        (uint256 assetAmount , , , uint256 interestDebt) = pool.userPosition(user);
+        (uint256 assetAmount , ,) = pool.userPositions(user);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
+        uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
         
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         uint256 interestDebtValue = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
@@ -372,11 +373,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IAssetPool pool = IAssetPool(assetPool);
         IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
         
-        ( uint256 assetAmount, ,
-          uint256 collateralAmount,
-          uint256 interestDebt
-        ) = pool.userPosition(user);
-
+        (uint256 assetAmount , , uint256 collateralAmount) = pool.userPositions(user);
+        
         if (assetAmount == 0) {
             return 3; // Healthy - no asset balance means no risk
         }
@@ -385,6 +383,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
+        uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
         uint256 userCollateralBalance = collateralAmount - Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
