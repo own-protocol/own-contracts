@@ -442,7 +442,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     function calculateRebalanceAmount(uint256 assetPrice) internal view returns (int256) {
         uint256 poolAssetValue = Math.mulDiv(assetToken.totalSupply(), assetPrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 poolReserveValue = assetPool.reserveBackingAsset();
-        return int256(poolAssetValue - poolReserveValue);
+        return int256(poolAssetValue) - int256(poolReserveValue);
     }
 
     /**
