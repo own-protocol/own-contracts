@@ -518,11 +518,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Convert deposits to asset tokens using the expected rebalance price
         uint256 depositAssetAmount = 0;
         if (cycleDeposits > 0 && expectedRebalancePrice > 0) {
-            depositAssetAmount = Math.mulDiv(
-                cycleDeposits, 
-                PRECISION * reserveToAssetDecimalFactor, 
-                expectedRebalancePrice
-            );
+            depositAssetAmount = _convertReserveToAsset(cycleDeposits, expectedRebalancePrice);
         }
         
         // Calculate projected asset supply

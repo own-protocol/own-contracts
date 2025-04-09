@@ -458,12 +458,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
 
         UserPosition storage position = userPositions[user];
         
-        uint256 assetAmount = Math.mulDiv(
-            amount, 
-            PRECISION * reserveToAssetDecimalFactor, 
-            rebalancePrice
-        );
-
+        uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
         uint256 scaledAssetAmount = Math.mulDiv(assetAmount, PRECISION, poolInterest);
 
         // Update user's position
@@ -685,7 +680,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         uint256 price = poolCycleManager.cycleRebalancePrice(prevCycle); 
         uint256 totalRatio = BPS + healthyRatio;
         uint256 utilisedLiquidity = getUtilisedLiquidity();
-        uint256 cycleRedemtionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, price, PRECISION * reserveToAssetDecimalFactor);
+        uint256 cycleRedemtionsInReserveToken = _convertAssetToReserve(cycleTotalRedemptions, price);
         uint256 nettChange = 0;
         uint256 cycleUtilisedLiquidity = 0;
         if (cycleTotalDeposits > cycleRedemtionsInReserveToken) {
@@ -710,7 +705,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         uint256 assetSupply = assetToken.totalSupply();
         uint256 assetPrice = poolCycleManager.cycleRebalancePrice(prevCycle);
 
-        return Math.mulDiv(assetSupply, assetPrice, PRECISION * reserveToAssetDecimalFactor);
+        return _convertAssetToReserve(assetSupply, assetPrice);
     }
 
     // --------------------------------------------------------------------------------
@@ -828,7 +823,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         uint256 assetBalance = assetToken.balanceOf(address(this));
         reserveBackingAsset = reserveBackingAsset 
             + cycleTotalDeposits
-            - Math.mulDiv(cycleTotalRedemptions, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+            - _convertAssetToReserve(cycleTotalRedemptions, rebalancePrice);
 
         if (rebalanceAmount > 0) {
             reserveBackingAsset += uint256(rebalanceAmount);
@@ -876,11 +871,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
 
         RedemptionValues memory r;
         // Convert asset to reserve using rebalance price
-        r.reserveAmount = Math.mulDiv(
-            assetAmount, 
-            rebalancePrice, 
-            PRECISION * reserveToAssetDecimalFactor
-        );
+        r.reserveAmount = _convertAssetToReserve(assetAmount, rebalancePrice);
         
         // Get user's position
         UserPosition storage position = userPositions[user];
@@ -891,7 +882,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         
         r.interestDebt = getInterestDebt(user, requestCycle);
         // Calculate interest debt in reserve tokens
-        r.interestDebt = Math.mulDiv(r.interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
+        r.interestDebt = _convertAssetToReserve(r.interestDebt, rebalancePrice);
         
         // If partial redemption, calculate proportional interest debt
         if (positionAssetAmount > assetAmount) {

@@ -4,6 +4,7 @@
 pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
@@ -104,5 +105,23 @@ abstract contract PoolStorage is Initializable {
             // Note: For the case where reserve has more decimals, additional handling
             // would be needed in conversion functions
         }
+    }
+
+    /**
+     * @notice Converts asset amount to reserve amount based on the asset price
+     * @param assetAmount The amount of asset to convert
+     * @param price The price of the asset in reserve terms
+     */
+    function _convertAssetToReserve(uint256 assetAmount, uint256 price) internal view returns (uint256) {
+        return Math.mulDiv(assetAmount, price , PRECISION * reserveToAssetDecimalFactor);
+    }
+
+    /**
+     * @notice Converts reserve amount to asset amount based on the asset price
+     * @param reserveAmount The amount of reserve to convert
+     * @param price The price of the asset in reserve terms
+     */
+    function _convertReserveToAsset(uint256 reserveAmount, uint256 price) internal view returns (uint256) {
+        return Math.mulDiv(reserveAmount, PRECISION * reserveToAssetDecimalFactor, price);
     }
 }
