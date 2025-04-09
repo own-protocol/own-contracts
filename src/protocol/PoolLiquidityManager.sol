@@ -192,6 +192,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
         // Ensure reduction amount doesn't exceed allowed reduction
         if (amount > allowedReduction) revert OperationExceedsAvailableLiquidity(amount, allowedReduction);
+        if (amount < allowedReduction) {
+            allowedReduction = amount;
+        }
 
         uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
         if (collateralHealth < 2) revert InsufficientCollateralHealth(collateralHealth);
