@@ -522,16 +522,16 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         // Update total user deposits and collateral
         totalUserDeposits -= r.depositAmount;
         totalUserCollateral -= r.collateralAmount;
-        aggregatePoolReserves -= totalAmount;
-    
+        aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
+
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
-            reserveToken.transfer(user, totalAmount);
+           _safeTransferBalance(user, totalAmount);
         } else if (requestType == RequestType.LIQUIDATE) {
             // Liquidation case - transfer reserve tokens to the liquidator
             address liquidator = liquidationInitiators[user];
             if (liquidator == address(0)) revert InvalidLiquidationRequest();
-            reserveToken.transfer(liquidator, totalAmount);
+            _safeTransferBalance(liquidator, totalAmount);
             // Clear liquidation initiator
             delete liquidationInitiators[user];
 
@@ -581,9 +581,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         totalUserDeposits -= r.depositAmount;
         totalUserCollateral -= r.collateralAmount;
         totalAmount -= r.interestDebt;
-        aggregatePoolReserves -= totalAmount;
+        aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
 
-        reserveToken.transfer(msg.sender, totalAmount);
+        _safeTransferBalance(msg.sender, totalAmount);
 
         emit ReserveWithdrawn(msg.sender, totalAmount, cycle);
     }
@@ -952,6 +952,29 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
 
         return amount - protocolFee;
     }
+
+    /**
+     * @notice Safely transfers the balance of reserve to a specified address
+     * @param to Address to which the tokens will be transferred
+     * @param amount Amount of tokens to transfer
+     */
+    function _safeTransferBalance(address to, uint256 amount) internal {
+        uint256 balance = reserveToken.balanceOf(address(this));
+        uint256 transferAmount = balance < amount ? balance : amount;
+        reserveToken.transfer(to, transferAmount);
+    }
+
+    /**
+     * @notice Safely subtracts an amount from a value, ensuring it doesn't go negative
+     * @dev This function is used to prevent underflows
+     * @param from The value to subtract from
+     * @param amount The amount to subtract
+     * @return The result of the subtraction, or 0 if it would go negative
+     */
+    function _safeSubtract(uint256 from, uint256 amount) internal pure returns (uint256) {
+        return amount > from ? 0 : from - amount;
+    }
+
 
     /**
      * @notice Returns the reserve token contract
