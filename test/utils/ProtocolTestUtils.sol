@@ -9,11 +9,11 @@ import "openzeppelin-contracts/contracts/proxy/Clones.sol";
 import "../../src/protocol/AssetPool.sol";
 import "../../src/protocol/PoolCycleManager.sol";
 import "../../src/protocol/PoolLiquidityManager.sol";
+import "../../src/protocol/strategies/DefaultPoolStrategy.sol";
 import "../../src/protocol/xToken.sol";
 import "../../src/protocol/AssetOracle.sol";
 import "../mocks/MockFunctionsRouter.sol";
 import "../mocks/MockAssetOracle.sol";
-import "../mocks/MockPoolStrategy.sol";
 import "../mocks/MockERC20.sol";
 
 /**
@@ -50,6 +50,31 @@ contract ProtocolTestUtils is Test {
     uint32 public constant GAS_LIMIT = 300000;
     bytes32 public constant DON_ID = bytes32("don1");
     uint256 public constant BPS = 10000; // 100% in basis points
+
+     // Set default values for tests
+    uint256 public constant rebalancePeriod = 1 days;
+    uint256 public constant oracleUpdateThreshold = 15 minutes;
+    uint256 public constant haltThreshold = 5 days;
+    
+    // Set interest rate parameters
+    uint256 public constant baseRate = 900; // 9%
+    uint256 public constant rate1 = 1800;   // 18%
+    uint256 public constant maxRate = 7200; // 72%
+    uint256 public constant utilTier1 = 6500; // 65%
+    uint256 public constant utilTier2 = 8500; // 85%
+    
+    // Set fee parameters  
+    uint256 public constant protocolFee = 1000; // 10%
+    address public constant feeRecipient = address(0x1234567890123456789012345678901234567890);
+    
+    // Set user collateral parameters
+    uint256 public constant userhealthyRatio = 2000; // 20%
+    uint256 public constant userLiquidationThreshold = 1250;  // 12.5%
+    
+    // Set LP parameters
+    uint256 public constant lpHealthyRatio = 3000;  // 30%
+    uint256 public constant lpLiquidationThreshold = 2000;   // 20%
+    uint256 public constant lpLiquidationReward = 50;        // 0.5%
 
     // Event records for testing
     struct EventRecord {
@@ -91,7 +116,7 @@ contract ProtocolTestUtils is Test {
         );
         
         // Deploy strategy
-        poolStrategy = new MockPoolStrategy();
+        poolStrategy = new DefaultPoolStrategy();
 
         // Deploy implementation contracts
         AssetPool assetPoolImpl = new AssetPool();
@@ -142,6 +167,13 @@ contract ProtocolTestUtils is Test {
             address(cycleManager),
             address(poolStrategy)
         );
+
+
+        poolStrategy.setCycleParams(rebalancePeriod, oracleUpdateThreshold, haltThreshold);
+        poolStrategy.setInterestRateParams(baseRate, rate1, maxRate, utilTier1, utilTier2);
+        poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward);
+        poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
+        poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
     }
     
     /**
