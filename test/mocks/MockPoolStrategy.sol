@@ -339,7 +339,7 @@ contract MockPoolStrategy is IPoolStrategy, Ownable {
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
         (uint256 assetAmount , ,) = pool.userPositions(user);
-        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
         
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
@@ -379,7 +379,7 @@ contract MockPoolStrategy is IPoolStrategy, Ownable {
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
-        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 userCollateralBalance = collateralAmount - Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
 
         uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
