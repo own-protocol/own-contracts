@@ -342,10 +342,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
-        (uint256 assetAmount , ,) = pool.userPositions(user);
+        (uint256 assetAmount, uint256 depositAmount, ) = pool.userPositions(user);
+        if(assetAmount == 0) {
+            return Math.mulDiv(depositAmount, userLiquidationThreshold, BPS);
+        }
+
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
-        
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
         uint256 interestDebtValue = Math.mulDiv(interestDebt, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         return requiredCollateral + interestDebtValue;
@@ -360,6 +363,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
+        if (lpAssetValue == 0) {
+            return Math.mulDiv(manager.getLPLiquidityCommitment(lp), lpHealthyLiquidityRatio, BPS);
+        }
 
         return Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
     }
