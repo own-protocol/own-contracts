@@ -420,7 +420,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         // Add interest to cumulative total
         cyclePoolInterest[cycleIndex] += interest;
         // Calculate the interest amount in terms of asset
-        cycleInterestAmount = Math.mulDiv(assetToken.totalSupply(), interest, PRECISION * reserveToAssetDecimalFactor);
+        cycleInterestAmount += Math.mulDiv(assetToken.totalSupply(), interest, PRECISION * reserveToAssetDecimalFactor);
         
         // Update last accrual timestamp
         lastInterestAccrualTimestamp = currentTimestamp;
