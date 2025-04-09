@@ -603,13 +603,13 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         UserPosition storage position = userPositions[user];
         uint256 assetAmount = position.assetAmount;
         uint256 scaledAssetAmount = scaledAssetBalance[user];
-
         if (assetAmount == 0) return 0;
 
-        uint256 interest = poolCycleManager.cyclePoolInterest(cycle);
-        uint256 debt = Math.mulDiv(scaledAssetAmount, interest, PRECISION) - assetAmount;
+        uint256 cycleInterest = poolCycleManager.cyclePoolInterest(cycle);
+        uint256 assetWithInterest = Math.mulDiv(scaledAssetAmount, cycleInterest, PRECISION);
+        if(assetWithInterest < assetAmount) return 0;
 
-        return debt;
+        return assetWithInterest - assetAmount;
     }
 
     /**
