@@ -3,7 +3,6 @@
 pragma solidity ^0.8.20;
 
 import "./utils/ProtocolTestUtils.sol";
-import "./mocks/MockPoolStrategy.sol";
 
 /**
  * @title AssetPoolTest
@@ -414,7 +413,7 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.stopPrank();
         
         completeCycleWithPriceChange(INITIAL_PRICE);
-        
+
         // Execute claim reserve
         vm.prank(user1);
         assetPool.claimReserve(user1);

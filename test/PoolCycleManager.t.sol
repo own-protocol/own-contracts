@@ -3,7 +3,6 @@
 pragma solidity ^0.8.20;
 
 import "./utils/ProtocolTestUtils.sol";
-import "./mocks/MockPoolStrategy.sol";
 
 /**
  * @title PoolCycleManagerTest
