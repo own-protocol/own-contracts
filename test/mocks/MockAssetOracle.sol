@@ -2,8 +2,6 @@
 
 pragma solidity ^0.8.20;
 
-import "../../src/interfaces/IAssetOracle.sol";
-
 /**
  * @title MockAssetOracle
  * @notice Mock Asset Oracle for testing that allows direct price setting with full OHLC data
@@ -212,7 +210,6 @@ contract MockAssetOracle {
         return symbol;
     }
     
-    // Additional functions to satisfy IAssetOracle interface
     function assetSymbol() external view returns (string memory) {
         return symbol;
     }

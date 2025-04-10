@@ -12,7 +12,6 @@ import "../../src/protocol/PoolLiquidityManager.sol";
 import "../../src/protocol/strategies/DefaultPoolStrategy.sol";
 import "../../src/protocol/xToken.sol";
 import "../../src/protocol/AssetOracle.sol";
-import "../mocks/MockFunctionsRouter.sol";
 import "../mocks/MockAssetOracle.sol";
 import "../mocks/MockERC20.sol";
 
@@ -31,7 +30,6 @@ contract ProtocolTestUtils is Test {
     
     // Mock contracts
     MockERC20 public reserveToken;
-    MockFunctionsRouter public functionsRouter;
     
     // Test accounts
     address public owner;
@@ -107,7 +105,6 @@ contract ProtocolTestUtils is Test {
         
         // Deploy mock contracts
         reserveToken = new MockERC20("USD Coin", "USDC", _reserveTokenDecimals);
-        functionsRouter = new MockFunctionsRouter();
         
         // Deploy oracle
         assetOracle = new MockAssetOracle(
