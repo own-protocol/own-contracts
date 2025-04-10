@@ -438,7 +438,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 currentAmount, 
         uint256 depositAmount
     ) external pure returns (uint256) {  
-        if (depositAmount == 0) {
+        if (depositAmount == 0 || currentAmount < prevAmount) {
             return 0; // No yield if no previous amount
         }      
         // Calculate yield
