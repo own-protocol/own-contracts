@@ -122,7 +122,7 @@ interface IPoolStrategy {
     ) external;
     
     /**
-     * @notice Sets the LP collateral parameters
+     * @notice Sets the LP liquidity parameters
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Liquidation threshold (scaled by 10000)
      * @param baseRatio Base collateral ratio (scaled by 10000)
@@ -198,7 +198,7 @@ interface IPoolStrategy {
     );
     
     /**
-     * @notice Returns LP collateral parameters
+     * @notice Returns LP liquidity parameters
      * @return healthyRatio Healthy collateral ratio (scaled by 10000)
      * @return liquidationThreshold Liquidation threshold (scaled by 10000)
      * @return baseRatio Base collateral ratio (scaled by 10000)
