@@ -149,9 +149,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function initiateOffchainRebalance() external {
         if (cycleState != CycleState.POOL_ACTIVE) revert InvalidCycleState();
-        (, uint256 oracleUpdateThreshold, ) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
-        if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
+        if (block.timestamp - oracleLastUpdated > poolStrategy.oracleUpdateThreshold()) revert OracleNotUpdated();
         if (!assetOracle.isMarketOpen()) revert MarketClosed();
 
         // Accrue interest before changing cycle state
@@ -167,9 +166,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function initiateOnchainRebalance() external {
         if (cycleState != CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidCycleState();
-        (, uint256 oracleUpdateThreshold, ) = poolStrategy.getCycleParams();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
-        if (block.timestamp - oracleLastUpdated > oracleUpdateThreshold) revert OracleNotUpdated();
+        if (block.timestamp - oracleLastUpdated > poolStrategy.oracleUpdateThreshold()) revert OracleNotUpdated();
         if (assetOracle.isMarketOpen()) revert MarketOpen();
         if (assetOracle.splitDetected()) {
             if (assetPool.isPriceDeviationValid()) {
@@ -203,8 +201,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         if (lp != msg.sender) revert UnauthorizedCaller();
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        (uint256 rebalanceLength, , ) = poolStrategy.getCycleParams();
-        if (block.timestamp > lastCycleActionDateTime + rebalanceLength) revert RebalancingExpired();
+        if (block.timestamp > lastCycleActionDateTime + poolStrategy.rebalanceLength()) revert RebalancingExpired();
 
         _validateRebalancingPrice(rebalancePrice);
 
@@ -279,9 +276,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function rebalanceLP(address lp) external {
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
-        (uint256 rebalanceLength, ,uint256 haltThreshold ) = poolStrategy.getCycleParams();
-        if (block.timestamp < lastCycleActionDateTime + rebalanceLength) revert OnChainRebalancingInProgress();
-        if (block.timestamp > lastCycleActionDateTime + haltThreshold) revert RebalancingExpired();
+        if (block.timestamp < lastCycleActionDateTime + poolStrategy.rebalanceLength()) revert OnChainRebalancingInProgress();
+        if (block.timestamp > lastCycleActionDateTime + poolStrategy.haltThreshold()) revert RebalancingExpired();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (!poolLiquidityManager.isLP(lp)) revert NotLP();
 
@@ -353,8 +349,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     function forceRebalanceLP(address lp) external {
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
-        (, ,uint256 haltThreshold ) = poolStrategy.getCycleParams();
-        if (block.timestamp < lastCycleActionDateTime + haltThreshold) revert InvalidCycleState();
+        if (block.timestamp < lastCycleActionDateTime + poolStrategy.haltThreshold()) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (!poolLiquidityManager.isLP(lp)) revert NotLP();
 

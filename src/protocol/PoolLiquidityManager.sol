@@ -135,10 +135,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (amount == 0) revert InvalidAmount();
 
         if (!_isPoolActive()) revert InvalidCycleState();
-
-        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
         // Calculate additional required collateral
-        uint256 requiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
+        uint256 requiredCollateral = Math.mulDiv(amount, poolStrategy.lpHealthyCollateralRatio(), BPS);
         // Transfer required collateral
         reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
 
@@ -391,11 +389,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 _removeLP(lp);
             }
         } else if (request.requestType == RequestType.LIQUIDATE) {
-
-            (,, uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
             // Transfer liquidation reward to liquidator
             uint256 liquidationAmount = request.requestAmount;
-            uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
+            uint256 rewardAmount = Math.mulDiv(liquidationAmount, poolStrategy.lpLiquidationReward(), BPS);
             position.liquidityCommitment -= liquidationAmount;
             if (position.collateralAmount >= rewardAmount){
                 position.collateralAmount -= rewardAmount;
@@ -641,17 +637,14 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[lp];
         if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
 
-        // Get LP liquidity parameters
-        (uint256 healthyRatio, , uint256 liquidationReward) = poolStrategy.getLPLiquidityParams();
-
         // Calculate liquidation reward
-        uint256 rewardAmount = Math.mulDiv(liquidationAmount, liquidationReward, BPS);
+        uint256 rewardAmount = Math.mulDiv(liquidationAmount, poolStrategy.lpLiquidationReward(), BPS);
         if (position.collateralAmount < rewardAmount) revert InsufficientCollateral();
         uint256 collateralAfterReward = position.collateralAmount - rewardAmount;
 
         // Calculate if position will be healthy after liquidation
         uint256 remainingLiquidity =  position.liquidityCommitment - liquidationAmount;
-        uint256 requiredCollateral = Math.mulDiv(remainingLiquidity, healthyRatio, BPS);
+        uint256 requiredCollateral = Math.mulDiv(remainingLiquidity, poolStrategy.lpHealthyCollateralRatio(), BPS);
         if (collateralAfterReward < requiredCollateral) revert InsufficientCollateral();
         
         // Determine allowed reduction amount (same logic as reduceLiquidity)
@@ -757,15 +750,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param amount Amount on which the fee needs to be deducted
      */
     function _deductProtocolFee(address lp, uint256 amount) internal returns (uint256) {
-        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        uint256 protocolFee = poolStrategy.protocolFee();
+        uint256 protocolFeeAmount = (protocolFee > 0) ? Math.mulDiv(amount, protocolFee, BPS) : 0;
             
-        if (protocolFee > 0) {   
-            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
-            emit FeeDeducted(lp, protocolFee);
+        if (protocolFeeAmount > 0) {   
+            reserveToken.transfer(poolStrategy.feeRecipient(), protocolFeeAmount);
+            emit FeeDeducted(lp, protocolFeeAmount);
         }
 
-        return amount - protocolFee;
+        return amount - protocolFeeAmount;
     }
 
     /**

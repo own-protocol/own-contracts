@@ -33,7 +33,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public utilizationTier2;            // Second utilization tier (e.g., 85%)
     
     // Fee parameters
-    uint256 public protocolFeePercentage;       // Fee on interest (e.g., 10.0%)
+    uint256 public protocolFee;                 // Fee on interest (e.g., 10.0%)
     address public feeRecipient;                // Address to receive fees
     
     // User collateral parameters 
@@ -41,12 +41,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public userLiquidationThreshold;    // Liquidation threshold (e.g., 12.5%)
     
     // LP liquidity parameters 
-    uint256 public lpHealthyLiquidityRatio;     // Healthy ratio (e.g., 30%)
-    uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%) 
+    uint256 public lpHealthyCollateralRatio;    // Healthy ratio (e.g., 30%)
+    uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%)
+    uint256 public lpBaseCollateralRatio;       // Base collateral ratio (e.g., 10%)
     uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
 
     // Yield generating reserve
-    bool public isYieldBearing;       // Flag to indicate if the reserve is yield generating
+    bool public isYieldBearing;                 // Flag to indicate if the reserve is yield generating
     
     // Constants
     uint256 private constant BPS = 100_00;      // 100% in basis points (10000)
@@ -125,20 +126,20 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     /**
      * @notice Sets the fee parameters
-     * @param protocolFee fee on interest (scaled by 10000)
+     * @param _protocolFee fee on interest (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
     function setProtocolFeeParams(
-        uint256 protocolFee,
+        uint256 _protocolFee,
         address _feeRecipient
     ) external onlyOwner {
         require(
-            protocolFee <= BPS, 
+            _protocolFee <= BPS, 
             "Fees cannot exceed 100%"
         );
         require(_feeRecipient != address(0), "Invalid fee recipient");
         
-        protocolFeePercentage = protocolFee;
+        protocolFee = _protocolFee;
         feeRecipient = _feeRecipient;
         
         emit FeeParamsUpdated(
@@ -168,26 +169,31 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Sets the LP liquidity parameters
-     * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @notice Sets the LP collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Warning threshold (scaled by 10000)
+     * @param baseRatio Base collateral ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
+        uint256 baseRatio,
         uint256 liquidationReward
     ) external onlyOwner {
         require(liquidationThreshold <= healthyRatio, "liquidation threshold must be <= healthy ratio");
+        require(baseRatio <= healthyRatio, "Base ratio must be <= healthy ratio");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
-        lpHealthyLiquidityRatio = healthyRatio;
+        lpHealthyCollateralRatio = healthyRatio;
         lpLiquidationThreshold = liquidationThreshold;
+        lpBaseCollateralRatio = baseRatio;
         lpLiquidationReward = liquidationReward;
         
         emit LPLiquidityParamsUpdated(
             healthyRatio,
             liquidationThreshold,
+            baseRatio,
             liquidationReward
         );
     }
@@ -278,26 +284,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     // --------------------------------------------------------------------------------
-    //                             FEE FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Returns protocol fee percentage
-     */
-    function getProtocolFee() external view returns (
-        uint256 protocolFee
-    ) {
-        return protocolFeePercentage;
-    }
-    
-    /**
-     * @notice Returns the fee recipient address
-     */
-    function getFeeRecipient() external view returns (address) {
-        return feeRecipient;
-    }
-    
-    // --------------------------------------------------------------------------------
     //                             COLLATERAL & LIQUIDITY FUNCTIONS
     // --------------------------------------------------------------------------------
     
@@ -315,16 +301,18 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
     
     /**
-     * @notice Returns LP liquidity parameters
+     * @notice Returns LP collateral parameters
      */
     function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
         uint256 liquidationThreshold,
+        uint256 baseCollateralRatio,
         uint256 liquidationReward
     ) {
         return (
-            lpHealthyLiquidityRatio,
+            lpHealthyCollateralRatio,
             lpLiquidationThreshold,
+            lpBaseCollateralRatio,
             lpLiquidationReward
         );
     }
@@ -363,11 +351,15 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
+        uint256 baseCollateral = Math.mulDiv(manager.getLPLiquidityCommitment(lp), lpBaseCollateralRatio, BPS);
+        uint256 healthyCollateral = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
         if (lpAssetValue == 0) {
-            return Math.mulDiv(manager.getLPLiquidityCommitment(lp), lpHealthyLiquidityRatio, BPS);
+            return baseCollateral;
+        } else if (healthyCollateral < baseCollateral) {
+            return baseCollateral;
+        } else {
+            return healthyCollateral;
         }
-
-        return Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
     }
 
     /**
@@ -417,7 +409,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
         uint256 lpCollateral = position.collateralAmount;
         
-        uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyLiquidityRatio, BPS);
+        uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
         uint256 reqLiquidity = Math.mulDiv(lpAssetValue, lpLiquidationThreshold, BPS);
         
         if (lpCollateral >= healthyLiquidity) {

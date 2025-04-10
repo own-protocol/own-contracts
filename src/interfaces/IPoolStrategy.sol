@@ -57,6 +57,7 @@ interface IPoolStrategy {
     event LPLiquidityParamsUpdated(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
+        uint256 baseRatio,
         uint256 liquidationReward
     );
 
@@ -102,11 +103,11 @@ interface IPoolStrategy {
     
     /**
      * @notice Sets the fee parameters
-     * @param protocolFee Protocol fee (scaled by 10000)
+     * @param _protocolFee Protocol fee (scaled by 10000)
      * @param _feeRecipient Address to receive fees
      */
     function setProtocolFeeParams(
-        uint256 protocolFee,
+        uint256 _protocolFee,
         address _feeRecipient
     ) external;
     
@@ -121,14 +122,16 @@ interface IPoolStrategy {
     ) external;
     
     /**
-     * @notice Sets the LP liquidity parameters
-     * @param healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @notice Sets the LP collateral parameters
+     * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @param baseRatio Base collateral ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
+        uint256 baseRatio,
         uint256 liquidationReward
     ) external;
 
@@ -179,22 +182,6 @@ interface IPoolStrategy {
      * @return rate Current interest rate (scaled by 10000)
      */
     function calculateInterestRate(uint256 utilization) external view returns (uint256 rate);
-    
-    // --------------------------------------------------------------------------------
-    //                             FEE FUNCTIONS
-    // --------------------------------------------------------------------------------
-    
-    /**
-     * @notice Returns Protocol fee percentage
-     * @return protocolFee Fee percentage (scaled by 10000)
-     */
-    function getProtocolFee() external view returns (uint256 protocolFee);
-    
-    /**
-     * @notice Returns the fee recipient address
-     * @return recipient The fee recipient address
-     */
-    function getFeeRecipient() external view returns (address recipient);
 
     // --------------------------------------------------------------------------------
     //                             COLLATERAL & LIQUIDITY FUNCTIONS
@@ -211,14 +198,16 @@ interface IPoolStrategy {
     );
     
     /**
-     * @notice Returns LP liquidity parameters
-     * @return healthyRatio Healthy liquidity ratio (scaled by 10000)
+     * @notice Returns LP collateral parameters
+     * @return healthyRatio Healthy collateral ratio (scaled by 10000)
      * @return liquidationThreshold Liquidation threshold (scaled by 10000)
+     * @return baseRatio Base collateral ratio (scaled by 10000)
      * @return liquidationReward Liquidation reward percentage (scaled by 10000)
      */
     function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
         uint256 liquidationThreshold,
+        uint256 baseRatio,
         uint256 liquidationReward
     );
     
@@ -282,4 +271,104 @@ interface IPoolStrategy {
         uint256 currentAmount,
         uint256 depositAmount
     ) external pure returns (uint256 yield);
+
+    // --------------------------------------------------------------------------------
+    //                             VIEW FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Returns the rebalance length for onchain rebalancing period
+     * @return The rebalance length in seconds
+     */
+    function rebalanceLength() external view returns (uint256);
+
+    /**
+     * @notice Returns the threshold for Oracle updates
+     * @return The oracle update threshold in seconds
+     */
+    function oracleUpdateThreshold() external view returns (uint256);
+
+    /**
+     * @notice Returns the threshold for halting the pool
+     * @return The halt threshold in seconds
+     */
+    function haltThreshold() external view returns (uint256);
+
+    /**
+     * @notice Returns the base interest rate
+     * @return The base interest rate (scaled by 10000)
+     */
+    function baseInterestRate() external view returns (uint256);
+
+    /**
+     * @notice Returns the tier 1 interest rate
+     * @return The tier 1 interest rate (scaled by 10000)
+     */
+    function interestRate1() external view returns (uint256);
+
+    /**
+     * @notice Returns the maximum interest rate
+     * @return The maximum interest rate (scaled by 10000)
+     */
+    function maxInterestRate() external view returns (uint256);
+
+    /**
+     * @notice Returns the first utilization tier
+     * @return The first utilization tier (scaled by 10000)
+     */
+    function utilizationTier1() external view returns (uint256);
+
+    /**
+     * @notice Returns the second utilization tier
+     * @return The second utilization tier (scaled by 10000)
+     */
+    function utilizationTier2() external view returns (uint256);
+
+    /**
+     * @notice Returns the protocol fee percentage
+     * @return The protocol fee (scaled by 10000)
+     */
+    function protocolFee() external view returns (uint256);
+
+    /**
+     * @notice Returns the address that receives fees
+     * @return The fee recipient address
+     */
+    function feeRecipient() external view returns (address);
+
+    /**
+     * @notice Returns the healthy collateral ratio for users
+     * @return The user healthy collateral ratio (scaled by 10000)
+     */
+    function userHealthyCollateralRatio() external view returns (uint256);
+
+    /**
+     * @notice Returns the user liquidation threshold
+     * @return The liquidation threshold for users (scaled by 10000)
+     */
+    function userLiquidationThreshold() external view returns (uint256);
+
+    /**
+     * @notice Returns the healthy collateral ratio for LPs
+     * @return The LP healthy collateral ratio (scaled by 10000)
+     */
+    function lpHealthyCollateralRatio() external view returns (uint256);
+
+    /**
+     * @notice Returns the LP liquidation threshold
+     * @return The liquidation threshold for LPs (scaled by 10000)
+     */
+    function lpLiquidationThreshold() external view returns (uint256);
+
+    /**
+     * @notice Returns the base collateral ratio for LPs
+     * @return The base collateral ratio for LPs (scaled by 10000)
+     */
+    function lpBaseCollateralRatio() external view returns (uint256);
+
+    /**
+     * @notice Returns the LP liquidation reward percentage
+     * @return The liquidation reward for LPs (scaled by 10000)
+     */
+    function lpLiquidationReward() external view returns (uint256);
 }

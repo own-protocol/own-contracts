@@ -306,7 +306,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
 
         if (availableLiquidity < amount) revert InsufficientLiquidity();
 
-        (uint256 healthyRatio ,) = poolStrategy.getUserCollateralParams();
+        uint256 healthyRatio = poolStrategy.userHealthyCollateralRatio();
         
         // Calculate minimum required collateral based on deposit amount
         uint256 minRequiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
@@ -660,7 +660,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
     function getUtilisedLiquidity() public view returns (uint256) {      
 
         uint256 poolValue = getPoolValue();
-        (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
+        uint256 healthyRatio = poolStrategy.lpHealthyCollateralRatio();
         uint256 totalRatio = BPS + healthyRatio;
 
         uint256 utilisedLiquidity = Math.mulDiv(poolValue, totalRatio, BPS);
@@ -675,7 +675,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @return cycleUtilisedLiquidity Total utilised liquidity
      */
     function getCycleUtilisedLiquidity() public view returns (uint256) {      
-        (uint256 healthyRatio, , ) = poolStrategy.getLPLiquidityParams();
+        uint256 healthyRatio = poolStrategy.lpHealthyCollateralRatio();
         uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
         uint256 price = poolCycleManager.cycleRebalancePrice(prevCycle); 
         uint256 totalRatio = BPS + healthyRatio;
@@ -753,13 +753,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         if(reserveBalance < amount) revert InsufficientBalance();
 
         uint256 cycleIndex = poolCycleManager.cycleIndex();
-        // Protocol fee recipient address
-        address feeRecipient = poolStrategy.getFeeRecipient();
         aggregatePoolReserves -= amount;
 
        if (isSettle) {
             // During settlement, all interest goes to the protocol as penalty
-            reserveToken.transfer(feeRecipient, amount);
+            reserveToken.transfer(poolStrategy.feeRecipient(), amount);
             emit FeeDeducted(lp, amount);
         } else {
             uint256 lpCycleInterest = _deductProtocolFee(lp, amount);
@@ -933,15 +931,15 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param amount Amount on which the fee needs to be deducted
      */
     function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
-        uint256 protocolFeePercentage = poolStrategy.getProtocolFee();
-        uint256 protocolFee = (protocolFeePercentage > 0) ? Math.mulDiv(amount, protocolFeePercentage, BPS) : 0;
+        uint256 protocolFee = poolStrategy.protocolFee();
+        uint256 protocolFeeAmount = (protocolFee > 0) ? Math.mulDiv(amount, protocolFee, BPS) : 0;
             
-        if (protocolFee > 0) {   
-            reserveToken.transfer(poolStrategy.getFeeRecipient(), protocolFee);
-            emit FeeDeducted(user, protocolFee);
+        if (protocolFeeAmount > 0) {   
+            reserveToken.transfer(poolStrategy.feeRecipient(), protocolFeeAmount);
+            emit FeeDeducted(user, protocolFeeAmount);
         }
 
-        return amount - protocolFee;
+        return amount - protocolFeeAmount;
     }
 
     /**
