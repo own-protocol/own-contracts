@@ -2,15 +2,15 @@
 
 pragma solidity ^0.8.20;
 
-import "./utils/ProtocolTestUtils.sol";
+import "../utils/ProtocolTestUtils.sol";
 
 /**
- * @title ProtocolUserFlowTest
+ * @title UserFlowTest
  * @notice Tests the user flow in the protocol
  * @dev This contract tests the basic user flow, including deposits, redemptions, and claims
  * @dev Tests multiple scenarios including price changes and different reserve token decimals
  */
-contract ProtocolUserFlowTest is ProtocolTestUtils {
+contract UserFlowTest is ProtocolTestUtils {
     // Base amounts (will be adjusted based on token decimals)
     uint256 constant INITIAL_PRICE = 100 * 1e18; // $100.00 per asset (always 18 decimals)
     uint256 constant USER_INITIAL_BALANCE = 100_000; 
