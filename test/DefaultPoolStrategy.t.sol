@@ -88,8 +88,8 @@ contract DefaultPoolStrategyTest is Test {
         assertEq(utilTier1, 6500, "Utilization tier 1 should be set correctly");
         assertEq(utilTier2, 8500, "Utilization tier 2 should be set correctly");
         
-        assertEq(strategy.getProtocolFee(), 1000, "Protocol fee should be set correctly");
-        assertEq(strategy.getFeeRecipient(), feeRecipient, "Fee recipient should be set correctly");
+        assertEq(strategy.protocolFee(), 1000, "Protocol fee should be set correctly");
+        assertEq(strategy.feeRecipient(), feeRecipient, "Fee recipient should be set correctly");
         
         (uint256 userHealthyRatio, uint256 userLiquidationThreshold) = strategy.getUserCollateralParams();
         assertEq(userHealthyRatio, 2000, "User healthy ratio should be set correctly");
@@ -155,8 +155,8 @@ contract DefaultPoolStrategyTest is Test {
         address newFeeRecipient = makeAddr("newFeeRecipient");
         strategy.setProtocolFeeParams(2000, newFeeRecipient);
         
-        assertEq(strategy.getProtocolFee(), 2000, "Protocol fee should be updated");
-        assertEq(strategy.getFeeRecipient(), newFeeRecipient, "Fee recipient should be updated");
+        assertEq(strategy.protocolFee(), 2000, "Protocol fee should be updated");
+        assertEq(strategy.feeRecipient(), newFeeRecipient, "Fee recipient should be updated");
     }
     
     function testProtocolFeeParamsValidation() public {

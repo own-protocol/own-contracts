@@ -59,7 +59,7 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         assertFalse(liquidityManager.isLP(newLP), "LP should not be registered initially");
         
         // Calculate expected collateral based on strategy
-        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
+        uint256 healthyRatio = poolStrategy.lpHealthyCollateralRatio();
         uint256 expectedCollateral = (liquidityAmount * healthyRatio) / BPS;
         
         // Add liquidity to register LP
@@ -160,7 +160,7 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(liquidityProvider1);
         
         // Get collateral requirement
-        (uint256 healthyRatio, ,) = poolStrategy.getLPLiquidityParams();
+        uint256 healthyRatio = poolStrategy.lpHealthyCollateralRatio();
         uint256 expectedCollateral = (liquidityAmount * healthyRatio) / BPS;
         
         // Assert request data
