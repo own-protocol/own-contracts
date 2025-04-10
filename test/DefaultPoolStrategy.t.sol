@@ -96,10 +96,11 @@ contract DefaultPoolStrategyTest is Test {
         assertEq(userHealthyRatio, 2000, "User healthy ratio should be set correctly");
         assertEq(userLiquidationThreshold, 1250, "User liquidation threshold should be set correctly");
         
-        (uint256 lpHealthyRatio, uint256 lpLiquidationThreshold, uint256 lpLiquidationReward) = 
+        (uint256 lpHealthyRatio, uint256 lpLiquidationThreshold, uint256 lpBaseRatio, uint256 lpLiquidationReward) = 
             strategy.getLPLiquidityParams();
         assertEq(lpHealthyRatio, 3000, "LP healthy ratio should be set correctly");
         assertEq(lpLiquidationThreshold, 2000, "LP liquidation threshold should be set correctly");
+        assertEq(lpBaseRatio, 1000, "LP base ratio should be set correctly");
         assertEq(lpLiquidationReward, 50, "LP liquidation reward should be set correctly");
     }
     
@@ -191,7 +192,7 @@ contract DefaultPoolStrategyTest is Test {
             strategy.getLPLiquidityParams();
         assertEq(lpHealthyRatio, 3500, "LP healthy ratio should be updated");
         assertEq(lpLiquidationThreshold, 2500, "LP liquidation threshold should be updated");
-        assetEq(lpBaseRatio, 1500, "LP base ratio should be updated");
+        assertEq(lpBaseRatio, 1500, "LP base ratio should be updated");
         assertEq(lpLiquidationReward, 100, "LP liquidation reward should be updated");
     }
     
@@ -363,6 +364,7 @@ contract DefaultPoolStrategyTest is Test {
         
         // Set up the mock with test data
         mockLiquidityManager.setLPAssetHoldingValue(mockLP, 100e18);
+        mockLiquidityManager.setLPLiquidityCommitment(mockLP, 100e18);
         
         // Calculate required collateral based on 30% healthy ratio for LP
         uint256 requiredCollateral = strategy.calculateLPRequiredCollateral(address(mockLiquidityManager), mockLP);
@@ -371,7 +373,7 @@ contract DefaultPoolStrategyTest is Test {
         assertEq(requiredCollateral, 30e18, "LP required collateral should be 30% of asset value");
         
         // Change LP liquidity parameters
-        strategy.setLPLiquidityParams(4000, 2500, 1000, 50); // 40% healthy, 25% liquidation, 0.5% reward
+        strategy.setLPLiquidityParams(4000, 2500, 1000, 50); // 40% healthy, 25% liquidation, 10% base, 0.5% reward
         
         // Calculate again
         uint256 newRequiredCollateral = strategy.calculateLPRequiredCollateral(address(mockLiquidityManager), mockLP);
@@ -497,6 +499,7 @@ contract MockCycleManager {
 
 contract MockLiquidityManagerForStrategy {
     mapping(address => uint256) public lpAssetHoldingValues;
+    mapping(address => uint256) public lpLiquidityCommitments;
     mapping(address => uint256) public lpCollateralValues;
     
     struct LPPosition {
@@ -512,8 +515,16 @@ contract MockLiquidityManagerForStrategy {
     function setLPCollateral(address lp, uint256 collateral) external {
         lpCollateralValues[lp] = collateral;
     }
+
+    function setLPLiquidityCommitment(address lp, uint256 commitment) external {
+        lpLiquidityCommitments[lp] = commitment;
+    }
     
     // Interface functions required by DefaultPoolStrategy
+
+    function getLPLiquidityCommitment(address lp) external view returns (uint256) {
+        return lpLiquidityCommitments[lp];
+    }
     
     function getLPAssetHoldingValue(address lp) external view returns (uint256) {
         return lpAssetHoldingValues[lp];
