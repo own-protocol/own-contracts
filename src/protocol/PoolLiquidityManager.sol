@@ -184,7 +184,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[msg.sender];
         if (amount > position.liquidityCommitment) revert InvalidAmount();
 
-        // Calculate allowed reduction amount
+        // Alowed reduction is lower (50%) in case of normal reduction
         uint256 allowedReduction = calculateAvailableLiquidity() / 2;
         // Ensure there is available liquidity for the operation
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
@@ -625,6 +625,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function _validateLiquidation(address lp, uint256 liquidationAmount) internal view {
         if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
         if (liquidationAmount == 0) revert InvalidAmount();
+
+        if (!_isPoolActive()) revert InvalidCycleState();
     
         // Check if LP is liquidatable
         uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
@@ -636,19 +638,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Get LP position details
         LPPosition storage position = lpPositions[lp];
         if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
-
-        // Calculate liquidation reward
-        uint256 rewardAmount = Math.mulDiv(liquidationAmount, poolStrategy.lpLiquidationReward(), BPS);
-        if (position.collateralAmount < rewardAmount) revert InsufficientCollateral();
-        uint256 collateralAfterReward = position.collateralAmount - rewardAmount;
-
-        // Calculate if position will be healthy after liquidation
-        uint256 remainingLiquidity =  position.liquidityCommitment - liquidationAmount;
-        uint256 requiredCollateral = Math.mulDiv(remainingLiquidity, poolStrategy.lpHealthyCollateralRatio(), BPS);
-        if (collateralAfterReward < requiredCollateral) revert InsufficientCollateral();
         
-        // Determine allowed reduction amount (same logic as reduceLiquidity)
-        uint256 allowedReduction = calculateAvailableLiquidity() / 2;
+        // Allowed reduction is higher (75%) in case of liquidation
+        uint256 allowedReduction = (calculateAvailableLiquidity() * 3) / 4;
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
 
         // Ensure liquidation amount doesn't exceed allowed reduction
