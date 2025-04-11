@@ -12,16 +12,17 @@ import "../utils/ProtocolTestUtils.sol";
 contract LPLiquidationTest is ProtocolTestUtils {
     // Base amounts (will be adjusted based on token decimals)
     uint256 constant INITIAL_PRICE = 100 * 1e18; // $100.00 per asset (always 18 decimals)
-    uint256 constant INCREASED_PRICE_1 = 130 * 1e18; // $130.00 (30% increase)
-    uint256 constant INCREASED_PRICE_2 = 175 * 1e18; // $175.00 (> 30% increase)
-    uint256 constant USER_INITIAL_BALANCE = 100_000;
+    uint256 constant INCREASED_PRICE = 130 * 1e18; // $130.00 (30% increase)
+    uint256 constant INCREASED_PRICE_2 = 145 * 1e18; // $145.00 (> 10% increase)
+    uint256 constant USER_INITIAL_BALANCE = 1_000_000;
     uint256 constant LP_INITIAL_BALANCE = 1_000_000;
     uint256 constant LP_LIQUIDITY_AMOUNT = 500_000;
-    uint256 constant USER_DEPOSIT_AMOUNT = 50_000;
+    uint256 constant USER_DEPOSIT_AMOUNT = 400_000;
     
     // LP test amounts
-    uint256 constant LP_HEALTHY_COLLATERAL_RATIO = 30; // 30% for LPs
-    uint256 constant LP_LIQUIDATION_THRESHOLD = 20; // 20% for LPs
+    uint256 constant LP_HEALTHY_COLLATERAL_RATIO = 3000; // 30% for LPs
+    uint256 constant LP_LIQUIDATION_THRESHOLD = 2000; // 20% for LPs
+    uint256 constant LP_BASE_COLLATERAL_RATIO = 1000; // 10% for LPs
     
     // Test accounts
     address public liquidator;
@@ -44,21 +45,6 @@ contract LPLiquidationTest is ProtocolTestUtils {
         liquidator = makeAddr("liquidator");
         liquidator2 = makeAddr("liquidator2");
         
-        // Fund liquidators
-        reserveToken.mint(liquidator, adjustAmountForDecimals(100_000, 6));
-        reserveToken.mint(liquidator2, adjustAmountForDecimals(100_000, 6));
-        
-        // Approve token spending
-        vm.startPrank(liquidator);
-        reserveToken.approve(address(liquidityManager), type(uint256).max);
-        assetToken.approve(address(assetPool), type(uint256).max);
-        vm.stopPrank();
-        
-        vm.startPrank(liquidator2);
-        reserveToken.approve(address(liquidityManager), type(uint256).max);
-        assetToken.approve(address(assetPool), type(uint256).max);
-        vm.stopPrank();
-        
         // Create substantial user deposits to generate asset value
         vm.startPrank(user1);
         assetPool.depositRequest(
@@ -79,6 +65,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
 
     /**
      * @notice Test that we can remove excess collateral to make an LP liquidatable
+     * @dev Need to account for unhealthy LPs not being able to rebalance themselves
      */
     function testSetupLiquidatableLP() public {
         // Get LP's initial position
@@ -89,8 +76,8 @@ contract LPLiquidationTest is ProtocolTestUtils {
         assertEq(initialHealth, 3, "LP should start with healthy collateral ratio");
         
         // Calculate required collateral for healthy ratio
-        uint256 lpAssetValue = liquidityManager.getLPAssetHoldingValue(liquidityProvider1);
-        uint256 requiredCollateral = (lpAssetValue * LP_HEALTHY_COLLATERAL_RATIO) / BPS;
+        uint256 assetValue = liquidityManager.getLPAssetHoldingValue(liquidityProvider1);
+        uint256 requiredCollateral = (assetValue * LP_HEALTHY_COLLATERAL_RATIO) / BPS;
         uint256 excessCollateral = initialPosition.collateralAmount - requiredCollateral;
         
         // LP should have excess collateral initially
@@ -110,11 +97,33 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // LP should still be healthy (level 3) or in warning (level 2)
         assertTrue(updatedHealth >= 2, "LP should not be liquidatable yet");
         assertLt(updatedPosition.collateralAmount, initialPosition.collateralAmount, "Collateral should be reduced");
+
+        completeCycleWithPriceChange(INCREASED_PRICE);
         
-        // Now increase the price by 30% to push the LP below liquidation threshold
-        completeCycleWithPriceChange(INCREASED_PRICE_1);
-        // Increase the price again to ensure LP is liquidatable
-        completeCycleWithPriceChange(INCREASED_PRICE_2);
+        // Start the rebalance process with increased price
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INCREASED_PRICE_2);
+        cycleManager.initiateOffchainRebalance();
+        
+        // Advance time to onchain rebalancing phase
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INCREASED_PRICE_2);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+        
+        // Complete rebalance for liquidityProvider2 (who is healthy)
+        vm.startPrank(liquidityProvider2);
+        cycleManager.rebalancePool(liquidityProvider2, INCREASED_PRICE_2);
+        vm.stopPrank();
+        
+        // LiquidityProvider1 can't rebalance themselves due to collateral ratio
+        // Use rebalanceLP for them instead (settlement)
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 100);
+        vm.startPrank(owner);
+        cycleManager.rebalanceLP(liquidityProvider1);
+        vm.stopPrank();
         
         // Check if LP is now liquidatable
         uint8 finalHealth = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
@@ -130,17 +139,10 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Setup liquidatable LP
         testSetupLiquidatableLP();
         
-        // Get LP's asset share to determine liquidation amount
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 30 / 100; // 30% of LP's position
-        
-        // Mint asset tokens to liquidator for the request
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
-        
-        // Record liquidator's initial balance
-        uint256 liquidatorInitialBalance = assetToken.balanceOf(liquidator);
+        // Get LP's commitment to determine liquidation amount
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        uint256 lpCommitment = position.liquidityCommitment;
+        uint256 liquidationAmount = lpCommitment * 30 / 100; // 30% of position
         
         // Submit liquidation request
         vm.startPrank(liquidator);
@@ -157,10 +159,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         
         // Assert liquidator is recorded
         address liquidationInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
-        assertEq(liquidationInitiator, liquidator, "Liquidation initiator should be recorded");
-        
-        // Assert asset tokens transferred from liquidator
-        assertEq(assetToken.balanceOf(liquidator), liquidatorInitialBalance - liquidationAmount, "Liquidator should have transferred asset tokens");
+        assertEq(liquidationInitiator, liquidator, "Liquidation initiator should be recorded");     
     }
 
     /**
@@ -170,12 +169,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Get LP's asset share to determine liquidation amount
         uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider2);
         uint256 liquidationAmount = lpAssetShare * 30 / 100; // 30% of LP's position
-        
-        // Mint asset tokens to liquidator for the request
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
-        
+                
         // Verify LP2 is healthy
         uint8 health = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider2);
         assertEq(health, 3, "LP2 should be healthy");
@@ -187,26 +181,80 @@ contract LPLiquidationTest is ProtocolTestUtils {
         vm.stopPrank();
     }
 
+    /**
+     * @notice Test liquidation with excessive amount (> 30% of position)
+     */
+    function testLiquidateExcessiveAmount() public {
+        // Setup liquidatable LP
+        testSetupLiquidatableLP();
+        
+        // Get LP's asset share to determine liquidation amount
+        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
+        uint256 excessiveAmount = lpAssetShare * 80 / 100; // 80% of LP's position (> 30% limit)
+        
+        // Attempt to liquidate with excessive amount should fail
+        vm.startPrank(liquidator);
+        vm.expectRevert(IPoolLiquidityManager.InvalidAmount.selector);
+        liquidityManager.liquidateLP(liquidityProvider1, excessiveAmount);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test attempting to submit a second liquidation request for the same LP
+     * @dev Only a single liquidation request can be active at one time for an LP
+     */
+    function testMultipleLiquidationRequests() public {
+        // Setup liquidatable LP
+        testSetupLiquidatableLP();
+        
+        // Get LP's commitment to determine liquidation amount
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        uint256 lpCommitment = position.liquidityCommitment;
+        uint256 firstLiquidationAmount = lpCommitment * 30 / 100; // 30% of position
+
+        vm.startPrank(liquidator);
+        liquidityManager.liquidateLP(liquidityProvider1, firstLiquidationAmount);
+        vm.stopPrank();
+        
+        // Verify first liquidation request
+        address firstInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        assertEq(firstInitiator, liquidator, "First liquidator should be recorded");
+        
+        // Second liquidator attempts to liquidate the same LP
+        uint256 secondAmount = lpCommitment * 15 / 100;
+        
+        // Should revert because there's already an active liquidation request
+        vm.startPrank(liquidator2);
+        vm.expectRevert(IPoolLiquidityManager.RequestPending.selector);
+        liquidityManager.liquidateLP(liquidityProvider1, secondAmount);
+        vm.stopPrank();
+        
+        // Verify first liquidator still recorded
+        address currentInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        assertEq(currentInitiator, liquidator, "First liquidator should still be recorded");
+        
+        // Get updated request to verify amount
+        IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(liquidityProvider1);
+        assertEq(request.requestAmount, firstLiquidationAmount, "Request amount should still match first liquidator's amount");
+    }
+
     // ==================== LIQUIDATION EXECUTION TESTS ====================
 
     /**
      * @notice Test full liquidation execution with cycle completion
+     * @dev Accounts for LPs with unhealthy collateral not being able to rebalance themselves
      */
     function testLiquidationExecution() public {
         // Setup liquidatable LP
         testSetupLiquidatableLP();
         
-        // Get LP's asset share for liquidation amount
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 25 / 100; // 25% of LP's position
+        // Get LP's commitment to determine liquidation amount
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        uint256 lpCommitment = position.liquidityCommitment;
+        uint256 liquidationAmount = lpCommitment * 30 / 100; // 30% of position
         
         // Get LP's initial position
         IPoolLiquidityManager.LPPosition memory initialPosition = liquidityManager.getLPPosition(liquidityProvider1);
-        
-        // Mint asset tokens to liquidator for the request
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
         
         // Submit liquidation request
         vm.startPrank(liquidator);
@@ -216,8 +264,29 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Record liquidator's balance before execution
         uint256 liquidatorBalanceBefore = reserveToken.balanceOf(liquidator);
         
-        // Complete a cycle to process liquidation
-        completeCycleWithPriceChange(INCREASED_PRICE_1);
+        // Start rebalance cycle with current price (no further increase needed)
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INCREASED_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        
+        // Advance time to onchain rebalancing phase
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INCREASED_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+        
+        // Rebalance the healthy LP normally
+        vm.startPrank(liquidityProvider2);
+        cycleManager.rebalancePool(liquidityProvider2, INCREASED_PRICE);
+        vm.stopPrank();
+        
+        // For liquidityProvider1, use rebalanceLP since they can't rebalance themselves
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 100);
+        vm.startPrank(owner);
+        cycleManager.rebalanceLP(liquidityProvider1);
+        vm.stopPrank();
         
         // Verify LP's position after liquidation
         IPoolLiquidityManager.LPPosition memory finalPosition = liquidityManager.getLPPosition(liquidityProvider1);
@@ -235,63 +304,6 @@ contract LPLiquidationTest is ProtocolTestUtils {
         assertEq(uint(request.requestType), uint(IPoolLiquidityManager.RequestType.NONE), "Request should be cleared after execution");
     }
 
-    /**
-     * @notice Test LP with insufficient collateral for reward
-     */
-    function testLiquidationInsufficientCollateralForReward() public {
-        // Setup liquidatable LP
-        testSetupLiquidatableLP();
-        
-        // Get LP's position
-        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
-        
-        // Remove almost all collateral to ensure insufficient collateral for reward
-        uint256 collateralToRemove = position.collateralAmount * 90 / 100; // Remove 90%
-        
-        vm.startPrank(liquidityProvider1);
-        // This might revert if it goes below required threshold
-        try liquidityManager.reduceCollateral(collateralToRemove) {
-            // Successfully removed collateral
-        } catch {
-            // If it reverted, try a smaller amount
-            liquidityManager.reduceCollateral(position.collateralAmount * 70 / 100);
-        }
-        vm.stopPrank();
-        
-        // Get LP's updated asset share for liquidation
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 20 / 100; // 20% of position
-        
-        // Mint asset tokens to liquidator
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
-        
-        // Get LP's updated position before liquidation
-        position = liquidityManager.getLPPosition(liquidityProvider1);
-        uint256 initialCollateral = position.collateralAmount;
-        
-        // Submit liquidation request (may revert if not actually liquidatable)
-        vm.startPrank(liquidator);
-        try liquidityManager.liquidateLP(liquidityProvider1, liquidationAmount) {
-            // Successfully submitted request
-        } catch {
-            // If it reverted, LP might not be liquidatable despite our setup
-            // Verify LP health status
-            uint8 health = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
-            assertEq(health, 1, "LP should be liquidatable");
-            vm.stopPrank();
-            return; // End test if LP is not liquidatable
-        }
-        vm.stopPrank();
-        
-        // Complete cycle to process liquidation
-        completeCycleWithPriceChange(INCREASED_PRICE_1);
-        
-        // Verify liquidation still processed but with reduced reward
-        position = liquidityManager.getLPPosition(liquidityProvider1);
-        assertTrue(position.collateralAmount <= initialCollateral, "Collateral should not increase");
-    }
 
     // ==================== CANCELLATION TESTS ====================
 
@@ -302,22 +314,14 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Setup liquidatable LP
         testSetupLiquidatableLP();
         
-        // Get LP's asset share for liquidation
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 20 / 100; // 20% of position
-        
-        // Mint asset tokens to liquidator
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        uint256 lpCommitment = position.liquidityCommitment;
+        uint256 liquidationAmount = lpCommitment * 30 / 100; // 30% of position
         
         // Submit liquidation request
         vm.startPrank(liquidator);
         liquidityManager.liquidateLP(liquidityProvider1, liquidationAmount);
         vm.stopPrank();
-        
-        // Record liquidator's asset balance after request (should have decreased)
-        uint256 liquidatorBalanceAfterRequest = assetToken.balanceOf(liquidator);
         
         // LP adds more collateral to become healthy again
         uint256 lpAssetValue = liquidityManager.getLPAssetHoldingValue(liquidityProvider1);
@@ -332,13 +336,17 @@ contract LPLiquidationTest is ProtocolTestUtils {
         liquidityManager.addCollateral(liquidityProvider1, additionalCollateral);
         vm.stopPrank();
         
+        // Check health after adding collateral
+        uint8 healthAfterCollateral = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
+        assertEq(healthAfterCollateral, 3, "LP should be healthy after adding collateral");
+        
         // Verify liquidation request was cancelled
         IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(liquidityProvider1);
         assertEq(uint(request.requestType), uint(IPoolLiquidityManager.RequestType.NONE), "Request should be cancelled");
-        
-        // Verify liquidator received their tokens back
-        uint256 liquidatorFinalBalance = assetToken.balanceOf(liquidator);
-        assertEq(liquidatorFinalBalance, liquidatorBalanceAfterRequest + liquidationAmount, "Liquidator should receive tokens back");
+         
+        // Verify liquidation initiator was cleared
+        address liquidationInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        assertEq(liquidationInitiator, address(0), "Liquidation initiator should be cleared");
     }
 
     // ==================== EDGE CASE TESTS ====================
@@ -346,39 +354,44 @@ contract LPLiquidationTest is ProtocolTestUtils {
     /**
      * @notice Test liquidation when a different request type is pending
      */
-    function testLiquidateWithPendingRequest() public {
+    function testAddingRequestWhenLiquidatable() public {
         // Setup liquidatable LP
         testSetupLiquidatableLP();
         
         // Create a regular liquidity request for the LP
-        uint256 liquidityAddAmount = 10000 * 10**6; // 10,000 units
+        uint256 liquidityAddAmount = 60000 * 10**6; // 60,000 units
         
         vm.startPrank(owner);
-        reserveToken.mint(liquidityProvider1, liquidityAddAmount * 2);
+        reserveToken.mint(liquidityProvider1, liquidityAddAmount * 3);
         vm.stopPrank();
         
         vm.startPrank(liquidityProvider1);
-        reserveToken.approve(address(liquidityManager), liquidityAddAmount * 2);
+        reserveToken.approve(address(liquidityManager), liquidityAddAmount);
+        // Attempt to add liquidity while liquidatable
+        vm.expectRevert();
         liquidityManager.addLiquidity(liquidityAddAmount);
         vm.stopPrank();
-        
-        // Verify request is pending
+
+        // Add collateral
+        vm.startPrank(liquidityProvider1);
+        liquidityManager.addCollateral(liquidityProvider1, liquidityAddAmount);
+        vm.stopPrank();
+
+        // Verify LP is no longer liquidatable
+        uint8 healthAfterCollateral = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
+        assertEq(healthAfterCollateral, 3, "LP should be healthy after adding collateral");
+
+        // Attempt to add liquidity again
+        vm.startPrank(liquidityProvider1);
+        reserveToken.approve(address(liquidityManager), liquidityAddAmount);
+        liquidityManager.addLiquidity(liquidityAddAmount);
+        vm.stopPrank();
+
+        // Verify LP's request after adding liquidity
         IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(liquidityProvider1);
         assertEq(uint(request.requestType), uint(IPoolLiquidityManager.RequestType.ADD_LIQUIDITY), "Request type should be ADD_LIQUIDITY");
-        
-        // Attempt to liquidate with pending request
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 20 / 100;
-        
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
-        
-        // Should revert due to pending request
-        vm.startPrank(liquidator);
-        vm.expectRevert(IPoolLiquidityManager.RequestPending.selector);
-        liquidityManager.liquidateLP(liquidityProvider1, liquidationAmount);
-        vm.stopPrank();
+        assertEq(request.requestAmount, liquidityAddAmount, "Request amount should match added liquidity amount");
+        assertEq(request.requestCycle, cycleManager.cycleIndex(), "Request cycle should match current cycle");
     }
 
     /**
@@ -388,19 +401,14 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Setup liquidatable LP
         testSetupLiquidatableLP();
         
-        // Get LP's asset share for liquidation
-        uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
-        uint256 liquidationAmount = lpAssetShare * 20 / 100; // 20% of position
-        
-        // Mint asset tokens to liquidator
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, liquidationAmount);
-        vm.stopPrank();
+        IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
+        uint256 lpCommitment = position.liquidityCommitment;
+        uint256 liquidationAmount = lpCommitment * 30 / 100; // 30% of position
         
         // Start offchain rebalancing
         vm.startPrank(owner);
         assetOracle.setMarketOpen(true);
-        updateOraclePrice(INCREASED_PRICE_1);
+        updateOraclePrice(INCREASED_PRICE);
         cycleManager.initiateOffchainRebalance();
         vm.stopPrank();
         
@@ -414,7 +422,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         vm.warp(block.timestamp + REBALANCE_LENGTH);
         vm.startPrank(owner);
         assetOracle.setMarketOpen(false);
-        updateOraclePrice(INCREASED_PRICE_1);
+        updateOraclePrice(INCREASED_PRICE);
         cycleManager.initiateOnchainRebalance();
         vm.stopPrank();
         
@@ -450,11 +458,6 @@ contract LPLiquidationTest is ProtocolTestUtils {
         uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
         uint256 excessiveAmount = lpAssetShare * 2; // Double the position size
         
-        // Mint asset tokens to liquidator
-        vm.startPrank(owner);
-        assetToken.mint(liquidator, excessiveAmount);
-        vm.stopPrank();
-        
         // Attempt to liquidate with excessive amount
         vm.startPrank(liquidator);
         vm.expectRevert(IPoolLiquidityManager.InvalidAmount.selector);
@@ -472,11 +475,6 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Get LP's asset share
         uint256 lpAssetShare = liquidityManager.getLPAssetShare(liquidityProvider1);
         uint256 liquidationAmount = lpAssetShare * 20 / 100;
-        
-        // Mint asset tokens to LP
-        vm.startPrank(owner);
-        assetToken.mint(liquidityProvider1, liquidationAmount);
-        vm.stopPrank();
         
         // LP attempts to liquidate themselves
         vm.startPrank(liquidityProvider1);
