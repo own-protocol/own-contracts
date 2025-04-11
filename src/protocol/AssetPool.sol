@@ -675,10 +675,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @return cycleUtilisedLiquidity Total utilised liquidity
      */
     function getCycleUtilisedLiquidity() public view returns (uint256) {      
-        uint256 healthyRatio = poolStrategy.lpHealthyCollateralRatio();
         uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
         uint256 price = poolCycleManager.cycleRebalancePrice(prevCycle); 
-        uint256 totalRatio = BPS + healthyRatio;
+        uint256 totalRatio = BPS + poolStrategy.lpHealthyCollateralRatio();
         uint256 utilisedLiquidity = getUtilisedLiquidity();
         uint256 cycleRedemtionsInReserveToken = _convertAssetToReserve(cycleTotalRedemptions, price);
         uint256 nettChange = 0;
@@ -687,10 +686,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
             nettChange = cycleTotalDeposits - cycleRedemtionsInReserveToken;
             nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
             cycleUtilisedLiquidity = utilisedLiquidity + nettChange;
-        } else {
+        } else if (cycleTotalDeposits < cycleRedemtionsInReserveToken) {
             nettChange = cycleRedemtionsInReserveToken - cycleTotalDeposits;
             nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
             cycleUtilisedLiquidity = utilisedLiquidity - nettChange;
+        } else {
+            cycleUtilisedLiquidity = utilisedLiquidity;
         }
         
         return cycleUtilisedLiquidity;
