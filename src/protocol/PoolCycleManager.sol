@@ -153,11 +153,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         if (block.timestamp - oracleLastUpdated > poolStrategy.oracleUpdateThreshold()) revert OracleNotUpdated();
         if (!assetOracle.isMarketOpen()) revert MarketClosed();
 
-        // Accrue interest before changing cycle state
-        _accrueInterest();
-
         cycleState = CycleState.POOL_REBALANCING_OFFCHAIN;
-        lastCycleActionDateTime = block.timestamp;
     }
 
     /**
@@ -424,7 +420,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
         
         // Add interest to cumulative total
-        cyclePoolInterest[cycleIndex] += interest;
+        cyclePoolInterest[cycleIndex] = Math.mulDiv(cyclePoolInterest[cycleIndex], PRECISION + interest, PRECISION);
         // Calculate the interest amount in terms of asset
         cycleInterestAmount += _convertAssetToReserve(assetToken.totalSupply(), interest);
         
