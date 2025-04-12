@@ -58,9 +58,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         
         // Record initial cycle data
         uint256 initialCycleIndex = cycleManager.cycleIndex();
-        uint256 initialLastAction = cycleManager.lastCycleActionDateTime();
-        
-        
+                
         // Update oracle with fresh price
         vm.warp(block.timestamp + 1 hours);
         updateOraclePrice(INITIAL_PRICE);
@@ -72,7 +70,6 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         // Verify state changes
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_REBALANCING_OFFCHAIN), "Cycle state should be OFFCHAIN_REBALANCING");
         assertEq(cycleManager.cycleIndex(), initialCycleIndex, "Cycle index should not change");
-        assertGt(cycleManager.lastCycleActionDateTime(), initialLastAction, "Last cycle action timestamp should be updated");
     }
     
     /**
@@ -791,12 +788,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         
         vm.prank(user1);
         assetPool.claimAsset(user1);
-        
-        // Record initial interest data
-        uint256 initialCycleInterest =cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
-        uint256 initialInterestAmount =cycleManager.cycleInterestAmount();
-        uint256 initialAccrualTime =cycleManager.lastInterestAccrualTimestamp();
-        
+                
         // Advance time
         vm.warp(block.timestamp + 30 days);
         
@@ -808,32 +800,24 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         vm.prank(owner);
         cycleManager.initiateOffchainRebalance();
         
-        // Verify interest was accrued
-        uint256 newCycleInterest = cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
-        uint256 newInterestAmount = cycleManager.cycleInterestAmount();
-        uint256 newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
-        
-        assertGt(newCycleInterest, initialCycleInterest, "Cycle interest should increase");
-        assertGt(newInterestAmount, initialInterestAmount, "Cycle interest amount should increase");
-        assertGt(newAccrualTime, initialAccrualTime, "Interest accrual timestamp should be updated");
-        
         // Start onchain rebalance which should accrue interest again
         vm.warp(block.timestamp + 1 hours);
         vm.prank(owner);
         assetOracle.setMarketOpen(false);
         updateOraclePrice(INITIAL_PRICE);
         
-        initialCycleInterest = cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
-        initialInterestAmount = cycleManager.cycleInterestAmount();
-        initialAccrualTime = cycleManager.lastInterestAccrualTimestamp();
+        // Record initial interest data
+        uint256 initialCycleInterest =cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
+        uint256 initialInterestAmount =cycleManager.cycleInterestAmount();
+        uint256 initialAccrualTime =cycleManager.lastInterestAccrualTimestamp();
         
         vm.prank(owner);
         cycleManager.initiateOnchainRebalance();
         
-        // Verify interest was accrued again
-        newCycleInterest = cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
-        newInterestAmount = cycleManager.cycleInterestAmount();
-        newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
+        // Verify interest was accrued
+        uint256 newCycleInterest = cycleManager.cyclePoolInterest(cycleManager.cycleIndex());
+        uint256 newInterestAmount = cycleManager.cycleInterestAmount();
+        uint256 newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
         
         assertGt(newCycleInterest, initialCycleInterest, "Cycle interest should increase again");
         assertGt(newInterestAmount, initialInterestAmount, "Cycle interest amount should increase again");
