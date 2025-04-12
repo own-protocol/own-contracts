@@ -936,6 +936,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param amount Amount on which the fee needs to be deducted
      */
     function _deductProtocolFee(address user, uint256 amount) internal returns (uint256) {
+        if (amount == 0) return 0;
         uint256 protocolFee = poolStrategy.protocolFee();
         uint256 protocolFeeAmount = (protocolFee > 0) ? Math.mulDiv(amount, protocolFee, BPS) : 0;
             

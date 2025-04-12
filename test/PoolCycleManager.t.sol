@@ -139,6 +139,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         // Record cycle data before onchain rebalance
         uint256 initialCycleIndex = cycleManager.cycleIndex();
         uint256 initialLastAction = cycleManager.lastCycleActionDateTime();
+        uint256 lpCount = liquidityManager.getLPCount();
         
         // Call the initiateOnchainRebalance function
         vm.prank(owner);
@@ -148,6 +149,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_REBALANCING_ONCHAIN), "Cycle state should be ONCHAIN_REBALANCING");
         assertEq(cycleManager.cycleIndex(), initialCycleIndex, "Cycle index should not change");
         assertGt(cycleManager.lastCycleActionDateTime(), initialLastAction, "Last cycle action timestamp should be updated");
+        assertEq(cycleManager.cycleLPCount(), lpCount, "Cycle LP count should match total LPs");
         
         // Verify high/low prices were set
         assertGt(cycleManager.cyclePriceHigh(), 0, "Cycle high price should be set");

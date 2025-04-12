@@ -247,4 +247,9 @@ interface IPoolCycleManager {
      */
     function cyclePriceLow() external view returns (uint256);
 
+    /**
+     * @notice Returns the total number of LPs that need to rebalance in the current cycle
+     */
+    function cycleLPCount() external view returns (uint256);
+
 }

@@ -80,6 +80,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     uint256 public cyclePriceLow;
 
     /**
+     * @notice Number of LPs who need to rebalance in the current cycle
+     */
+    uint256 public cycleLPCount;
+
+    /**
      * @notice Timestamp of the last interest accrual
      */
     uint256 public lastInterestAccrualTimestamp;
@@ -180,6 +185,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
 
         lastCycleActionDateTime = block.timestamp;
         cycleState = CycleState.POOL_REBALANCING_ONCHAIN;
+        cycleLPCount = poolLiquidityManager.lpCount();
 
         emit RebalanceInitiated(
             cycleIndex,
@@ -258,7 +264,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         emit Rebalanced(lp, rebalancePrice, amount, isDeposit, cycleIndex);
 
         // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
+        if (rebalancedLPs == cycleLPCount) {
             _startNewCycle(CycleState.POOL_ACTIVE);
         }
     }
@@ -332,7 +338,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         emit Rebalanced(lp, settlementPrice, amount, isDeposit, cycleIndex);
         
         // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
+        if (rebalancedLPs == cycleLPCount) {
             _startNewCycle(CycleState.POOL_ACTIVE);
         }
     }
@@ -388,7 +394,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         emit Rebalanced(lp, settlementPrice, lpCollateral, isDeposit, cycleIndex);
         
         // If all LPs have rebalanced, start next cycle
-        if (rebalancedLPs == poolLiquidityManager.getLPCount()) {
+        if (rebalancedLPs == cycleLPCount) {
             _startNewCycle(CycleState.POOL_HALTED);
         }
     }
