@@ -712,9 +712,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         aggregatePoolReserves -= amount;
 
         if (isSettle) {
+            poolLiquidityManager.addToCollateral(lp, amount);    
             // Transfer the rebalance amount to the liquidity manager
-            reserveToken.transfer(address(poolLiquidityManager), amount);
-            poolLiquidityManager.addToCollateral(lp, amount);      
+            reserveToken.transfer(address(poolLiquidityManager), amount);  
         } else {
             // Transfer the rebalance amount to the LP
             reserveToken.transfer(lp, amount);
@@ -746,9 +746,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
             emit FeeDeducted(lp, amount);
         } else {
             uint256 lpCycleInterest = _deductProtocolFee(lp, amount);
+            poolLiquidityManager.addToInterest(lp, lpCycleInterest);
             // Transfer remaining interest to liquidity manager for the LP
             reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
-            poolLiquidityManager.addToInterest(lp, lpCycleInterest);
             
             emit InterestDistributedToLP(lp, lpCycleInterest, cycleIndex);
         }
