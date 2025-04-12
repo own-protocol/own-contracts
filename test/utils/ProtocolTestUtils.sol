@@ -40,7 +40,6 @@ contract ProtocolTestUtils is Test {
     address public liquidityProvider2;
     
     // Test constants
-    uint256 public constant CYCLE_LENGTH = 7 days;
     uint256 public constant REBALANCE_LENGTH = 1 days;
     bytes32 public constant DEFAULT_SOURCE_HASH = keccak256(abi.encodePacked("console.log(JSON.stringify({price: 42069000000000000000000}));"));
     string public constant DEFAULT_SOURCE_CODE = "console.log(JSON.stringify({price: 42069000000000000000000}));";
@@ -406,7 +405,6 @@ contract ProtocolTestUtils is Test {
         }
         
         // Start offchain rebalance
-        vm.warp(block.timestamp + CYCLE_LENGTH);
         vm.prank(owner);
         cycleManager.initiateOffchainRebalance();
         
@@ -446,8 +444,6 @@ contract ProtocolTestUtils is Test {
      * @notice Advances time and simulates a new cycle without requests
      */
     function advanceCycle() public {
-        // Advance time to the next cycle
-        vm.warp(block.timestamp + CYCLE_LENGTH);
         
         // Start offchain rebalance
         vm.prank(liquidityProvider1);
@@ -661,9 +657,6 @@ contract ProtocolTestUtils is Test {
         // Verify LPs have non-zero liquidity commitment 
         IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
         require(position.liquidityCommitment > 0, "LP1 should have non-zero liquidity commitment");
-        
-        // Advance time to next cycle
-        vm.warp(block.timestamp + CYCLE_LENGTH);
         
         // OFFCHAIN REBALANCE PHASE
         // Set market open and start offchain rebalance
