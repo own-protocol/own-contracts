@@ -17,6 +17,8 @@ contract MockAssetOracle {
     uint256 public maxPriceAge;
     bool private splitDetectedFlag;
     uint256 private preSplitPriceValue;
+
+    uint256 private constant PRECISION = 1e18; // Precision for calculations
     
     // OHLC Data structure
     struct OHLCData {
@@ -185,9 +187,20 @@ contract MockAssetOracle {
         return percentageDeviation > threshold;
     }
     
-    function verifySplit(uint256 splitRatio, uint256 splitDenominator) external pure returns (bool) {
-        // Allow any split ratio for testing
-        return splitRatio > 0 && splitDenominator > 0;
+    function verifySplit(uint256 expectedRatio, uint256 expectedDenominator) external view returns (bool) {
+        if (preSplitPriceValue == 0 || ohlcData.open == 0) return false;
+        
+        // Calculate the actual price ratio (scaled by PRECISION)
+        uint256 priceRatio = (preSplitPriceValue * PRECISION) / ohlcData.open;
+        
+        // Calculate the expected price ratio
+        uint256 expectedPriceRatio = (expectedRatio * PRECISION) / expectedDenominator;
+        
+        // Allow for some small deviation (perhaps within 5%)
+        uint256 lowerBound = (expectedPriceRatio * 95) / 100;
+        uint256 upperBound = (expectedPriceRatio * 105) / 100;
+        
+        return priceRatio >= lowerBound && priceRatio <= upperBound;
     }
     
     function getAssetPrice() external view returns (uint256) {
