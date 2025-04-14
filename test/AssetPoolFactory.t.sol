@@ -171,20 +171,6 @@ contract AssetPoolFactoryTest is Test {
         );
     }
     
-    function test_RevertWhen_CreatePoolWithUnverifiedOracle() public {
-        // Deploy unverified oracle
-        MockAssetOracle unverifiedOracle = new MockAssetOracle("AAPL", DEFAULT_SOURCE_HASH);
-        
-        // Expect revert when oracle is not verified
-        vm.expectRevert(IAssetPoolFactory.NotVerified.selector);
-        factory.createPool(
-            address(usdc),
-            ASSET_SYMBOL,
-            address(unverifiedOracle),
-            address(strategy)
-        );
-    }
-    
     function test_RevertWhen_CreatePoolWithUnverifiedStrategy() public {
         // Deploy unverified strategy
         IPoolStrategy unverifiedStrategy = new DefaultPoolStrategy();
@@ -262,38 +248,6 @@ contract AssetPoolFactoryTest is Test {
         assertTrue(cycleManager1 != cycleManager2, "CycleManagers should be different from each other");
     }
     
-    function test_CreatePoolWithNewlyVerifiedOracle() public {
-    // Deploy a new oracle that is initially unverified
-    MockAssetOracle newOracle = new MockAssetOracle("META", DEFAULT_SOURCE_HASH);
-    
-    // Attempt to create a pool with unverified oracle (should fail)
-    vm.expectRevert(IAssetPoolFactory.NotVerified.selector);
-    factory.createPool(
-        address(usdc),
-        "xMETA",
-        address(newOracle),
-        address(strategy)
-    );
-    
-    // Verify the oracle in the registry
-    registry.setOracleVerification(address(newOracle), true);
-    
-    // Now create a pool with the newly verified oracle (should succeed)
-    address poolAddress = factory.createPool(
-        address(usdc),
-        "xMETA",
-        address(newOracle),
-        address(strategy)
-    );
-    
-    // Verify pool was created successfully
-    assertTrue(poolAddress != address(0), "Pool address should not be zero");
-    
-    // Verify oracle was set correctly
-    AssetPool pool = AssetPool(payable(poolAddress));
-    assertEq(address(pool.getAssetOracle()), address(newOracle), "Oracle not set correctly");
-}
-
     function test_CreatePoolWithNewlyVerifiedStrategy() public {
         // Deploy a new strategy that is initially unverified
         IPoolStrategy newStrategy = new DefaultPoolStrategy();
@@ -324,45 +278,6 @@ contract AssetPoolFactoryTest is Test {
         // Verify strategy was set correctly
         AssetPool pool = AssetPool(payable(poolAddress));
         assertEq(address(pool.getPoolStrategy()), address(newStrategy), "Strategy not set correctly");
-    }
-
-    function test_CreatePoolAfterOracleVerificationRemoved() public {
-        // Create a pool with verified oracle
-        address poolAddress = factory.createPool(
-            address(usdc),
-            "xTSLA",
-            address(oracle),
-            address(strategy)
-        );
-        
-        // Verify pool was created successfully
-        assertTrue(poolAddress != address(0), "Pool address should not be zero");
-        
-        // Remove oracle verification
-        registry.setOracleVerification(address(oracle), false);
-        
-        // Attempt to create another pool with the now-unverified oracle (should fail)
-        vm.expectRevert(IAssetPoolFactory.NotVerified.selector);
-        factory.createPool(
-            address(usdc),
-            "xTSLA2",
-            address(oracle),
-            address(strategy)
-        );
-        
-        // Re-verify the oracle
-        registry.setOracleVerification(address(oracle), true);
-        
-        // Now create another pool (should succeed)
-        address poolAddress2 = factory.createPool(
-            address(usdc),
-            "xTSLA2",
-            address(oracle),
-            address(strategy)
-        );
-        
-        // Verify second pool was created successfully
-        assertTrue(poolAddress2 != address(0), "Second pool address should not be zero");
     }
 
     function test_CreatePoolAfterStrategyVerificationRemoved() public {

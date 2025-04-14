@@ -70,7 +70,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
      * Only callable by the owner of the contract.
      * Reverts if:
      * - Any address parameter is zero.
-     * - The strategy or oracle is not verified in the registry.
+     * - The strategy is not verified in the registry.
      * 
      * @param depositToken Address of the token used for deposits.
      * @param assetSymbol Symbol of the token representing the asset.
@@ -91,10 +91,9 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             bytes(assetSymbol).length == 0
         ) revert InvalidParams();
 
-        // Verify that the strategy and oracle are verified in the registry
+        // Verify that the strategy is verified in the registry
         IProtocolRegistry registry = IProtocolRegistry(protocolRegistry);
         if (!registry.isStrategyVerified(poolStrategy)) revert NotVerified();
-        if (!registry.isOracleVerified(oracle)) revert NotVerified();
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
