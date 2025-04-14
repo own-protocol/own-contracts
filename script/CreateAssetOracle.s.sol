@@ -3,9 +3,13 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/protocol/AssetOracle.sol";
+import "../src/protocol/AssetPoolFactory.sol";
 
-contract DeployOracleScript is Script {
+contract CreateAssetOracleScript is Script {
+
+    // Deployed contract addresses (replace with actual addresses after deployment)
+    address constant ASSET_POOL_FACTORY = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c;
+
     // Chainlink Functions Router address - depends on the network
     address constant FUNCTIONS_ROUTER = 0xf9B8fc078197181C841c296C876945aaa425B278; // Modify for the correct network
 
@@ -19,15 +23,17 @@ contract DeployOracleScript is Script {
         // Calculate the source hash
         bytes32 sourceHash = keccak256(abi.encodePacked(source));
 
+        // Get contract instances
+        AssetPoolFactory factory = AssetPoolFactory(ASSET_POOL_FACTORY);
+
         // Deploy the AssetOracle contract
-        AssetOracle assetOracle = new AssetOracle(
-            FUNCTIONS_ROUTER,
+        address assetOracle = factory.createOracle(
             "TSLA",
             sourceHash,
-            msg.sender
+            FUNCTIONS_ROUTER
         );
 
-        console.log("Deployed AssetOracle contract at:", address(assetOracle));
+        console.log("Deployed AssetOracle contract at:", assetOracle);
         console.log("Source hash:", vm.toString(sourceHash));
 
         vm.stopBroadcast();
