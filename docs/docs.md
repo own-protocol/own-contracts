@@ -1,21 +1,25 @@
 # Own Protocol Documentation
 
-## Contract Addresses (Base Sepolia)
+## Asset Pool Factory (Base Sepolia)
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPool        | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
-| LPRegistry       | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
 | AssetPoolFactory | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
 
-### Test Pool Contracts
+## Implementation Contract Addresses (Base Sepolia)
 
-| Contract  | Address                                      |
-| --------- | -------------------------------------------- |
-| AssetPool | `0xf6AF07a6d2Fd6551c2eb0f2DA7644F4d5dd0FB65` |
-| xToken    | `0xF2809722104D4a0D5E300546dF2489832512fFa4` |
-| USDC      | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
-| Oracle    | `0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0` |
+| Contract             | Address                                      |
+| -------------------- | -------------------------------------------- |
+| AssetPool            | ``                                           |
+| PoolCylceManager     | `0x0f1A428320e1cd5E2ED40f1d1ACf91E337E96015` |
+| PoolLiquidityManager | `0xF73dB7066C192A84e55ea92D7fC161757f36345f` |
+| ProtocolRegistry     | ``                                           |
+
+## Strategy Contract Addresses (Base Sepolia)
+
+| Contract   | Address                                      |
+| ---------- | -------------------------------------------- |
+| Strategy A | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
 
 ### Chainlink Oracle Details
 
@@ -26,31 +30,24 @@
 
 ## Deployment Commands
 
-### Deploy Oracle
-
-```bash
-forge script script/DeployOracle.s.sol:DeployOracleScript \
-    --rpc-url base_sepolia --broadcast --verify
-```
-
-### Fetch Asset Price
-
-```bash
-forge script script/RequestAssetPrice.s.sol:RequestAssetPrice \
-    --rpc-url base_sepolia --broadcast
-```
-
 ### Deploy AssetPool Implementation
 
 ```bash
-forge script script/DeployAssetPoolImplementation.s.sol:AssetPoolImplementationDeployScript \
+forge script script/DeployPoolImplementations.s.sol:DeployPoolImplementations \
     --rpc-url base_sepolia --broadcast --verify
 ```
 
-### Deploy LP Registry
+### Deploy Protocol Registry
 
 ```bash
-forge script script/DeployLPRegistry.s.sol:LPRegistryDeployScript \
+forge script script/DeployProtocolRegistry.s.sol:DeployProtocolRegistryScript \
+    --rpc-url base_sepolia --broadcast --verify
+```
+
+### Deploy Pool Strategy
+
+```bash
+forge script script/DeployPoolStrategy.s.sol:DeployPoolStrategyScript \
     --rpc-url base_sepolia --broadcast --verify
 ```
 
@@ -59,6 +56,20 @@ forge script script/DeployLPRegistry.s.sol:LPRegistryDeployScript \
 ```bash
 forge script script/DeployPoolFactory.s.sol:AssetPoolDeployScript \
     --rpc-url base_sepolia --broadcast --verify
+```
+
+### Create Oracle
+
+```bash
+forge script script/CreateAssetOracle.s.sol:CreateAssetOracleScript \
+    --rpc-url base_sepolia --broadcast --verify
+```
+
+### Fetch Asset Price
+
+```bash
+forge script script/RequestAssetPrice.s.sol:RequestAssetPrice \
+    --rpc-url base_sepolia --broadcast
 ```
 
 ### Create New Pool
