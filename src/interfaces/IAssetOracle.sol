@@ -57,6 +57,13 @@ interface IAssetOracle {
     );
 
     /**
+     * @notice Emitted when the request cooldown is updated
+     * @param oldCooldown The previous cooldown duration
+     * @param newCooldown The new cooldown duration
+     */
+    event RequestCooldownUpdated(uint256 oldCooldown, uint256 newCooldown);
+
+    /**
      * @notice Thrown when received requestId doesn't match the expected one
      * @param requestId The unexpected requestId received
      */
@@ -71,6 +78,11 @@ interface IAssetOracle {
      * @notice Thrown when the asset price is not valid
      */
     error InvalidPrice();
+
+    /**
+     * @notice Thrown when trying to request a price update before the cooldown period has elapsed
+     */
+    error RequestCooldownNotElapsed();
 
     /**
      * @notice Initiates a request to fetch the current asset price
@@ -175,4 +187,12 @@ interface IAssetOracle {
      * @dev Can only be called by the contract owner
      */
     function resetSplitDetection() external;
+
+    /**
+     * @notice Updates the cooldown period for price requests
+     * @param newCooldown The new cooldown period in seconds
+     * @dev Can only be called by the contract owner
+     */
+    function updateRequestCooldown(uint256 newCooldown) external;
+
 }

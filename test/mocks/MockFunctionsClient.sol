@@ -114,14 +114,17 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
     
     uint256 private constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
     uint256 internal constant PRECISION = 1e18;
+    uint256 public REQUEST_COOLDOWN;
     
     constructor(
         address router,
         string memory _assetSymbol,
-        bytes32 _sourceHash
-    ) MockFunctionsClient(router) MockConfirmedOwner(msg.sender) {
+        bytes32 _sourceHash,
+        address _owner
+    ) MockFunctionsClient(router) MockConfirmedOwner(_owner) {
         assetSymbol = _assetSymbol;
         sourceHash = _sourceHash;
+        REQUEST_COOLDOWN = 0;
     }
     
     function requestAssetPrice(
@@ -129,9 +132,13 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donId
-    ) external onlyOwner {
+    ) external {
         if (keccak256(abi.encodePacked(source)) != sourceHash) {
             revert InvalidSource();
+        }
+
+        if(block.timestamp < lastUpdated + REQUEST_COOLDOWN) {
+            revert RequestCooldownNotElapsed();
         }
         
         // Create a mock request
@@ -262,5 +269,11 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
     function resetSplitDetection() external onlyOwner {
         splitDetected = false;
         preSplitPrice = 0;
+    }
+
+    function updateRequestCooldown(uint256 newCooldown) external onlyOwner {
+        // This function is a placeholder for updating the request cooldown
+        // In a real implementation, you would update the cooldown logic here
+        REQUEST_COOLDOWN = newCooldown;
     }
 }

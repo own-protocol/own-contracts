@@ -23,7 +23,8 @@ contract DeployOracleScript is Script {
         AssetOracle assetOracle = new AssetOracle(
             FUNCTIONS_ROUTER,
             "TSLA",
-            sourceHash
+            sourceHash,
+            msg.sender
         );
 
         console.log("Deployed AssetOracle contract at:", address(assetOracle));

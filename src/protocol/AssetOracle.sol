@@ -45,7 +45,11 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     uint256 public lastUpdated;
 
     /// @notice Maximum time difference (in seconds) to consider market open
-    uint256 private constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
+    uint256 public constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
+
+    /// @notice Cooldown period (in seconds) for price requests
+    /// @dev Prevents spamming of requests
+    uint256 public REQUEST_COOLDOWN;
 
     /// @notice Precision factor for price calculations
     uint256 internal constant PRECISION = 1e18;
@@ -67,14 +71,17 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
      * @param router Address of the Chainlink Functions Router
      * @param _assetSymbol Symbol of the asset to track
      * @param _sourceHash Hash of the valid JavaScript source code
+     * @param _owner Address of the contract owner
      */
     constructor(
         address router,
         string memory _assetSymbol,
-        bytes32 _sourceHash
-    ) FunctionsClient(router) ConfirmedOwner(msg.sender) {
+        bytes32 _sourceHash,
+        address _owner
+    ) FunctionsClient(router) ConfirmedOwner(_owner) {
         assetSymbol = _assetSymbol;
         sourceHash = _sourceHash;
+        REQUEST_COOLDOWN = 0;
     }
 
     /**
@@ -89,10 +96,16 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donID
-    ) external onlyOwner {
+    ) external {
         if (keccak256(abi.encodePacked(source)) != sourceHash) {
             revert InvalidSource();
         }
+
+        // Check cooldown period
+        if (block.timestamp < lastUpdated + REQUEST_COOLDOWN) {
+            revert RequestCooldownNotElapsed();
+        }
+        
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(source);
         s_lastRequestId = _sendRequest(
@@ -274,5 +287,16 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     function resetSplitDetection() external onlyOwner {
         splitDetected = false;
         preSplitPrice = 0;
+    }
+
+    /**
+     * @notice Updates the cooldown period for price requests
+     * @param newCooldown The new cooldown period in seconds
+     * @dev Can only be called by the contract owner
+     */
+    function updateRequestCooldown(uint256 newCooldown) external onlyOwner {
+        uint256 oldCooldown = REQUEST_COOLDOWN;
+        REQUEST_COOLDOWN = newCooldown;
+        emit RequestCooldownUpdated(oldCooldown, newCooldown);
     }
 }

@@ -51,7 +51,8 @@ contract AssetOracleTest is Test {
         assetOracle = new MockAssetOracle(
             address(mockRouter),
             ASSET_SYMBOL,
-            SOURCE_HASH
+            SOURCE_HASH,
+            owner
         );
     }
     
@@ -134,22 +135,7 @@ contract AssetOracleTest is Test {
             DON_ID
         );
     }
-    
-    function testRequestAssetPriceUnauthorized() public {
-        // Valid source code
-        string memory source = "console.log(JSON.stringify({price: 42069000000000000000000}));";
         
-        // Try to request asset price from unauthorized account
-        vm.prank(user1);
-        vm.expectRevert();
-        assetOracle.requestAssetPrice(
-            source,
-            SUBSCRIPTION_ID,
-            GAS_LIMIT,
-            DON_ID
-        );
-    }
-    
     // ==================== FULFILLMENT TESTS ====================
     
     function testOracleFulfillment() public {
@@ -484,4 +470,49 @@ contract AssetOracleTest is Test {
             bytes("")
         );
     }
+
+    function testRequestCooldown() public {
+        // Set a cooldown period
+        uint256 cooldownPeriod = 1 hours;
+        vm.prank(owner);
+        // Update the cooldown period
+        assetOracle.updateRequestCooldown(cooldownPeriod);
+        assertEq(assetOracle.REQUEST_COOLDOWN(), cooldownPeriod, "Cooldown period not set correctly");
+        vm.stopPrank();
+
+        // Make the first request
+        string memory source = "console.log(JSON.stringify({price: 42069000000000000000000}));";
+
+        // Attempt to make another request before the cooldown period has elapsed
+        vm.expectRevert(IAssetOracle.RequestCooldownNotElapsed.selector);
+        assetOracle.requestAssetPrice(
+            source,
+            SUBSCRIPTION_ID,
+            GAS_LIMIT,
+            DON_ID
+        );
+
+        // Advance time to surpass the cooldown period
+        vm.warp(block.timestamp + cooldownPeriod);
+
+        // Make another request after the cooldown period
+        assetOracle.requestAssetPrice(
+            source,
+            SUBSCRIPTION_ID,
+            GAS_LIMIT,
+            DON_ID
+        );
+
+        // Verify that the request was successful
+        assertNotEq(assetOracle.s_lastRequestId(), bytes32(0), "Request ID should be set");
+    }
+
+    function testUpdateRequestCooldownUnauthorized() public {
+        // Attempt to update the cooldown period from a non-owner account
+        uint256 newCooldown = 1 hours;
+        vm.prank(user1); // Simulate a call from an unauthorized user
+        vm.expectRevert("Not owner");
+        assetOracle.updateRequestCooldown(newCooldown);
+    }
+
 }
