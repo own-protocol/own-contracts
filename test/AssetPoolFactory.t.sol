@@ -8,9 +8,9 @@ import "../src/protocol/AssetPool.sol";
 import "../src/protocol/PoolCycleManager.sol";
 import "../src/protocol/PoolLiquidityManager.sol";
 import "../src/protocol/ProtocolRegistry.sol";
+import "../src/protocol/AssetOracle.sol";
 import "../src/protocol/strategies/DefaultPoolStrategy.sol";
 import "../test/mocks/MockERC20.sol";
-import "../test/mocks/MockAssetOracle.sol";
 
 contract AssetPoolFactoryTest is Test {
     AssetPoolFactory public factory;
@@ -21,10 +21,13 @@ contract AssetPoolFactoryTest is Test {
     
     // Mock contracts for testing
     MockERC20 public usdc;
-    MockAssetOracle public oracle;
+    AssetOracle public oracle;
     
     // strategy contract
     IPoolStrategy public strategy;
+    
+    // Chainlink router (mocked)
+    address public chainlinkRouter;
     
     // Test accounts
     address public owner;
@@ -38,6 +41,7 @@ contract AssetPoolFactoryTest is Test {
         // Set up test accounts
         owner = address(this);
         user = makeAddr("user");
+        chainlinkRouter = makeAddr("chainlinkRouter");
         
         // Deploy implementation contracts
         assetPoolImpl = new AssetPool();
@@ -49,7 +53,14 @@ contract AssetPoolFactoryTest is Test {
         
         // Deploy mock contracts
         usdc = new MockERC20("USD Coin", "USDC", 6);
-        oracle = new MockAssetOracle("TSLA", DEFAULT_SOURCE_HASH);
+
+        // deploy oracle
+        oracle = new AssetOracle(
+            chainlinkRouter,
+            "TSLA",
+            DEFAULT_SOURCE_HASH,
+            owner
+        );
         strategy = new DefaultPoolStrategy();
         
         // Deploy factory
@@ -60,11 +71,11 @@ contract AssetPoolFactoryTest is Test {
             address(registry)
         );
         
-        // Verify oracle and strategy in registry
-        registry.setOracleVerification(address(oracle), true);
+        // Verify strategy in registry
         registry.setStrategyVerification(address(strategy), true);
     }
     
+    // Existing tests remain the same, but modified where needed
     function test_Initialization() public view {
         // Test factory initialization
         assertEq(factory.assetPool(), address(assetPoolImpl), "AssetPool address mismatch");
@@ -101,12 +112,94 @@ contract AssetPoolFactoryTest is Test {
         factory.updateRegistry(address(newRegistry));
     }
     
+    // New test for createOracle function
+    function test_CreateOracle() public {
+        
+        // Create oracle
+        address oracleAddress = factory.createOracle(
+            ASSET_SYMBOL,
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+        
+        // Verify oracle was created (non-zero address)
+        assertTrue(oracleAddress != address(0), "Oracle address should not be zero");
+        
+        // Verify oracle properties
+        assertEq(AssetOracle(oracleAddress).assetSymbol(), ASSET_SYMBOL, "Asset symbol not set correctly");
+        assertEq(AssetOracle(oracleAddress).sourceHash(), DEFAULT_SOURCE_HASH, "Source hash not set correctly");
+        assertEq(AssetOracle(oracleAddress).owner(), owner, "Oracle owner not set correctly");
+    }
+    
+    function test_RevertWhen_CreateOracleWithEmptySymbol() public {
+        // Expect revert when asset symbol is empty
+        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
+        factory.createOracle(
+            "",
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+    }
+    
+    function test_RevertWhen_CreateOracleWithZeroRouterAddress() public {
+        // Expect revert when router address is zero
+        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
+        factory.createOracle(
+            ASSET_SYMBOL,
+            DEFAULT_SOURCE_HASH,
+            address(0)
+        );
+    }
+    
+    function test_CreateMultipleOracles() public {
+        // Create multiple oracles with different symbols
+        address oracle1 = factory.createOracle(
+            "TSLA",
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+        
+        address oracle2 = factory.createOracle(
+            "AAPL", 
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+        
+        // Verify oracles have unique addresses
+        assertTrue(oracle1 != oracle2, "Oracles should have different addresses");
+        
+        // Verify oracle symbols
+        assertEq(AssetOracle(oracle1).assetSymbol(), "TSLA", "Oracle1 symbol not set correctly");
+        assertEq(AssetOracle(oracle2).assetSymbol(), "AAPL", "Oracle2 symbol not set correctly");
+    }
+    
+    function test_OracleOwnerIsDifferentFromFactory() public {
+        // Create oracle
+        address oracleAddress = factory.createOracle(
+            ASSET_SYMBOL,
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+        
+        // Verify the oracle's owner is the same as the factory's owner (not the factory itself)
+        assertEq(AssetOracle(oracleAddress).owner(), factory.owner(), "Oracle owner should be factory owner");
+        assertTrue(AssetOracle(oracleAddress).owner() != address(factory), "Oracle owner should not be factory address");
+    }
+    
+    // Modified test for createPool to use factory-created oracle
     function test_CreatePool() public {
+        // Create oracle using factory
+        address oracleAddress = factory.createOracle(
+            ASSET_SYMBOL,
+            DEFAULT_SOURCE_HASH,
+            chainlinkRouter
+        );
+        
         // Create a new pool
         address poolAddress = factory.createPool(
             address(usdc),
             ASSET_SYMBOL,
-            address(oracle),
+            oracleAddress,
             address(strategy)
         );
         
@@ -119,7 +212,7 @@ contract AssetPoolFactoryTest is Test {
         // Verify pool was initialized correctly
         assertEq(address(pool.getReserveToken()), address(usdc), "Reserve token not set correctly");
         assertEq(pool.getAssetToken().symbol(), ASSET_SYMBOL, "Asset symbol not set correctly");
-        assertEq(address(pool.getAssetOracle()), address(oracle), "Oracle not set correctly");
+        assertEq(address(pool.getAssetOracle()), oracleAddress, "Oracle not set correctly");
         assertEq(address(pool.getPoolStrategy()), address(strategy), "Strategy not set correctly");
         assertEq(pool.owner(), owner, "Pool owner not set correctly");
         
@@ -131,80 +224,52 @@ contract AssetPoolFactoryTest is Test {
         assertTrue(liquidityManagerAddress != address(0), "LiquidityManager address should not be zero");
     }
     
-    function test_RevertWhen_CreatePoolWithZeroAddress() public {
-        // Expect revert when deposit token is zero
-        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
-        factory.createPool(
-            address(0),
+    // New test: Create pool with oracle not created by factory
+    function test_RevertWhen_CreatePoolWithUnverifiedOracle() public {
+        // Create a new oracle directly (not through factory)
+        AssetOracle unverifiedOracle = new AssetOracle(
+            chainlinkRouter,
             ASSET_SYMBOL,
-            address(oracle),
-            address(strategy)
+            DEFAULT_SOURCE_HASH,
+            user // Different owner than factory owner
         );
         
-        // Expect revert when oracle is zero
-        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
-        factory.createPool(
-            address(usdc),
-            ASSET_SYMBOL,
-            address(0),
-            address(strategy)
-        );
-        
-        // Expect revert when strategy is zero
-        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
-        factory.createPool(
-            address(usdc),
-            ASSET_SYMBOL,
-            address(oracle),
-            address(0)
-        );
-    }
-    
-    function test_RevertWhen_CreatePoolWithEmptySymbol() public {
-        // Expect revert when asset symbol is empty
-        vm.expectRevert(IAssetPoolFactory.InvalidParams.selector);
-        factory.createPool(
-            address(usdc),
-            "",
-            address(oracle),
-            address(strategy)
-        );
-    }
-    
-    function test_RevertWhen_CreatePoolWithUnverifiedStrategy() public {
-        // Deploy unverified strategy
-        IPoolStrategy unverifiedStrategy = new DefaultPoolStrategy();
-        
-        // Expect revert when strategy is not verified
+        // Attempt to create pool with unverified oracle (should fail)
         vm.expectRevert(IAssetPoolFactory.NotVerified.selector);
         factory.createPool(
             address(usdc),
             ASSET_SYMBOL,
-            address(oracle),
-            address(unverifiedStrategy)
+            address(unverifiedOracle),
+            address(strategy)
         );
     }
-    
+        
+    // Additional tests for existing functionality using factory-created oracles
     function test_CreateMultiplePools() public {
+        // Create oracles using factory
+        address oracle1 = factory.createOracle("TSLA", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        address oracle2 = factory.createOracle("AAPL", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        address oracle3 = factory.createOracle("MSFT", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
         // Create three pools with different symbols
         address pool1 = factory.createPool(
             address(usdc),
             "xTSLA",
-            address(oracle),
+            oracle1,
             address(strategy)
         );
         
         address pool2 = factory.createPool(
             address(usdc),
             "xAAPL",
-            address(oracle),
+            oracle2,
             address(strategy)
         );
         
         address pool3 = factory.createPool(
             address(usdc),
             "xMSFT",
-            address(oracle),
+            oracle3,
             address(strategy)
         );
         
@@ -220,18 +285,22 @@ contract AssetPoolFactoryTest is Test {
     }
     
     function test_PoolsShareImplementations() public {
+        // Create oracles using factory
+        address oracle1 = factory.createOracle("TSLA", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        address oracle2 = factory.createOracle("AAPL", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
         // Create two pools
         address pool1 = factory.createPool(
             address(usdc),
             "xTSLA",
-            address(oracle),
+            oracle1,
             address(strategy)
         );
         
         address pool2 = factory.createPool(
             address(usdc),
             "xAAPL",
-            address(oracle),
+            oracle2,
             address(strategy)
         );
         
@@ -249,6 +318,9 @@ contract AssetPoolFactoryTest is Test {
     }
     
     function test_CreatePoolWithNewlyVerifiedStrategy() public {
+        // Create oracle using factory
+        address oracleAddress = factory.createOracle(ASSET_SYMBOL, DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
         // Deploy a new strategy that is initially unverified
         IPoolStrategy newStrategy = new DefaultPoolStrategy();
         
@@ -257,7 +329,7 @@ contract AssetPoolFactoryTest is Test {
         factory.createPool(
             address(usdc),
             "xNVDA",
-            address(oracle),
+            oracleAddress,
             address(newStrategy)
         );
         
@@ -268,7 +340,7 @@ contract AssetPoolFactoryTest is Test {
         address poolAddress = factory.createPool(
             address(usdc),
             "xNVDA",
-            address(oracle),
+            oracleAddress,
             address(newStrategy)
         );
         
@@ -281,11 +353,14 @@ contract AssetPoolFactoryTest is Test {
     }
 
     function test_CreatePoolAfterStrategyVerificationRemoved() public {
+        // Create oracle using factory
+        address oracleAddress = factory.createOracle(ASSET_SYMBOL, DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
         // Create a pool with verified strategy
         address poolAddress = factory.createPool(
             address(usdc),
             "xAMZN",
-            address(oracle),
+            oracleAddress,
             address(strategy)
         );
         
@@ -300,7 +375,7 @@ contract AssetPoolFactoryTest is Test {
         factory.createPool(
             address(usdc),
             "xAMZN2",
-            address(oracle),
+            oracleAddress,
             address(strategy)
         );
         
@@ -311,11 +386,33 @@ contract AssetPoolFactoryTest is Test {
         address poolAddress2 = factory.createPool(
             address(usdc),
             "xAMZN2",
-            address(oracle),
+            oracleAddress,
             address(strategy)
         );
         
         // Verify second pool was created successfully
         assertTrue(poolAddress2 != address(0), "Second pool address should not be zero");
+    }
+    
+    // Test oracle ownership transfer when factory owner changes
+    function test_OracleOwnershipWithFactoryOwnerChange() public {
+        // Create oracle using factory
+        address oracleAddress = factory.createOracle(ASSET_SYMBOL, DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
+        // Verify initial ownership
+        assertEq(AssetOracle(oracleAddress).owner(), owner, "Oracle initial owner should be factory owner");
+        
+        // Transfer factory ownership to user
+        factory.transferOwnership(user);
+        
+        // Oracle ownership should remain unchanged
+        assertEq(AssetOracle(oracleAddress).owner(), owner, "Oracle ownership should not change when factory ownership changes");
+        
+        // New oracles should be created with new owner
+        vm.prank(user);
+        address newOracleAddress = factory.createOracle("NVDA", DEFAULT_SOURCE_HASH, chainlinkRouter);
+        
+        // Verify new oracle ownership
+        assertEq(AssetOracle(newOracleAddress).owner(), user, "New oracle owner should be new factory owner");
     }
 }

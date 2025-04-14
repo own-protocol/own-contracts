@@ -10,6 +10,7 @@ import {IProtocolRegistry} from '../interfaces/IProtocolRegistry.sol';
 import {AssetPool} from "../protocol/AssetPool.sol";
 import {PoolLiquidityManager} from '../protocol/PoolLiquidityManager.sol';
 import {PoolCycleManager} from '../protocol/PoolCycleManager.sol';
+import {AssetOracle} from '../protocol/AssetOracle.sol';
 import {IXToken} from '../interfaces/IXToken.sol';
 
 
@@ -67,7 +68,6 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
 
     /**
      * @dev Creates a new asset pool with the given parameters.
-     * Only callable by the owner of the contract.
      * Reverts if:
      * - Any address parameter is zero.
      * - The strategy is not verified in the registry.
@@ -94,6 +94,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         // Verify that the strategy is verified in the registry
         IProtocolRegistry registry = IProtocolRegistry(protocolRegistry);
         if (!registry.isStrategyVerified(poolStrategy)) revert NotVerified();
+        // Verify that the oracle was created by the factory
+        if (AssetOracle(oracle).owner() != owner()) revert NotVerified();
 
         // Clones a new AssetPool contract instance.
         address pool = Clones.clone(assetPool);
@@ -143,6 +145,34 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
         );
 
         return address(pool);
+    }
+
+
+    /**
+     * @dev Creates a new asset oracle with the given parameters.
+     * Reverts if:
+     * - Any address parameter is zero.
+     * - The asset symbol is empty.
+     * 
+     * @param assetSymbol Symbol of the token representing the asset.
+     * @param sourceHash Hash of the valid source code.
+     * @param router Address of the Chainlink Functions router contract.
+     * @return address The address of the newly created asset oracle.
+     */
+    function createOracle(
+        string memory assetSymbol,
+        bytes32 sourceHash,
+        address router
+    ) external returns (address) {
+        if (bytes(assetSymbol).length == 0 || router == address(0)) revert InvalidParams();
+        
+        // Create a new AssetOracle instance
+        AssetOracle oracle = new AssetOracle(router, assetSymbol, sourceHash, owner());
+        
+        // Emit an event for oracle creation
+        emit AssetOracleCreated(address(oracle), assetSymbol);
+        
+        return address(oracle);
     }
 
 }

@@ -24,6 +24,16 @@ interface IAssetPoolFactory {
     );
 
     /**
+     * @dev Emitted when a new asset oracle is created.
+     * @param oracle Address of the newly created oracle.
+     * @param assetSymbol Symbol representing the asset.
+     */
+    event AssetOracleCreated(
+        address indexed oracle,
+        string assetSymbol
+    );
+
+    /**
      * @dev Emitted when the protocol registry is updated
      * @param oldRegistry Address of the old registry
      * @param newRegistry Address of the new registry
@@ -84,6 +94,23 @@ interface IAssetPoolFactory {
         string memory assetSymbol,
         address oracle,
         address poolStrategy
+    ) external returns (address);
+
+    /**
+     * @dev Creates a new asset oracle with the given parameters.
+     * Reverts if:
+     * - Any address parameter is zero.
+     * - The asset symbol is empty.
+     * 
+     * @param assetSymbol Symbol of the token representing the asset.
+     * @param sourceHash Hash of the valid source code.
+     * @param router Address of the Chainlink Functions router contract.
+     * @return address The address of the newly created asset oracle.
+     */
+    function createOracle(
+        string memory assetSymbol,
+        bytes32 sourceHash,
+        address router
     ) external returns (address);
 
 }
