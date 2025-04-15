@@ -525,7 +525,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
      * @return Reserve token amount
      */
     function _convertAssetToReserve(uint256 assetAmount, uint256 price) internal view returns (uint256) {
-        uint256 decimalFactor = assetPool.getReserveToAssetDecimalFactor();
+        uint256 decimalFactor = assetPool.reserveToAssetDecimalFactor();
         return Math.mulDiv(assetAmount, price, PRECISION * decimalFactor);
     }
 }

@@ -210,15 +210,15 @@ contract AssetPoolFactoryTest is Test {
         AssetPool pool = AssetPool(payable(poolAddress));
         
         // Verify pool was initialized correctly
-        assertEq(address(pool.getReserveToken()), address(usdc), "Reserve token not set correctly");
-        assertEq(pool.getAssetToken().symbol(), ASSET_SYMBOL, "Asset symbol not set correctly");
-        assertEq(address(pool.getAssetOracle()), oracleAddress, "Oracle not set correctly");
-        assertEq(address(pool.getPoolStrategy()), address(strategy), "Strategy not set correctly");
+        assertEq(address(pool.reserveToken()), address(usdc), "Reserve token not set correctly");
+        assertEq(pool.assetToken().symbol(), ASSET_SYMBOL, "Asset symbol not set correctly");
+        assertEq(address(pool.assetOracle()), oracleAddress, "Oracle not set correctly");
+        assertEq(address(pool.poolStrategy()), address(strategy), "Strategy not set correctly");
         assertEq(pool.owner(), owner, "Pool owner not set correctly");
         
         // Verify associated contracts were deployed
-        address cycleManagerAddress = address(pool.getPoolCycleManager());
-        address liquidityManagerAddress = address(pool.getPoolLiquidityManager());
+        address cycleManagerAddress = address(pool.poolCycleManager());
+        address liquidityManagerAddress = address(pool.poolLiquidityManager());
         
         assertTrue(cycleManagerAddress != address(0), "CycleManager address should not be zero");
         assertTrue(liquidityManagerAddress != address(0), "LiquidityManager address should not be zero");
@@ -279,9 +279,9 @@ contract AssetPoolFactoryTest is Test {
         assertTrue(pool2 != pool3, "Pool2 and Pool3 should have different addresses");
         
         // Verify pool symbols are set correctly
-        assertEq(AssetPool(payable(pool1)).getAssetToken().symbol(), "xTSLA", "Pool1 symbol not set correctly");
-        assertEq(AssetPool(payable(pool2)).getAssetToken().symbol(), "xAAPL", "Pool2 symbol not set correctly");
-        assertEq(AssetPool(payable(pool3)).getAssetToken().symbol(), "xMSFT", "Pool3 symbol not set correctly");
+        assertEq(AssetPool(payable(pool1)).assetToken().symbol(), "xTSLA", "Pool1 symbol not set correctly");
+        assertEq(AssetPool(payable(pool2)).assetToken().symbol(), "xAAPL", "Pool2 symbol not set correctly");
+        assertEq(AssetPool(payable(pool3)).assetToken().symbol(), "xMSFT", "Pool3 symbol not set correctly");
     }
     
     function test_PoolsShareImplementations() public {
@@ -309,8 +309,8 @@ contract AssetPoolFactoryTest is Test {
         assertTrue(pool2 != address(assetPoolImpl), "Pool2 should be different from implementation");
         
         // Get pool cycle managers and verify they are different from the implementation
-        address cycleManager1 = address(AssetPool(payable(pool1)).getPoolCycleManager());
-        address cycleManager2 = address(AssetPool(payable(pool2)).getPoolCycleManager());
+        address cycleManager1 = address(AssetPool(payable(pool1)).poolCycleManager());
+        address cycleManager2 = address(AssetPool(payable(pool2)).poolCycleManager());
         
         assertTrue(cycleManager1 != address(cycleManagerImpl), "CycleManager1 should be different from implementation");
         assertTrue(cycleManager2 != address(cycleManagerImpl), "CycleManager2 should be different from implementation");
@@ -349,7 +349,7 @@ contract AssetPoolFactoryTest is Test {
         
         // Verify strategy was set correctly
         AssetPool pool = AssetPool(payable(poolAddress));
-        assertEq(address(pool.getPoolStrategy()), address(newStrategy), "Strategy not set correctly");
+        assertEq(address(pool.poolStrategy()), address(newStrategy), "Strategy not set correctly");
     }
 
     function test_CreatePoolAfterStrategyVerificationRemoved() public {

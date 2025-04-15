@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/interfaces/IAssetPool.sol";
+import "../src/interfaces/IAssetPoolWithPoolStorage.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 
 contract CreatePoolScript is Script {
@@ -56,8 +56,8 @@ contract CreatePoolScript is Script {
         console.log("----------------------------------------------------");
 
         // Verify the pool was created correctly
-        IAssetPool pool = IAssetPool(poolAddress);
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(poolAddress);
         
-        require(address(pool.getReserveToken()) == DEPOSIT_TOKEN, "Deposit token not set correctly");
+        require(address(pool.reserveToken()) == DEPOSIT_TOKEN, "Deposit token not set correctly");
     }
 }

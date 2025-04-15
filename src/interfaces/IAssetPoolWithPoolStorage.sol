@@ -18,23 +18,8 @@ import {IPoolStrategy} from "./IPoolStrategy.sol";
  */
 interface IAssetPoolWithPoolStorage is IAssetPool {
     // --------------------------------------------------------------------------------
-    //                     POOL STORAGE CONSTANTS & VARIABLES
+    //                     POOL STORAGE VARIABLES
     // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Precision factor for calculations
-     */
-    function PRECISION() external view returns (uint256);
-
-    /**
-     * @notice Basis points scaling factor (100% = 10000)
-     */
-    function BPS() external view returns (uint256);
-
-    /**
-     * @notice Seconds in a year, used for interest calculations
-     */
-    function SECONDS_PER_YEAR() external view returns (uint256);
 
     /**
      * @notice Reserve to asset decimal factor for conversion calculations
@@ -80,23 +65,4 @@ interface IAssetPoolWithPoolStorage is IAssetPool {
      */
     function poolStrategy() external view returns (IPoolStrategy);
 
-    // --------------------------------------------------------------------------------
-    //                            CONVERSION FUNCTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Converts asset amount to reserve amount based on the asset price
-     * @param assetAmount The amount of asset to convert
-     * @param price The price of the asset in reserve terms
-     * @return Equivalent amount in reserve tokens
-     */
-    function convertAssetToReserve(uint256 assetAmount, uint256 price) external view returns (uint256);
-
-    /**
-     * @notice Converts reserve amount to asset amount based on the asset price
-     * @param reserveAmount The amount of reserve to convert
-     * @param price The price of the asset in reserve terms
-     * @return Equivalent amount in asset tokens
-     */
-    function convertReserveToAsset(uint256 reserveAmount, uint256 price) external view returns (uint256);
 }

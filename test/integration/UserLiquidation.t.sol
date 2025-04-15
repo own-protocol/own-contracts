@@ -274,7 +274,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
         
         // Calculate expected reward based on the liquidation amount
         uint256 expectedReward = (collateralAmount * liquidationAmount) / assetAmount;
-        uint256 assetValue = (liquidationAmount * assetOracle.assetPrice()) / (1e18 * assetPool.getReserveToAssetDecimalFactor());
+        uint256 assetValue = (liquidationAmount * assetOracle.assetPrice()) / (1e18 * assetPool.reserveToAssetDecimalFactor());
         uint256 expectedTotal = assetValue + expectedReward;
         
         // Verify liquidator received expected amount
@@ -602,7 +602,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
      * @return Reserve token amount
      */
     function _convertAssetToReserve(uint256 _assetAmount, uint256 _price) internal view returns (uint256) {
-        uint256 decimalFactor = assetPool.getReserveToAssetDecimalFactor();
+        uint256 decimalFactor = assetPool.reserveToAssetDecimalFactor();
         return (_assetAmount * _price) / (1e18 * decimalFactor);
     }
 }

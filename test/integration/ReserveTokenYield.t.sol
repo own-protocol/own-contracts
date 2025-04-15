@@ -87,7 +87,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         );
         
         // Get asset token address created by AssetPool
-        address assetTokenAddress = address(assetPool.getAssetToken());
+        address assetTokenAddress = address(assetPool.assetToken());
         assetToken = xToken(assetTokenAddress);
         
         // Initialize CycleManager

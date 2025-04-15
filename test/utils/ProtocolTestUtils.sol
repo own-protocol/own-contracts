@@ -142,7 +142,7 @@ contract ProtocolTestUtils is Test {
         );
         
         // Get asset token address created by AssetPool
-        address assetTokenAddress = address(assetPool.getAssetToken());
+        address assetTokenAddress = address(assetPool.assetToken());
         assetToken = xToken(assetTokenAddress);
         
         // Initialize CycleManager
@@ -621,7 +621,7 @@ contract ProtocolTestUtils is Test {
         uint256 _depositAmount,
         uint256 _price
     ) public view returns (uint256) {
-        uint256 decimalFactor = assetPool.getReserveToAssetDecimalFactor();
+        uint256 decimalFactor = assetPool.reserveToAssetDecimalFactor();
         return (_depositAmount * 1e18 * decimalFactor) / _price;
     }
     
@@ -635,7 +635,7 @@ contract ProtocolTestUtils is Test {
         uint256 _assetAmount,
         uint256 _price
     ) public view returns (uint256) {
-        uint256 decimalFactor = assetPool.getReserveToAssetDecimalFactor();
+        uint256 decimalFactor = assetPool.reserveToAssetDecimalFactor();
         return (_assetAmount * _price) / (1e18 * decimalFactor);
     }
     
