@@ -111,7 +111,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
      * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), 50 tokens are stored
      */
-    function mint(address account, uint256 amount) external onlyManager {
+    function mint(address account, uint256 amount) external onlyPool {
         // Convert the visible amount to raw storage amount
         uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
         
@@ -147,7 +147,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
      * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
      */
-    function applySplit(uint256 splitRatio, uint256 splitDenominator) external onlyPool {
+    function applySplit(uint256 splitRatio, uint256 splitDenominator) external onlyManager {
         if (splitRatio == 0 || splitDenominator == 0) revert InvalidSplitRatio();
         
         // Update the split multiplier
