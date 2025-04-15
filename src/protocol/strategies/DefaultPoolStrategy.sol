@@ -437,4 +437,63 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 yield = Math.mulDiv(currentAmount - prevAmount, PRECISION, depositAmount);
         return yield;
     }
+
+    // --------------------------------------------------------------------------------
+    //                             POOL FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @param assetPool Address of the asset pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function calculateUtilisedLiquidity(address assetPool) public view returns (uint256 utilisedLiquidity) {
+        IAssetPool pool = IAssetPool(assetPool);
+        
+        uint256 poolValue = pool.getPoolValue();
+        uint256 healthyRatio = lpHealthyCollateralRatio;
+        uint256 totalRatio = BPS + healthyRatio;
+
+        return Math.mulDiv(poolValue, totalRatio, BPS);
+    }
+
+    /**
+     * @notice Calculate utilised liquidity (including cycle changes)
+     * @param assetPool Address of the asset pool
+     * @return cycleUtilisedLiquidity Total utilised liquidity
+     */
+    function calculateCycleUtilisedLiquidity(address assetPool) public view returns (uint256 cycleUtilisedLiquidity) {
+        IAssetPool pool = IAssetPool(assetPool);
+        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
+        
+        uint256 prevCycle = cycleManager.cycleIndex() - 1;
+        uint256 price = cycleManager.cycleRebalancePrice(prevCycle); 
+        uint256 totalRatio = BPS + lpHealthyCollateralRatio;
+        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        uint256 cycleTotalDeposits = pool.cycleTotalDeposits();
+        uint256 cycleTotalRedemptions = pool.cycleTotalRedemptions();
+        uint256 cycleRedemptionsInReserveToken = 0;
+        
+        // Calculate redemptions in reserve token
+        if (cycleTotalRedemptions > 0) {
+            uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+            cycleRedemptionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, price, PRECISION * reserveToAssetDecimalFactor);
+        }
+
+        uint256 nettChange = 0;
+        
+        if (cycleTotalDeposits > cycleRedemptionsInReserveToken) {
+            nettChange = cycleTotalDeposits - cycleRedemptionsInReserveToken;
+            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
+            cycleUtilisedLiquidity = utilisedLiquidity + nettChange;
+        } else if (cycleTotalDeposits < cycleRedemptionsInReserveToken) {
+            nettChange = cycleRedemptionsInReserveToken - cycleTotalDeposits;
+            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
+            cycleUtilisedLiquidity = utilisedLiquidity > nettChange ? utilisedLiquidity - nettChange : 0;
+        } else {
+            cycleUtilisedLiquidity = utilisedLiquidity;
+        }
+        
+        return cycleUtilisedLiquidity;
+    }
 }

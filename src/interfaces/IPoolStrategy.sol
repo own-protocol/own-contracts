@@ -273,6 +273,25 @@ interface IPoolStrategy {
     ) external pure returns (uint256 yield);
 
     // --------------------------------------------------------------------------------
+    //                             POOL FUNCTIONS
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @notice Calculate utilised liquidity in the pool
+     * @param assetPool Address of the asset pool
+     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
+     */
+    function calculateUtilisedLiquidity(address assetPool) external view returns (uint256 utilisedLiquidity);
+
+    /**
+     * @notice Calculate utilised liquidity (including cycle changes)
+     * @param assetPool Address of the asset pool
+     * @return cycleUtilisedLiquidity Total utilised liquidity
+     */
+    function calculateCycleUtilisedLiquidity(address assetPool) external view returns (uint256 cycleUtilisedLiquidity);
+
+
+    // --------------------------------------------------------------------------------
     //                             VIEW FUNCTIONS
     // --------------------------------------------------------------------------------
 
