@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 
 import "../../interfaces/IPoolStrategy.sol";
 import "../../interfaces/IPoolLiquidityManager.sol";
-import "../../interfaces/IAssetPool.sol";
+import "../../interfaces/IAssetPoolWithPoolStorage.sol";
 import "../../interfaces/IXToken.sol";
 import "../../interfaces/IAssetOracle.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
@@ -323,10 +323,10 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param user Address of the user
      */
     function calculateUserRequiredCollateral(address assetPool, address user) external view returns (uint256) {
-        IAssetPool pool = IAssetPool(assetPool);
-        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolCycleManager cycleManager = pool.poolCycleManager();
 
-        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        uint256 reserveToAssetDecimalFactor = pool.reserveToAssetDecimalFactor();
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
@@ -368,8 +368,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return health 3 = Healthy, 2 = Warning, 1 = Liquidatable
      */
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
-        IAssetPool pool = IAssetPool(assetPool);
-        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolCycleManager cycleManager = pool.poolCycleManager();
         
         (uint256 assetAmount , , uint256 collateralAmount) = pool.userPositions(user);
         
@@ -377,7 +377,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             return 3; // Healthy - no asset balance means no risk
         }
 
-        uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+        uint256 reserveToAssetDecimalFactor = pool.reserveToAssetDecimalFactor();
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
@@ -448,7 +448,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return utilisedLiquidity Total utilised liquidity in reserve tokens
      */
     function calculateUtilisedLiquidity(address assetPool) public view returns (uint256 utilisedLiquidity) {
-        IAssetPool pool = IAssetPool(assetPool);
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         
         uint256 poolValue = pool.getPoolValue();
         uint256 healthyRatio = lpHealthyCollateralRatio;
@@ -463,8 +463,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return cycleUtilisedLiquidity Total utilised liquidity
      */
     function calculateCycleUtilisedLiquidity(address assetPool) public view returns (uint256 cycleUtilisedLiquidity) {
-        IAssetPool pool = IAssetPool(assetPool);
-        IPoolCycleManager cycleManager = IPoolCycleManager(pool.getPoolCycleManager());
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolCycleManager cycleManager = pool.poolCycleManager();
         
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 price = cycleManager.cycleRebalancePrice(prevCycle); 
@@ -476,7 +476,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         // Calculate redemptions in reserve token
         if (cycleTotalRedemptions > 0) {
-            uint256 reserveToAssetDecimalFactor = pool.getReserveToAssetDecimalFactor();
+            uint256 reserveToAssetDecimalFactor = pool.reserveToAssetDecimalFactor();
             cycleRedemptionsInReserveToken = Math.mulDiv(cycleTotalRedemptions, price, PRECISION * reserveToAssetDecimalFactor);
         }
 

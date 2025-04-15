@@ -477,42 +477,4 @@ interface IAssetPool {
      */
     function getPoolValue() external view returns (uint256 value);
 
-    // --------------------------------------------------------------------------------
-    //                               DEPENDENCIES
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Returns the reserve token contract
-     */
-    function getReserveToken() external view returns (IERC20Metadata);
-
-    /**
-     * @notice Returns the asset token contract
-     */
-    function getAssetToken() external view returns (IXToken);
-
-    /**
-     * @notice Returns the pool cycle manager contract
-     */
-    function getPoolCycleManager() external view returns (IPoolCycleManager);
-
-    /**
-     * @notice Returns the pool liquidity manager contract
-     */
-    function getPoolLiquidityManager() external view returns (IPoolLiquidityManager);
-
-    /**
-     * @notice Returns the pool strategy contract
-     */
-    function getPoolStrategy() external view returns (IPoolStrategy);
-
-    /**
-     * @notice Returns the asset oracle contract
-     */
-    function getAssetOracle() external view returns (IAssetOracle);
-
-    /**
-     * @notice Returns the reserve to asset decimal factor
-     */
-    function getReserveToAssetDecimalFactor() external view returns (uint256);
 }

@@ -947,55 +947,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Returns the reserve token contract
-     */
-    function getReserveToken() external view returns (IERC20Metadata) {
-        return reserveToken;
-    }
-
-    /**
-     * @notice Returns the asset token contract
-     */
-    function getAssetToken() external view returns (IXToken) {
-        return assetToken;
-    }
-
-    /**
-     * @notice Returns the pool cycle manager contract
-     */
-    function getPoolCycleManager() external view returns (IPoolCycleManager) {
-        return poolCycleManager;
-    }
-
-    /**
-     * @notice Returns the pool liquidity manager contract
-     */
-    function getPoolLiquidityManager() external view returns (IPoolLiquidityManager) {
-        return poolLiquidityManager;
-    }
-
-    /**
-     * @notice Returns the pool strategy contract
-     */
-    function getPoolStrategy() external view returns (IPoolStrategy) {
-        return poolStrategy;
-    }
-
-    /**
-    * @notice Returns the asset oracle contract
-    */
-    function getAssetOracle() external view returns (IAssetOracle) {
-        return assetOracle;
-    }
-
-    /**
-     * @notice Returns the reserve to asset decimal factor
-     */
-    function getReserveToAssetDecimalFactor() external view returns (uint256) {
-        return reserveToAssetDecimalFactor;
-    }
-
-    /**
      * @notice Returns the liquidation initiator for a user
      * @param user Address of the user
      * @return Address of the liquidation initiator
