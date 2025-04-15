@@ -137,8 +137,7 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(cycleManager),
             address(liquidityManager),
-            address(poolStrategy),
-            owner
+            address(poolStrategy)
         );
         
         // Get asset token address created by AssetPool
@@ -152,7 +151,8 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(assetPool),
             address(liquidityManager),
-            address(poolStrategy)
+            address(poolStrategy),
+            owner
         );
         
         // Initialize LiquidityManager

@@ -82,8 +82,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             address(assetOracle),
             address(cycleManager),
             address(liquidityManager),
-            address(poolStrategy),
-            owner
+            address(poolStrategy)
         );
         
         // Get asset token address created by AssetPool
@@ -97,7 +96,8 @@ contract ReserveTokenYield is ProtocolTestUtils {
             address(assetOracle),
             address(assetPool),
             address(liquidityManager),
-            address(poolStrategy)
+            address(poolStrategy),
+            owner
         );
         
         // Initialize LiquidityManager

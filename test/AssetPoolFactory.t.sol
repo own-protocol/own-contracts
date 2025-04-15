@@ -214,7 +214,6 @@ contract AssetPoolFactoryTest is Test {
         assertEq(pool.assetToken().symbol(), ASSET_SYMBOL, "Asset symbol not set correctly");
         assertEq(address(pool.assetOracle()), oracleAddress, "Oracle not set correctly");
         assertEq(address(pool.poolStrategy()), address(strategy), "Strategy not set correctly");
-        assertEq(pool.owner(), owner, "Pool owner not set correctly");
         
         // Verify associated contracts were deployed
         address cycleManagerAddress = address(pool.poolCycleManager());
