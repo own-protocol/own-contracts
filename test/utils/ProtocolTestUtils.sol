@@ -588,29 +588,7 @@ contract ProtocolTestUtils is Test {
         );
     }
     
-    /**
-     * @notice Performs a collateral addition and verifies it was successful
-     * @param _user User address
-     * @param _amount Amount of collateral to add
-     * @return True if successful
-     */
-    function addUserCollateral(
-        address _user,
-        uint256 _amount
-    ) public returns (bool) {
-        uint256 initialBalance = reserveToken.balanceOf(_user);
-        uint256 initialCollateral = assetPool.userCollateral(_user);
-        
-        vm.startPrank(_user);
-        assetPool.addCollateral(_user, _amount);
-        vm.stopPrank();
-        
-        return (
-            assetPool.userCollateral(_user) == initialCollateral + _amount &&
-            reserveToken.balanceOf(_user) == initialBalance - _amount
-        );
-    }
-    
+
     /**
      * @notice Get expected asset token amount for a deposit
      * @param _depositAmount Amount of reserve tokens deposited

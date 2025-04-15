@@ -183,7 +183,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
         assertEq(reqCycle, cycleManager.cycleIndex(), "Request cycle should match current cycle");
         
         // Verify liquidation initiator
-        address liquidator = assetPool.getUserLiquidationIntiator(user1);
+        address liquidator = assetPool.liquidationInitiators(user1);
         assertEq(liquidator, user2, "Liquidator should be user2");
         
         // Complete a cycle to process the liquidation
@@ -311,7 +311,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify liquidation request state
-        address initialLiquidator = assetPool.getUserLiquidationIntiator(user1);
+        address initialLiquidator = assetPool.liquidationInitiators(user1);
         assertEq(initialLiquidator, user2, "Initial liquidator should be user2");
         
         // Second liquidator (user3) requests larger liquidation
@@ -325,7 +325,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
         assertEq(uint(reqType), uint(IAssetPool.RequestType.LIQUIDATE), "Request type should still be LIQUIDATE");
         assertEq(reqAmount, largeLiquidationAmount, "Request amount should be updated to larger amount");
         
-        address finalLiquidator = assetPool.getUserLiquidationIntiator(user1);
+        address finalLiquidator = assetPool.liquidationInitiators(user1);
         assertEq(finalLiquidator, user3, "New liquidator should be user3");
         
         // Complete a cycle to process the liquidation
@@ -378,7 +378,7 @@ contract UserLiquidationTest is ProtocolTestUtils {
         assertEq(uint(reqType), uint(IAssetPool.RequestType.LIQUIDATE), "Request type should still be LIQUIDATE");
         assertEq(reqAmount, largeLiquidationAmount, "Request amount should still be the larger amount");
         
-        address finalLiquidator = assetPool.getUserLiquidationIntiator(user1);
+        address finalLiquidator = assetPool.liquidationInitiators(user1);
         assertEq(finalLiquidator, user2, "Liquidator should still be user2");
     }
 

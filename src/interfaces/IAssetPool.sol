@@ -346,13 +346,6 @@ interface IAssetPool {
     function getInterestDebt(address user, uint256 cycle) external view returns (uint256 interestDebt);
 
     /**
-     * @notice Get a user's collateral amount
-     * @param user Address of the user
-     * @return amount User's collateral amount
-     */
-    function userCollateral(address user) external view returns (uint256 amount);
-
-    /**
      * @notice Get a user's position details
      * @param user Address of the user
      * @return assetAmount Amount of asset tokens held
@@ -379,12 +372,6 @@ interface IAssetPool {
         uint256 collateralAmount,
         uint256 requestCycle
     );
-
-    /**
-     * @notice Get users's current liquidation initiator
-     * @param user Address of the user
-     */
-    function getUserLiquidationIntiator(address user) external view returns (address);
 
     /**
      * @notice Get total pending deposits for the current cycle

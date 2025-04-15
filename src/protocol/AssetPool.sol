@@ -870,26 +870,4 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         return amount > from ? 0 : from - amount;
     }
 
-    // --------------------------------------------------------------------------------
-    //                               VIEW FUNCTIONS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @notice Get a user's collateral amount
-     * @param user Address of the user
-     * @return amount User's collateral amount
-     */
-    function userCollateral(address user) external view returns (uint256 amount) {
-        return userPositions[user].collateralAmount;
-    }
-
-    /**
-     * @notice Returns the liquidation initiator for a user
-     * @param user Address of the user
-     * @return Address of the liquidation initiator
-     */
-    function getUserLiquidationIntiator(address user) external view returns (address) {
-        return liquidationInitiators[user];
-    }
-
 }

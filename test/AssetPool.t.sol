@@ -523,7 +523,7 @@ contract AssetPoolTest is ProtocolTestUtils {
         assetPool.claimAsset(user1);
         
         // Initial collateral check
-        uint256 initialCollateral = assetPool.userCollateral(user1);
+        (, , uint256 initialCollateral) = assetPool.userPositions(user1);
         assertEq(initialCollateral, collateralAmount, "Initial collateral should match deposit");
         
         // Add more collateral
@@ -535,7 +535,7 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify collateral was added
-        uint256 finalCollateral = assetPool.userCollateral(user1);
+        (, , uint256 finalCollateral) = assetPool.userPositions(user1);
         assertEq(finalCollateral, initialCollateral + additionalCollateral, "Collateral should increase by added amount");
         
         // Verify user balance decreased
@@ -573,7 +573,7 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify collateral was reduced
-        uint256 finalCollateral = assetPool.userCollateral(user1);
+        (, , uint256 finalCollateral) = assetPool.userPositions(user1);
         assertEq(finalCollateral, collateralAmount - reduceAmount, "Collateral should decrease by reduced amount");
         
         // Verify user balance increased
