@@ -100,45 +100,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
         _disableInitializers();
     }
 
-    // --------------------------------------------------------------------------------
-    //                                  MODIFIERS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @dev Ensures the caller is the pool cycle manager
-     */
-    modifier onlyPoolCycleManager() {
-        if (msg.sender != address(poolCycleManager)) revert NotPoolCycleManager();
-        _;
-    }
-
-    /**
-     * @dev Ensures the cycle state is active
-     */
-    modifier onlyActivePool() {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Pool not active");
-        _;
-    }
-
-    /**
-     * @dev Ensures the cycle state is halted
-     */
-    modifier onlyHaltedPool() {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_HALTED) revert("Pool not halted");
-        _;
-    }
-
-    /**
-     * @dev Ensures the cycle state is active or halted
-     */
-    modifier onlyActiveOrHaltedPool() {
-        IPoolCycleManager.CycleState state = poolCycleManager.cycleState();
-        if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
-            revert("Pool not active or halted");
-        }
-        _;
-    }
-
 
     // --------------------------------------------------------------------------------
     //                                 INITIALIZER
@@ -276,7 +237,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant onlyActivePool {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant {
+        _requireActivePool();
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
         
@@ -325,7 +287,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @notice Process a redemption request
      * @param amount Amount of asset tokens to redeem
      */
-    function redemptionRequest(uint256 amount) external nonReentrant onlyActivePool {
+    function redemptionRequest(uint256 amount) external nonReentrant {
+        _requireActivePool();
         if (amount == 0) revert InvalidAmount();
 
         UserPosition memory position = userPositions[msg.sender];
@@ -355,7 +318,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param user Address of the user whose position is to be liquidated
      * @param amount Amount of asset to liquidate (must be <= 30% of user's position)
      */
-    function liquidationRequest(address user, uint256 amount) external nonReentrant onlyActivePool {
+    function liquidationRequest(address user, uint256 amount) external nonReentrant {
+        _requireActivePool();
         // Basic validations
         if (user == address(0) || user == msg.sender) revert InvalidLiquidationRequest();
         if (amount == 0) revert InvalidAmount();
@@ -416,7 +380,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @notice Claim asset tokens after a deposit request
      * @param user Address of the user
      */
-    function claimAsset(address user) external nonReentrant onlyActiveOrHaltedPool {
+    function claimAsset(address user) external nonReentrant {
+        _requireActiveOrHaltedPool();
         UserRequest storage request = userRequests[user];
         RequestType requestType = request.requestType;
         uint256 amount = request.amount;
@@ -454,7 +419,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @notice Claim reserve tokens after a redemption request or liquidation request
      * @param user Address of the user
      */
-    function claimReserve(address user) external nonReentrant onlyActiveOrHaltedPool {
+    function claimReserve(address user) external nonReentrant {
+        _requireActiveOrHaltedPool();
         UserRequest storage request = userRequests[user];
         RequestType requestType = request.requestType;
         uint256 amount = request.amount;
@@ -520,7 +486,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @notice When pool is halted exit the pool
      * @param amount Amount of the asset tokens to burn
      */
-    function exitPool(uint256 amount) external nonReentrant onlyHaltedPool {
+    function exitPool(uint256 amount) external nonReentrant {
+        _requireHaltedPool();
         if (amount == 0) revert InvalidAmount();
         UserRequest memory request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
@@ -703,7 +670,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param amount Amount of reserve tokens to transfer to the LP
      * @param isSettle Boolean If the function is called during settlement
      */
-    function transferRebalanceAmount(address lp, uint256 amount, bool isSettle) external onlyPoolCycleManager {
+    function transferRebalanceAmount(address lp, uint256 amount, bool isSettle) external {
+        _requirePoolCycleManager();
         if (amount == 0) revert InvalidAmount();
 
         // Check if we have enough reserve tokens for the transfer
@@ -729,7 +697,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
      * @param amount Amount of interest to deduct
      * @param isSettle Boolean If the function is called during settlement
      */
-    function deductInterest(address lp, uint256 amount, bool isSettle) external onlyPoolCycleManager {
+    function deductInterest(address lp, uint256 amount, bool isSettle) external {
+        _requirePoolCycleManager();
         if (amount == 0) revert InvalidAmount();
 
         // Check if we have enough reserve tokens for the interest
@@ -757,7 +726,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
     /**
      * @notice Updates the price deviation validity flag
      */
-    function updateIsPriceDeviationValid() external onlyPoolCycleManager {
+    function updateIsPriceDeviationValid() external {
+        _requirePoolCycleManager();
         isPriceDeviationValid  = !isPriceDeviationValid;
         emit isPriceDeviationValidUpdated(isPriceDeviationValid);
     }
@@ -788,7 +758,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
     /**
      * @notice Update cycle data at the end of a cycle
      */
-    function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external onlyPoolCycleManager {
+    function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external {
+        _requirePoolCycleManager();
         uint256 assetBalance = assetToken.balanceOf(address(this));
         reserveBackingAsset = reserveBackingAsset 
             + cycleTotalDeposits
@@ -813,6 +784,41 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownab
     // --------------------------------------------------------------------------------
     //                               INTERNAL FUNCTIONS
     // --------------------------------------------------------------------------------
+
+    /**
+     * @dev Checks if the caller is the pool cycle manager
+     * @dev Use at the beginning of functions that should only be called by the cycle manager
+     */
+    function _requirePoolCycleManager() internal view {
+        if (msg.sender != address(poolCycleManager)) revert NotPoolCycleManager();
+    }
+
+    /**
+     * @dev Checks if the cycle state is active
+     * @dev Use at the beginning of functions that should only execute in active pool state
+     */
+    function _requireActivePool() internal view {
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Pool not active");
+    }
+
+    /**
+     * @dev Checks if the cycle state is halted
+     * @dev Use at the beginning of functions that should only execute in halted pool state
+     */
+    function _requireHaltedPool() internal view {
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_HALTED) revert("Pool not halted");
+    }
+
+    /**
+     * @dev Checks if the cycle state is active or halted
+     * @dev Use at the beginning of functions that can execute in either active or halted pool state
+     */
+    function _requireActiveOrHaltedPool() internal view {
+        IPoolCycleManager.CycleState state = poolCycleManager.cycleState();
+        if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
+            revert("Pool not active or halted");
+        }
+    }
 
     /**
      * @notice Executes a token split for the asset token
