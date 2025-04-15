@@ -260,7 +260,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param utilization Current utilization rate (scaled by 10000)
      * @return rate Current interest rate (scaled by 10000)
      */
-    function calculateInterestRate(uint256 utilization) external view returns (uint256 rate) {
+    function calculateInterestRate(uint256 utilization) public view returns (uint256 rate) {
         if (utilization <= utilizationTier1) {
             // Base rate when utilization <= Tier1
             return baseInterestRate;
@@ -496,4 +496,87 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         return cycleUtilisedLiquidity;
     }
+
+    /**
+     * @notice Calculate current interest rate based on pool utilization
+     * @return rate Current interest rate (scaled by 10000)
+     */
+    function calculatePoolInterestRate(address assetPool) public view returns (uint256 rate) {
+        uint256 utilization = calculatePoolUtilization(assetPool);
+        return calculateInterestRate(utilization);
+    }
+
+     /**
+     * @notice Calculate interest rate based on pool utilization (including cycle changes)
+     * @dev This function gives the expected interest rate for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return rate interest rate (scaled by 10000)
+     */
+    function calculateCycleInterestRate(address assetPool) public view returns (uint256 rate) {
+        uint256 utilization = calculateCyclePoolUtilization(assetPool);
+        return calculateInterestRate(utilization);
+    }
+
+    /**
+     * @notice Calculate pool utilization ratio
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function calculatePoolUtilization(address assetPool) public view returns (uint256 utilization) {
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
+
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
+        if (totalLiquidity == 0) return 0;
+        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        
+        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate pool utilization ratio (including cycle changes)
+     * @dev This function gives the expected utilization for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */    
+    function calculateCyclePoolUtilization(address assetPool) public view returns (uint256 utilization) {
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
+
+        uint256 cycleTotalLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited();
+        if (cycleTotalLiquidity == 0) return 0;
+        uint256 cycleUtilisedLiquidity = calculateCycleUtilisedLiquidity(assetPool);
+        
+        return Math.min((cycleUtilisedLiquidity * BPS) / cycleTotalLiquidity, BPS);
+    }
+
+    /**
+     * @notice Calculate available liquidity in the pool
+     * @return availableLiquidity Available liquidity in reserve tokens
+     */
+    function calculateAvailableLiquidity(address assetPool) public view returns (uint256 availableLiquidity) {
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
+
+        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
+        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        
+        return totalLiquidity - utilisedLiquidity;
+    }
+
+    /**
+     * @notice Calculate available liquidity in the pool (including cycle changes)
+     * @dev This function gives the expected available liquidity for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return availableLiquidity Available liquidity in reserve tokens
+     */
+    function calculateCycleAvailableLiquidity(address assetPool) public view returns (uint256 availableLiquidity) {
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
+
+        uint256 cycleTotalLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited();
+        uint256 cycleUtilisedLiquidity = calculateCycleUtilisedLiquidity(assetPool);
+        
+        return cycleTotalLiquidity - cycleUtilisedLiquidity;
+    }
+
 }

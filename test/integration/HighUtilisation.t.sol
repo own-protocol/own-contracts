@@ -48,7 +48,7 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
         createHighUtilization();
         
         // 2. Verify utilization is high
-        uint256 utilization = assetPool.getCyclePoolUtilization();
+        uint256 utilization = poolStrategy.calculateCyclePoolUtilization(address(assetPool));
         assertApproxEqRel(utilization, 90 * 100, 0.02e18, "Utilization should be approximately 90%");
         
         // 3. Initiate offchain rebalance
@@ -86,7 +86,7 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
         assertEq(assetPool.cycleTotalDeposits(), depositAmount, "Total deposits should match expected amount");
         
         // Verify target utilization is reached
-        uint256 utilization = assetPool.getCyclePoolUtilization();
+        uint256 utilization = poolStrategy.calculateCyclePoolUtilization(address(assetPool));
         assertApproxEqRel(
             utilization, 
             TARGET_UTILIZATION_PERCENT * 100, // BPS format (90% = 9000)

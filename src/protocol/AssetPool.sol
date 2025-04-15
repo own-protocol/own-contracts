@@ -193,15 +193,15 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         if (amount == 0) revert InvalidAmount();
         
         UserPosition storage position = userPositions[msg.sender];
-        uint256 userCollateral = position.collateralAmount;
-        if (userCollateral < amount) revert InsufficientBalance();
+        uint256 collateral = position.collateralAmount;
+        if (collateral < amount) revert InsufficientBalance();
         
         // Calculate required collateral
         uint256 requiredCollateral = poolStrategy.calculateUserRequiredCollateral(address(this), msg.sender);
         uint256 excessCollateral = 0;
         
-        if (userCollateral > requiredCollateral) {
-            excessCollateral = userCollateral - requiredCollateral;
+        if (collateral > requiredCollateral) {
+            excessCollateral = collateral - requiredCollateral;
         }
         
         if (amount > excessCollateral) revert ExcessiveWithdrawal();
@@ -237,7 +237,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         if (request.amount > 0) revert RequestPending();
 
         // Check if pool has enough liquidity to accept the deposit
-        uint256 availableLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited() - getCycleUtilisedLiquidity();
+        uint256 availableLiquidity = poolStrategy.calculateCycleAvailableLiquidity(address(this));
+
         uint256 currentCycle = poolCycleManager.cycleIndex();
 
         if (availableLiquidity < amount) revert InsufficientLiquidity();
@@ -531,70 +532,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         if(assetWithInterest < assetAmount) return 0;
 
         return assetWithInterest - assetAmount;
-    }
-
-    /**
-     * @notice Calculate current interest rate based on pool utilization
-     * @return rate Current interest rate (scaled by 10000)
-     */
-    function getCurrentInterestRate() public view returns (uint256 rate) {
-        uint256 utilization = getPoolUtilization();
-        return poolStrategy.calculateInterestRate(utilization);
-    }
-
-    /**
-     * @notice Calculate interest rate based on pool utilization (including cycle changes)
-     * @dev This function gives the expected interest rate for the next cycle
-     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
-     * @return rate interest rate (scaled by 10000)
-     */
-    function getCycleInterestRate() public view returns (uint256 rate) {
-        uint256 utilization = getCyclePoolUtilization();
-        return poolStrategy.calculateInterestRate(utilization);
-    }
-
-    /**
-     * @notice Calculate pool utilization ratio
-     * @return utilization Pool utilization as a percentage (scaled by 10000)
-     */
-    function getPoolUtilization() public view returns (uint256 utilization) {
-        uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
-        if (totalLiquidity == 0) return 0;
-        uint256 utilisedLiquidity = getUtilisedLiquidity();
-        
-        return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
-    }
-
-    /**
-     * @notice Calculate pool utilization ratio (including cycle changes)
-     * @dev This function gives the expected utilization for the next cycle
-     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
-     * @return utilization Pool utilization as a percentage (scaled by 10000)
-     */    
-    function getCyclePoolUtilization() public view returns (uint256 utilization) {
-        uint256 cycleTotalLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited();
-        if (cycleTotalLiquidity == 0) return 0;
-        uint256 cycleUtilisedLiquidity = getCycleUtilisedLiquidity();
-        
-        return Math.min((cycleUtilisedLiquidity * BPS) / cycleTotalLiquidity, BPS);
-    }
-
-    /**
-     * @notice Calculate utilised liquidity in the pool
-     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
-     */
-    function getUtilisedLiquidity() public view returns (uint256) {      
-        return poolStrategy.calculateUtilisedLiquidity(address(this));
-    }
-
-    /**
-     * @notice Calculate utilised liquidity (including cycle changes)
-     * @dev This function gives the expected utilised liquidity for the next cycle
-     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
-     * @return cycleUtilisedLiquidity Total utilised liquidity
-     */
-    function getCycleUtilisedLiquidity() public view returns (uint256) {      
-        return poolStrategy.calculateCycleUtilisedLiquidity(address(this));
     }
 
     /**

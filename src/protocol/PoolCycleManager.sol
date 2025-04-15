@@ -415,7 +415,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         }
         
         // Convert BPS interest rate (10000 = 100%) to a rate with precision
-        uint256 currentRate = assetPool.getCurrentInterestRate();
+        uint256 currentRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         uint256 rateWithPrecision = Math.mulDiv(currentRate, PRECISION, BPS);
         
         // Calculate time elapsed since last accrual in seconds

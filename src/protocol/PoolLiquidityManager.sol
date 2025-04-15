@@ -187,7 +187,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (amount > position.liquidityCommitment) revert InvalidAmount();
 
         // Alowed reduction is lower (50%) in case of normal reduction
-        uint256 allowedReduction = calculateAvailableLiquidity() / 2;
+        uint256 allowedReduction = poolStrategy.calculateAvailableLiquidity(address(assetPool)) / 2;
         // Ensure there is available liquidity for the operation
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
         // Ensure reduction amount doesn't exceed allowed reduction
@@ -646,7 +646,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
         
         // Allowed reduction is higher (75%) in case of liquidation
-        uint256 allowedReduction = (calculateAvailableLiquidity() * 3) / 4;
+        uint256 allowedReduction = (poolStrategy.calculateAvailableLiquidity(address(assetPool)) * 3) / 4;
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
 
         // Ensure liquidation amount doesn't exceed allowed reduction
@@ -815,16 +815,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function _safeSubtract(uint256 from, uint256 amount) internal pure returns (uint256) {
         return amount > from ? 0 : from - amount;
-    }
-
-    /**
-     * @notice Calculate available liquidity for operations based on current utilization
-     * @return availableLiquidity Maximum amount of liquidity available for operations
-    */
-    function calculateAvailableLiquidity() public view returns (uint256 availableLiquidity) {
-        availableLiquidity =  getCycleTotalLiquidityCommited() - assetPool.getCycleUtilisedLiquidity();
-
-        return availableLiquidity;
     }
 
     /**

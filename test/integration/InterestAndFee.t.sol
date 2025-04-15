@@ -78,7 +78,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD);
         
         // Get current interest rate
-        uint256 interestRate = assetPool.getCurrentInterestRate();
+        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         
         // Expected annual interest rate in the low utilization scenario
         uint256 expectedLowInterestRate = poolStrategy.baseInterestRate();
@@ -129,7 +129,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD);
         
         // Get current interest rate
-        uint256 interestRate = assetPool.getCurrentInterestRate();
+        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         
         // Verify interest rate is in medium range (between base and maxRate)
         uint256 baseRate = poolStrategy.baseInterestRate();
@@ -183,7 +183,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD);
         
         // Get current interest rate
-        uint256 interestRate = assetPool.getCurrentInterestRate();
+        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         
         // Verify interest rate is in high range
         uint256 tier1Rate = poolStrategy.interestRate1();
@@ -270,7 +270,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         assertGt(finalInterestDebt, firstInterestDebt, "Interest on combined position should be higher");
         
         // Verify that interest accrued on increased position is higher than it would be on initial position alone
-        uint256 interestRate = assetPool.getCurrentInterestRate();
+        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         uint256 accrualPeriod = (INTEREST_ACCRUAL_PERIOD / 2) + poolStrategy.rebalanceLength();
         uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
         uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
@@ -345,7 +345,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         uint256 reducedPositionInterestDebt = assetPool.getInterestDebt(user1, secondCycleIndex);
         
         // Interest on reduced position should be accruing at approximately half the rate
-        uint256 interestRate = assetPool.getCurrentInterestRate();
+        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
         uint256 accrualPeriod = INTEREST_ACCRUAL_PERIOD * 2 + poolStrategy.rebalanceLength();
         uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
         uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
@@ -447,7 +447,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         assetPool.claimAsset(user2);
         
         // Verify target utilization is reached (approximately)
-        uint256 actualUtilization = assetPool.getPoolUtilization();
+        uint256 actualUtilization = poolStrategy.calculatePoolUtilization(address(assetPool));
         assertApproxEqRel(
             actualUtilization, 
             targetUtilization, 
@@ -509,7 +509,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         assetPool.claimAsset(user3);
         
         // Verify target utilization is reached (approximately)
-        uint256 actualUtilization = assetPool.getPoolUtilization();
+        uint256 actualUtilization = poolStrategy.calculatePoolUtilization(address(assetPool));
         assertApproxEqRel(
             actualUtilization, 
             targetUtilization, 

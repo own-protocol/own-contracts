@@ -290,6 +290,48 @@ interface IPoolStrategy {
      */
     function calculateCycleUtilisedLiquidity(address assetPool) external view returns (uint256 cycleUtilisedLiquidity);
 
+    /**
+     * @notice Calculate current interest rate based on pool utilization
+     * @return rate Current interest rate (scaled by 10000)
+     */
+    function calculatePoolInterestRate(address assetPool) external view returns (uint256 rate);
+
+    /**
+     * @notice Calculate interest rate based on pool utilization (including cycle changes)
+     * @dev This function gives the expected interest rate for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return rate interest rate (scaled by 10000)
+     */
+    function calculateCycleInterestRate(address assetPool) external view returns (uint256 rate);
+
+    /**
+     * @notice Calculate pool utilization ratio
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */
+    function calculatePoolUtilization(address assetPool) external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate pool utilization ratio (including cycle changes)
+     * @dev This function gives the expected utilization for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return utilization Pool utilization as a percentage (scaled by 10000)
+     */    
+    function calculateCyclePoolUtilization(address assetPool) external view returns (uint256 utilization);
+
+    /**
+     * @notice Calculate available liquidity in the pool
+     * @return availableLiquidity Available liquidity in reserve tokens
+     */
+    function calculateAvailableLiquidity(address assetPool) external view returns (uint256 availableLiquidity);
+
+    /**
+     * @notice Calculate available liquidity in the pool (including cycle changes)
+     * @dev This function gives the expected available liquidity for the next cycle
+     * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
+     * @return availableLiquidity Available liquidity in reserve tokens
+     */
+    function calculateCycleAvailableLiquidity(address assetPool) external view returns (uint256 availableLiquidity);
+
 
     // --------------------------------------------------------------------------------
     //                             VIEW FUNCTIONS

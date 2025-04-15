@@ -401,10 +401,4 @@ interface IPoolLiquidityManager {
      * @return uint256 The current liquidity amount
      */
     function getLPLiquidityCommitment(address lp) external view returns (uint256);
-
-    /**
-     * @notice Calculate available liquidity for operations based on current utilization
-     * @return availableLiquidity Maximum amount of liquidity available for operations
-    */
-    function calculateAvailableLiquidity() external view returns (uint256 availableLiquidity);
 }
