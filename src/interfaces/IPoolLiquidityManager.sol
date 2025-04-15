@@ -403,11 +403,6 @@ interface IPoolLiquidityManager {
     function getLPLiquidityCommitment(address lp) external view returns (uint256);
 
     /**
-     * @notice Returns the reserve to asset decimal factor
-     */
-    function getReserveToAssetDecimalFactor() external view returns (uint256);
-
-    /**
      * @notice Calculate available liquidity for operations based on current utilization
      * @return availableLiquidity Maximum amount of liquidity available for operations
     */

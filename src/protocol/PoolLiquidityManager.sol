@@ -608,13 +608,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
-     * @notice Returns the reserve to asset decimal factor
-     */
-    function getReserveToAssetDecimalFactor() public view returns (uint256) {
-        return reserveToAssetDecimalFactor;
-    }
-
-    /**
      * @notice Check if the current cycle is active
      * @return True if the cycle is active, false otherwise
     */
