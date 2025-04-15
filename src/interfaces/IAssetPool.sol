@@ -225,8 +225,6 @@ interface IAssetPool {
     error Unauthorized();
     /// @notice Thrown when the pool utilization exceeds the limit
     error PoolUtilizationExceeded();
-    /// @notice Thrown when redemption request is invalid
-    error InvalidRedemptionRequest();
     /// @notice Thrown when pool has insufficient liquidity
     error InsufficientLiquidity();
     /// @notice Thrown when liquidation request is invalid

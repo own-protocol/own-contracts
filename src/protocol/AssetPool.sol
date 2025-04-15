@@ -244,11 +244,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
 
         uint256 healthyRatio = poolStrategy.userHealthyCollateralRatio();
         
-        // Calculate minimum required collateral based on deposit amount
-        uint256 minRequiredCollateral = Math.mulDiv(amount, healthyRatio, BPS);
-        
-        // Ensure provided collateral meets minimum requirement
-        if (collateralAmount < minRequiredCollateral) revert InsufficientCollateral();
+        // Calculate minimum required collateral & ensure provided collateral meets minimum requirement
+        if (collateralAmount < Math.mulDiv(amount, healthyRatio, BPS)) revert InsufficientCollateral();
 
         uint256 totalDeposit = amount + collateralAmount;
 
@@ -278,10 +275,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         if (amount == 0) revert InvalidAmount();
 
         UserPosition memory position = userPositions[msg.sender];
-        if (position.assetAmount < amount) revert InvalidRedemptionRequest();
-        
-        uint256 userBalance = assetToken.balanceOf(msg.sender);
-        if (userBalance < amount) revert InsufficientBalance();
+        if (position.assetAmount < amount || assetToken.balanceOf(msg.sender) < amount)
+            revert InsufficientBalance();
         
         UserRequest storage request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
@@ -294,7 +289,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         // Update request state
         request.requestType = RequestType.REDEEM;
         request.amount = amount;
-        request.collateralAmount = 0;
         request.requestCycle = currentCycle;
         cycleTotalRedemptions += amount;
         
@@ -354,7 +348,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         // Create the liquidation request
         request.requestType = RequestType.LIQUIDATE;
         request.amount = amount;
-        request.collateralAmount = 0;
         request.requestCycle = currentCycle;
 
         // Store the liquidator's address
@@ -372,13 +365,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     function claimAsset(address user) external nonReentrant {
         _requireActiveOrHaltedPool();
         UserRequest storage request = userRequests[user];
-        RequestType requestType = request.requestType;
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
         uint256 requestCycle = request.requestCycle;
         
         if (requestCycle >= poolCycleManager.cycleIndex()) revert NothingToClaim();
-        if (requestType != RequestType.DEPOSIT) revert NothingToClaim();
+        if (request.requestType != RequestType.DEPOSIT) revert NothingToClaim();
         
         // Get the rebalance price from the pool cycle manager
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
@@ -478,7 +470,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         UserRequest memory request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
         UserPosition storage position = userPositions[msg.sender];
-        if (position.assetAmount < amount) revert InvalidRedemptionRequest();
+        if (position.assetAmount < amount) revert InsufficientBalance();
         
         uint256 userBalance = assetToken.balanceOf(msg.sender);
         if (userBalance < amount) revert InsufficientBalance();
