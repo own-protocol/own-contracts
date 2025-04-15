@@ -86,6 +86,14 @@ interface IPoolCycleManager {
         uint256 timestamp
     );
 
+    /**
+     * @notice Emitted when the price deviation validity is updated
+     * @param isPriceDeviationValid New price deviation validity status
+     */
+    event isPriceDeviationValidUpdated(
+        bool isPriceDeviationValid
+    );
+
     // --------------------------------------------------------------------------------
     //                                     ERRORS
     // --------------------------------------------------------------------------------
@@ -126,6 +134,8 @@ interface IPoolCycleManager {
     error MarketOpen();
     /// @notice Thrown when the asset price deviation is too high
     error PriceDeviationHigh();
+        /// @notice Thrown when the provided split ratio is invalid
+    error InvalidSplit();
 
     // --------------------------------------------------------------------------------
     //                                  LP ACTIONS
@@ -160,6 +170,18 @@ interface IPoolCycleManager {
      * @param lp Address of the LP to rebalance
      */
     function forceRebalanceLP(address lp) external;
+
+    /**
+     * @notice Resolves price deviation by executing a token split or validating the price
+     * @param isTokenSplit True if the price shock was due to a stock split
+     * @param splitRatio Only used if isTokenSplit is true - numerator of split ratio (e.g., 2 for 2:1 split)
+     * @param splitDenominator Only used if isTokenSplit is true - denominator of split ratio (e.g., 1 for 2:1 split)
+     */
+    function resolvePriceDeviation(
+        bool isTokenSplit,
+        uint256 splitRatio,
+        uint256 splitDenominator
+    ) external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
@@ -264,4 +286,9 @@ interface IPoolCycleManager {
      */
     function cycleLPCount() external view returns (uint256);
 
+    /**
+     * @notice Check if the price deviation is valid
+     * @return True if the price deviation is valid, false otherwise
+     */
+    function isPriceDeviationValid() external view returns (bool);
 }

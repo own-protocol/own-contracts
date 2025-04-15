@@ -13,6 +13,11 @@ interface IXToken is IERC20Metadata {
     error NotPool();
 
     /**
+     * @dev Thrown when a caller is not the manager contract
+     */
+    error NotManager();
+
+    /**
      * @dev Thrown when zero address is provided where it's not allowed
      */
     error ZeroAddress();
@@ -66,7 +71,11 @@ interface IXToken is IERC20Metadata {
      **/
     function pool() external view returns (address);
 
-
+    /**
+     * @dev Returns the manager contract address that manages this token
+     * @return The address of the manager contract
+     **/
+    function manager() external view returns (address);
 
     /**
      * @dev Returns the current split multiplier used to adjust balances for token splits

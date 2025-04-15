@@ -19,13 +19,14 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Address of the pool contract that manages this token
     address public immutable pool;
 
+    /// @notice Address of the manager contract that manages this token
+    address public immutable manager;
+
     /// @notice Version identifier for the xToken implementation
     uint256 public constant XTOKEN_VERSION = 0x1;
 
     /// @notice Price precision constant
     uint256 private constant PRECISION = 1e18;
-
-
 
     /// @notice Split multiplier to adjust balances for token splits
     uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
@@ -39,12 +40,21 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     }
 
     /**
+     * @notice Ensures the caller is the manager contract
+     */
+    modifier onlyManager() {
+        if (msg.sender != manager) revert NotManager();
+        _;
+    }
+
+    /**
      * @notice Constructs the xToken contract
      * @param name The name of the token
      * @param symbol The symbol of the token
      */
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) ERC20Permit(name) {
+    constructor(string memory name, string memory symbol, address _manager) ERC20(name, symbol) ERC20Permit(name) {
         pool = msg.sender;
+        manager = _manager;
     }
 
     /**
@@ -95,13 +105,13 @@ contract xToken is IXToken, ERC20, ERC20Permit {
 
     /**
      * @notice Mints new tokens to an account
-     * @dev Only callable by the pool contract
+     * @dev Only callable by the manager contract
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens to mint (visible amount with split multiplier applied)
      * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
      * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), 50 tokens are stored
      */
-    function mint(address account, uint256 amount) external onlyPool {
+    function mint(address account, uint256 amount) external onlyManager {
         // Convert the visible amount to raw storage amount
         uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
         

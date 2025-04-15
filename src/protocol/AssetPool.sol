@@ -5,7 +5,6 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -21,7 +20,7 @@ import {xToken} from "./xToken.sol";
  * @notice Manages user positions, collateral, and interest payments in the protocol
  * @dev Handles the lifecycle of user positions and calculates interest based on pool utilization
  */
-contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
+contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -62,11 +61,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     uint256 public reserveYieldAccrued;
 
     /**
-     * @notice Flag to indicate if the price deviation is valid
-     */
-    bool public isPriceDeviationValid;
-
-    /**
      * @notice Mapping of user addresses to their positions
      */
     mapping(address => UserPosition) public userPositions;
@@ -94,7 +88,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     /**
      * @dev Constructor for the implementation contract
      */
-    constructor() Ownable(msg.sender) {
+    constructor() {
         // Disable implementation initializers
         _disableInitializers();
     }
@@ -112,7 +106,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
      * @param _poolCycleManager Address of the pool cycle manager contract
      * @param _poolLiquidityManager Address of the pool liquidity manager contract
      * @param _poolStrategy Address of the pool strategy contract
-     * @param _owner Address of the contract owner
      */
     function initialize(
         address _reserveToken,
@@ -120,8 +113,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         address _assetOracle,
         address _poolCycleManager,
         address _poolLiquidityManager,
-        address _poolStrategy,
-        address _owner
+        address _poolStrategy
     ) external initializer {
         if (_reserveToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _poolCycleManager == address(0)) 
@@ -129,7 +121,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
 
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
-        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol);
+        assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol, _poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
         poolStrategy = IPoolStrategy(_poolStrategy);
@@ -137,8 +129,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
-        // Transfer ownership to the specified address
-        _transferOwnership(_owner);
     }
 
     // --------------------------------------------------------------------------------
@@ -605,38 +595,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Updates the price deviation validity flag
-     */
-    function updateIsPriceDeviationValid() external {
-        _requirePoolCycleManager();
-        isPriceDeviationValid  = !isPriceDeviationValid;
-        emit isPriceDeviationValidUpdated(isPriceDeviationValid);
-    }
-
-    /**
-     * @notice Resolves price deviation by executing a token split or validating the price
-     * @param isTokenSplit True if the price shock was due to a stock split
-     * @param splitRatio Only used if isTokenSplit is true - numerator of split ratio (e.g., 2 for 2:1 split)
-     * @param splitDenominator Only used if isTokenSplit is true - denominator of split ratio (e.g., 1 for 2:1 split)
-     */
-    function resolvePriceDeviation(
-        bool isTokenSplit,
-        uint256 splitRatio,
-        uint256 splitDenominator
-    ) external onlyOwner {
-        if (poolCycleManager.cycleState() != 
-            IPoolCycleManager.CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidPoolState();
-        
-        if (isTokenSplit) {
-            if (!assetOracle.verifySplit(splitRatio, splitDenominator)) revert InvalidSplit();
-            // Execute token split
-            _executeTokenSplit(splitRatio, splitDenominator);
-        } 
-        isPriceDeviationValid = true;
-        emit isPriceDeviationValidUpdated(isPriceDeviationValid);
-    }
-
-    /**
      * @notice Update cycle data at the end of a cycle
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external {
@@ -699,20 +657,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
         if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
             revert("Pool not active or halted");
         }
-    }
-
-    /**
-     * @notice Executes a token split for the asset token
-     * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split)
-     * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
-     * @dev Only callable by the owner or the pool cycle manager
-     */
-    function _executeTokenSplit(
-        uint256 splitRatio,
-        uint256 splitDenominator
-    ) internal {            
-        // Apply the token split to the xToken
-        assetToken.applySplit(splitRatio, splitDenominator);
     }
 
     /**

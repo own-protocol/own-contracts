@@ -148,14 +148,6 @@ interface IAssetPool {
     );
 
     /**
-     * @notice Emitted when the price deviation validity is updated
-     * @param isPriceDeviationValid New price deviation validity status
-     */
-    event isPriceDeviationValidUpdated(
-        bool isPriceDeviationValid
-    );
-
-    /**
      * @notice Emitted when a liquidation is claimed
      * @param user Address of the user
      * @param liquidator Address of the liquidator
@@ -209,10 +201,6 @@ interface IAssetPool {
     error ExcessiveLiquidationAmount(uint256 amount, uint256 maxLiquidationAmount);
     /// @notice Thrown when a better liquidation request exists
     error BetterLiquidationRequestExists();
-    /// @notice Thrown when the pool is not in a valid state for the operation
-    error InvalidPoolState();
-    /// @notice Thrown when the provided split ratio is invalid
-    error InvalidSplit();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS
@@ -292,22 +280,6 @@ interface IAssetPool {
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external;
 
-    /**
-     * @notice Updates the price deviation validity flag
-     */
-    function updateIsPriceDeviationValid() external;
-
-    /**
-     * @notice Resolves price deviation by executing a token split or validating the price
-     * @param isTokenSplit True if the price shock was due to a stock split
-     * @param splitRatio Only used if isTokenSplit is true - numerator of split ratio (e.g., 2 for 2:1 split)
-     * @param splitDenominator Only used if isTokenSplit is true - denominator of split ratio (e.g., 1 for 2:1 split)
-     */
-    function resolvePriceDeviation(
-        bool isTokenSplit,
-        uint256 splitRatio,
-        uint256 splitDenominator
-    ) external;
 
     // --------------------------------------------------------------------------------
     //                               VIEW FUNCTIONS
@@ -386,16 +358,9 @@ interface IAssetPool {
      */
     function reserveYieldAccrued() external view returns (uint256);
 
-    /**
-     * @notice Check if the price deviation is valid
-     * @return True if the price deviation is valid, false otherwise
-     */
-    function isPriceDeviationValid() external view returns (bool);
-
      /**
      * @notice Calculate pool value
      * @return value Pool value in reserve tokens
      */
     function getPoolValue() external view returns (uint256 value);
-
 }

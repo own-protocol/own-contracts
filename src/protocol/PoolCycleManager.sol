@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/Multicall.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -19,7 +20,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall, Ownable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -28,11 +29,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      * @notice Index of the current operational cycle.
      */
     uint256 public cycleIndex;
-
-    /**
-     * @notice Current state of the pool (ACTIVE or REBALANCING etc).
-     */
-    CycleState public cycleState;
 
     /**
      * @notice Timestamp of the last cycle action.
@@ -45,24 +41,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
     uint256 public rebalancedLPs;
 
     /**
-     * @notice Tracks the last cycle an lp rebalanced.
-     */
-    mapping(address => uint256) public lastRebalancedCycle;
-
-    /**
-     * @notice Rebalance price for each cycle.
-     */
-    mapping(uint256 => uint256) public cycleRebalancePrice;
-
-    /**
      * @notice Weighted sum of rebalance prices for the current cycle.
      */
     uint256 private cycleWeightedSum;
-
-    /**
-     * @notice Cumulative pool interest accrued over time (in Precision units) as of the current cycle.
-     */
-    mapping (uint256 => uint256) public cyclePoolInterest;
 
     /**
      * @notice Total interest accrued in the current cycle (in terms of asset).
@@ -89,7 +70,32 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
      */
     uint256 public lastInterestAccrualTimestamp;
 
-    constructor() {
+    /**
+     * @notice Cumulative pool interest accrued over time (in Precision units) as of the current cycle.
+     */
+    mapping (uint256 => uint256) public cyclePoolInterest;
+
+    /**
+     * @notice Tracks the last cycle an lp rebalanced.
+     */
+    mapping(address => uint256) public lastRebalancedCycle;
+
+    /**
+     * @notice Rebalance price for each cycle.
+     */
+    mapping(uint256 => uint256) public cycleRebalancePrice;
+
+    /**
+     * @notice Current state of the pool (ACTIVE or REBALANCING etc).
+     */
+    CycleState public cycleState;
+
+    /**
+     * @notice Flag to indicate if the price deviation is valid
+     */
+    bool public isPriceDeviationValid;
+    
+    constructor() Ownable(msg.sender) {
         // Disable the implementation contract
         _disableInitializers();
     }
@@ -113,7 +119,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         address _assetOracle,
         address _assetPool,
         address _poolLiquidityManager,
-        address _poolStrategy
+        address _poolStrategy,
+        address _owner
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetOracle == address(0) || 
             _poolLiquidityManager == address(0) || _assetPool == address(0)) 
@@ -131,6 +138,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         cyclePoolInterest[cycleIndex] = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
+
+        // Transfer ownership to the specified address
+        _transferOwnership(_owner);
     }
 
     // --------------------------------------------------------------------------------
@@ -171,8 +181,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         if (block.timestamp - oracleLastUpdated > poolStrategy.oracleUpdateThreshold()) revert OracleNotUpdated();
         if (assetOracle.isMarketOpen()) revert MarketOpen();
         if (assetOracle.splitDetected()) {
-            if (assetPool.isPriceDeviationValid()) {
-                assetPool.updateIsPriceDeviationValid();
+            if (isPriceDeviationValid) {
+                _updateIsPriceDeviationValid();
             } else {
                 revert PriceDeviationHigh();
             }
@@ -401,6 +411,29 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         }
     }
 
+    /**
+     * @notice Resolves price deviation by executing a token split or validating the price
+     * @param isTokenSplit True if the price shock was due to a stock split
+     * @param splitRatio Only used if isTokenSplit is true - numerator of split ratio (e.g., 2 for 2:1 split)
+     * @param splitDenominator Only used if isTokenSplit is true - denominator of split ratio (e.g., 1 for 2:1 split)
+     */
+    function resolvePriceDeviation(
+        bool isTokenSplit,
+        uint256 splitRatio,
+        uint256 splitDenominator
+    ) external onlyOwner {
+        if (poolCycleManager.cycleState() != 
+            IPoolCycleManager.CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        
+        if (isTokenSplit) {
+            if (!assetOracle.verifySplit(splitRatio, splitDenominator)) revert InvalidSplit();
+            // Execute token split
+            _executeTokenSplit(splitRatio, splitDenominator);
+        } 
+        isPriceDeviationValid = true;
+        emit isPriceDeviationValidUpdated(isPriceDeviationValid);
+    }
+
 
     // --------------------------------------------------------------------------------
     //                          INTEREST CALCULATION LOGIC
@@ -502,6 +535,29 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Multicall {
         cyclePriceLow = 0;
         
         emit CycleStarted(cycleIndex, block.timestamp);
+    }
+
+    /**
+     * @notice Updates the price deviation validity flag
+     */
+    function _updateIsPriceDeviationValid() internal {
+        isPriceDeviationValid  = !isPriceDeviationValid;
+        emit isPriceDeviationValidUpdated(isPriceDeviationValid);
+    }
+
+
+    /**
+     * @notice Executes a token split for the asset token
+     * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split)
+     * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
+     * @dev Only callable by the owner or the pool cycle manager
+     */
+    function _executeTokenSplit(
+        uint256 splitRatio,
+        uint256 splitDenominator
+    ) internal {            
+        // Apply the token split to the xToken
+        assetToken.applySplit(splitRatio, splitDenominator);
     }
     
     // --------------------------------------------------------------------------------

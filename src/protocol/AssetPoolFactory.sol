@@ -112,8 +112,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             cycleManager,
             liquidityManager,
-            poolStrategy,
-            owner
+            poolStrategy
         );
 
         IXToken assetToken = AssetPool(pool).assetToken();
@@ -124,7 +123,8 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle,
             pool,
             liquidityManager,
-            poolStrategy
+            poolStrategy,
+            owner
         );
 
         PoolLiquidityManager(liquidityManager).initialize(
