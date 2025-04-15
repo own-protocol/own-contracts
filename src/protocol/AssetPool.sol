@@ -6,7 +6,6 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -22,7 +21,7 @@ import {xToken} from "./xToken.sol";
  * @notice Manages user positions, collateral, and interest payments in the protocol
  * @dev Handles the lifecycle of user positions and calculates interest based on pool utilization
  */
-contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Multicall, Ownable {
+contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
