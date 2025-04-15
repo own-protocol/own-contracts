@@ -573,8 +573,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
             // Transfer the rebalance amount to the LP
             reserveToken.transfer(lp, amount);
         }
-        
-        emit RebalanceAmountTransferred(lp, amount, poolCycleManager.cycleIndex());
     }
 
     /**
@@ -603,8 +601,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard, Ownable {
             poolLiquidityManager.addToInterest(lp, lpCycleInterest);
             // Transfer remaining interest to liquidity manager for the LP
             reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
-            
-            emit InterestDistributedToLP(lp, lpCycleInterest, poolCycleManager.cycleIndex());
         }
     }
 

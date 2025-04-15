@@ -122,30 +122,6 @@ interface IAssetPool {
     event FeeDeducted(address indexed user, uint256 amount);
 
     /**
-     * @notice Emitted when rebalance amount is transferred to an LP
-     * @param lp Address of the LP
-     * @param amount Amount of rebalance funds transferred
-     * @param cycleIndex Index of the cycle
-     */
-    event RebalanceAmountTransferred(
-        address indexed lp,
-        uint256 indexed amount,
-        uint256 indexed cycleIndex
-    );
-
-    /**
-     * @notice Emitted when interest is distributed to an LP
-     * @param lp Address of the LP
-     * @param amount Amount of interest distributed
-     * @param cycleIndex Index of the cycle
-     */
-    event InterestDistributedToLP(
-        address indexed lp,
-        uint256 indexed amount,
-        uint256 indexed cycleIndex
-    );
-
-    /**
      * @notice Emitted when a liquidation is requested
      * @param user Address of the user being liquidated
      * @param liquidator Address of the liquidator

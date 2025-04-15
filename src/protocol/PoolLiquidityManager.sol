@@ -330,6 +330,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         lpPositions[lp].interestAccrued += amount;
         aggregatePoolReserves += amount;
+
+        emit InterestDistributedToLP(lp, amount, poolCycleManager.cycleIndex());
     }
 
     /**
@@ -348,6 +350,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         lpPositions[lp].collateralAmount += amount;
         totalLPCollateral += amount;
         aggregatePoolReserves += amount;
+
+        emit RebalanceAmountTransferred(lp, amount, poolCycleManager.cycleIndex());
     }
 
     /**

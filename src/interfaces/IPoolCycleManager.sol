@@ -51,6 +51,18 @@ interface IPoolCycleManager {
     event CycleStarted(uint256 indexed cycleIndex, uint256 timestamp);
 
     /**
+     * @notice Emitted when rebalance amount is transferred to an LP
+     * @param lp Address of the LP
+     * @param amount Amount of rebalance funds transferred
+     * @param cycleIndex Index of the cycle
+     */
+    event RebalanceAmountTransferred(
+        address indexed lp,
+        uint256 indexed amount,
+        uint256 indexed cycleIndex
+    );
+
+    /**
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
      * @param cyclePriceHigh Highest price of the asset during the rebalance
