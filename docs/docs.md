@@ -22,9 +22,8 @@
 | Strategy A | `0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F` |
 | Strategy B | `0x17976DC403bd39DeF23485D86604d1fFf3A9D0F3` |
 
-## Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.
-
-## Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
+Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
+Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
 
 ## Test Pool & Oracl Contract Addresses (Base Sepolia)
 
