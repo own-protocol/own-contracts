@@ -98,10 +98,10 @@ contract AssetSplitTest is ProtocolTestUtils {
         
         // Resolve the price deviation with a valid split
         vm.prank(owner);
-        assetPool.resolvePriceDeviation(true, SPLIT_RATIO, SPLIT_DENOMINATOR);
+        cycleManager.resolvePriceDeviation(true, SPLIT_RATIO, SPLIT_DENOMINATOR);
         
         // Verify isPriceDeviationValid is now true
-        assertTrue(assetPool.isPriceDeviationValid(), "Price deviation should be marked as valid");
+        assertTrue(cycleManager.isPriceDeviationValid(), "Price deviation should be marked as valid");
         
         // Now we should be able to initiate onchain rebalance
         vm.prank(owner);
@@ -197,10 +197,10 @@ contract AssetSplitTest is ProtocolTestUtils {
         
         // Resolve the price deviation with a valid reverse split
         vm.prank(owner);
-        assetPool.resolvePriceDeviation(true, REVERSE_SPLIT_RATIO, REVERSE_SPLIT_DENOMINATOR);
+        cycleManager.resolvePriceDeviation(true, REVERSE_SPLIT_RATIO, REVERSE_SPLIT_DENOMINATOR);
         
         // Verify isPriceDeviationValid is now true
-        assertTrue(assetPool.isPriceDeviationValid(), "Price deviation should be marked as valid");
+        assertTrue(cycleManager.isPriceDeviationValid(), "Price deviation should be marked as valid");
         
         // Now we should be able to initiate onchain rebalance
         vm.prank(owner);
@@ -298,10 +298,10 @@ contract AssetSplitTest is ProtocolTestUtils {
         
         // Resolve the price deviation as a NON-split (false parameter)
         vm.startPrank(owner);
-        assetPool.resolvePriceDeviation(false, 0, 0);
+        cycleManager.resolvePriceDeviation(false, 0, 0);
         
         // Verify isPriceDeviationValid is now true
-        assertTrue(assetPool.isPriceDeviationValid(), "Price deviation should be marked as valid");
+        assertTrue(cycleManager.isPriceDeviationValid(), "Price deviation should be marked as valid");
         
         // Verify token split was NOT applied (splitMultiplier remains unchanged)
         assertEq(assetToken.splitMultiplier(), initialSplitMultiplier, "Split multiplier should remain unchanged");
@@ -359,11 +359,161 @@ contract AssetSplitTest is ProtocolTestUtils {
         
         // Verify that an incorrect split ratio is rejected
         // Note: We're purposely trying to pass a wrong ratio (3:1 instead of 2:1)
-        vm.expectRevert(IAssetPool.InvalidSplit.selector);
-        assetPool.resolvePriceDeviation(true, 3, 1);
+        vm.expectRevert(IPoolCycleManager.InvalidSplit.selector);
+        cycleManager.resolvePriceDeviation(true, 3, 1);
         vm.stopPrank();
         
         // Split should still be detected since resolution failed
         assertTrue(assetOracle.splitDetected(), "Split should still be detected after failed resolution");
+    }
+
+    /**
+     * @notice Test split detection and state transitions before resolution
+     */
+    function testSplitDetectionStateTransitions() public {
+        // Generate a significant price drop that should trigger split detection
+        uint256 splitPrice = INITIAL_PRICE / 2;
+        
+        // Initial state - no split detected
+        assertFalse(assetOracle.splitDetected(), "No split should be detected initially");
+        
+        // Trigger split detection in the oracle
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(splitPrice);
+        
+        // Verify split was detected
+        assertTrue(assetOracle.splitDetected(), "Split should be detected after price change");
+        assertEq(assetOracle.preSplitPrice(), INITIAL_PRICE, "Pre-split price should be recorded");
+        
+        // Verify we can still initiate offchain rebalance even with split detected
+        assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_ACTIVE), "Pool should be in active state");
+        cycleManager.initiateOffchainRebalance();
+        assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_REBALANCING_OFFCHAIN), "Pool should transition to offchain rebalancing");
+        
+        // But we cannot directly go to onchain rebalance without resolving the price deviation
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        
+        // Ensure the oracle is updated recently enough to pass the threshold check
+        updateOraclePrice(splitPrice);
+        
+        // Now the error should be about price deviation, not oracle staleness
+        vm.expectRevert(IPoolCycleManager.PriceDeviationHigh.selector);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test multiple sequential stock splits
+     */
+    function testMultipleSequentialSplits() public {
+        // Add user deposits to create asset tokens in the system
+        vm.prank(user1);
+        assetPool.depositRequest(
+            adjustAmountForDecimals(10_000, 6),  // 10,000 units of reserve token
+            adjustAmountForDecimals(2_000, 6)    // 2,000 units of collateral
+        );
+        
+        // Complete a cycle to process deposits
+        completeCycleWithPriceChange(INITIAL_PRICE);
+        
+        // User claims assets to mint tokens
+        vm.prank(user1);
+        assetPool.claimAsset(user1);
+        
+        // Record user's initial asset balance
+        uint256 initialAssetBalance = assetToken.balanceOf(user1);
+        
+        // First split: 2:1
+        // ---------------
+        // Generate a 2:1 split price drop
+        uint256 firstSplitPrice = INITIAL_PRICE / 2;
+        
+        // Process first split
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(firstSplitPrice);
+        assertTrue(assetOracle.splitDetected(), "Split should be detected after price change");
+        
+        cycleManager.initiateOffchainRebalance();
+        
+        // Advance time to onchain rebalance phase
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(firstSplitPrice);
+        
+        // Resolve the price deviation with a valid split
+        cycleManager.resolvePriceDeviation(true, SPLIT_RATIO, SPLIT_DENOMINATOR);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+        
+        // Complete the cycle
+        vm.prank(liquidityProvider1);
+        cycleManager.rebalancePool(liquidityProvider1, firstSplitPrice);
+        
+        vm.prank(liquidityProvider2);
+        cycleManager.rebalancePool(liquidityProvider2, firstSplitPrice);
+        
+        // Verify balance after first split
+        uint256 balanceAfterFirstSplit = assetToken.balanceOf(user1);
+        assertEq(balanceAfterFirstSplit, initialAssetBalance * 2, "Balance should double after 2:1 split");
+        
+        // Second split: 1:2 (reverse)
+        // --------------------------
+        // Generate a 1:2 reverse split price increase
+        uint256 secondSplitPrice = firstSplitPrice * 2; // Back to original price
+        
+        // Process second split
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(secondSplitPrice);
+        
+        // Manually set split detected since our simple test oracle might not detect it
+        assetOracle.setSplitDetected(true, firstSplitPrice);
+        
+        cycleManager.initiateOffchainRebalance();
+        
+        // Advance time to onchain rebalance phase
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(secondSplitPrice);
+        
+        // Resolve the price deviation with a valid reverse split
+        cycleManager.resolvePriceDeviation(true, REVERSE_SPLIT_RATIO, REVERSE_SPLIT_DENOMINATOR);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+        
+        // Complete the cycle
+        vm.prank(liquidityProvider1);
+        cycleManager.rebalancePool(liquidityProvider1, secondSplitPrice);
+        
+        vm.prank(liquidityProvider2);
+        cycleManager.rebalancePool(liquidityProvider2, secondSplitPrice);
+        
+        // Verify final balance - should be back to initial (2x * 0.5x = 1x)
+        uint256 finalBalance = assetToken.balanceOf(user1);
+        assertEq(finalBalance, initialAssetBalance, "Final balance should equal initial after offsetting splits");
+    }
+
+    /**
+     * @notice Test attempting to resolve a split when no split is detected
+     */
+    function testResolveNonExistentSplit() public {
+        // Start in active state with no split detected
+        assertFalse(assetOracle.splitDetected(), "No split should be detected initially");
+        assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_ACTIVE), "Pool should be in active state");
+        
+        // First go to offchain rebalance state
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        
+        // Since no split is detected, we should get an InvalidSplit error
+        // rather than an InvalidCycleState error when trying to resolve a split
+        vm.expectRevert(IPoolCycleManager.InvalidSplit.selector);
+        cycleManager.resolvePriceDeviation(true, SPLIT_RATIO, SPLIT_DENOMINATOR);
+        vm.stopPrank();
     }
 }
