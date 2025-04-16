@@ -56,7 +56,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     uint256 public aggregatePoolReserves;
 
     /**
-     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     * @notice Yield accrued by the pool reserve tokens (if isYieldBearing)
      */
     uint256 public reserveYieldAccrued;
 
@@ -155,12 +155,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         UserRequest storage request = userRequests[user];
         if (request.requestType == RequestType.LIQUIDATE 
             && poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE) {
-
+            
+            // Cancel liquidation request if sufficient collateral is added
             uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
             if (collateralHealth == 3) {
                 uint256 requestAmount = request.amount;
                 address liquidationInitiator = liquidationInitiators[user];
-                // Cancel liquidation request if collateral is added
                 cycleTotalRedemptions -= requestAmount;
                 // Refund the liquidator's tokens
                 assetToken.transfer(liquidationInitiator, requestAmount);
