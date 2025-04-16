@@ -64,14 +64,4 @@ forge script script/CreateAssetPool.s.sol:CreatePoolScript \
     --rpc-url base_sepolia --broadcast
 ```
 
-## Security Model
-
-- Multi-layered collateralization requirements for both users and LPs
-- Cycle-based rebalancing to prevent market manipulation from being overly reliant on oracle prices
-- Automated interest rate adjustments based on pool utilization
-- Permissionless design allows for community-driven governance and upgrades
-- Comprehensive testing of all contracts
-- Clear separation between offchain and onchain rebalancing phases
-- Oracle price validation and anomaly detection
-
 **Checkout docs for more details**
