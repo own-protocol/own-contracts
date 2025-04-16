@@ -80,6 +80,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             address(yieldToken),
             "xTSLA",
             address(assetOracle),
+            address(assetPool),
             address(cycleManager),
             address(liquidityManager),
             address(poolStrategy)
@@ -95,6 +96,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetTokenAddress,
             address(assetOracle),
             address(assetPool),
+            address(cycleManager),
             address(liquidityManager),
             address(poolStrategy),
             owner
@@ -107,6 +109,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             address(assetOracle),
             address(assetPool),
             address(cycleManager),
+            address(liquidityManager),
             address(poolStrategy)
         );
 

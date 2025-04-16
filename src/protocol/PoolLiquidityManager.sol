@@ -107,6 +107,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         address _assetOracle,
         address _assetPool,
         address _poolCycleManager,
+        address _poolLiquidityManager,
         address _poolStrategy
     ) external initializer {
         if (_reserveToken == address(0) || _assetToken == address(0) || _assetPool == address(0) || 
@@ -116,10 +117,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = IXToken(_assetToken);
+        assetOracle = IAssetOracle(_assetOracle);
         assetPool = IAssetPool(_assetPool);
         poolCycleManager = IPoolCycleManager(_poolCycleManager);
+        poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
-        assetOracle = IAssetOracle(_assetOracle);
         reserveYieldAccrued = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));

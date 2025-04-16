@@ -110,6 +110,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             depositToken,
             assetSymbol,
             oracle,
+            pool,
             cycleManager,
             liquidityManager,
             poolStrategy
@@ -122,6 +123,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             address(assetToken),
             oracle,
             pool,
+            cycleManager,
             liquidityManager,
             poolStrategy,
             owner
@@ -133,6 +135,7 @@ contract AssetPoolFactory is IAssetPoolFactory, Ownable {
             oracle, 
             pool, 
             cycleManager, 
+            liquidityManager,
             poolStrategy
         );
 

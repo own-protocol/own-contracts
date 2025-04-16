@@ -111,6 +111,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         address _reserveToken,
         string memory _assetTokenSymbol,
         address _assetOracle,
+        address _assetPool,
         address _poolCycleManager,
         address _poolLiquidityManager,
         address _poolStrategy
@@ -119,11 +120,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             _poolLiquidityManager == address(0) || _poolCycleManager == address(0)) 
             revert ZeroAddress();
 
-        poolCycleManager =IPoolCycleManager(_poolCycleManager);
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = new xToken(_assetTokenSymbol, _assetTokenSymbol, _poolCycleManager);
-        poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         assetOracle = IAssetOracle(_assetOracle);
+        assetPool = IAssetPool(_assetPool);
+        poolCycleManager =IPoolCycleManager(_poolCycleManager);
+        poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
         reserveYieldAccrued = 1e18;
 

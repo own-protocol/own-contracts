@@ -135,6 +135,7 @@ contract ProtocolTestUtils is Test {
             address(reserveToken),
             _assetTokenSymbol,
             address(assetOracle),
+            address(assetPool),
             address(cycleManager),
             address(liquidityManager),
             address(poolStrategy)
@@ -150,6 +151,7 @@ contract ProtocolTestUtils is Test {
             assetTokenAddress,
             address(assetOracle),
             address(assetPool),
+            address(cycleManager),
             address(liquidityManager),
             address(poolStrategy),
             owner
@@ -162,6 +164,7 @@ contract ProtocolTestUtils is Test {
             address(assetOracle),
             address(assetPool),
             address(cycleManager),
+            address(liquidityManager),
             address(poolStrategy)
         );
 

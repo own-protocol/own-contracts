@@ -117,6 +117,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         address _assetToken,
         address _assetOracle,
         address _assetPool,
+        address _poolCycleManager,
         address _poolLiquidityManager,
         address _poolStrategy,
         address _owner
@@ -127,10 +128,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
 
         reserveToken = IERC20Metadata(_reserveToken);
         assetToken = IXToken(_assetToken);
+        assetOracle = IAssetOracle(_assetOracle);
         assetPool = IAssetPool(_assetPool);
+        poolCycleManager = IPoolCycleManager(_poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
-        assetOracle = IAssetOracle(_assetOracle);
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
