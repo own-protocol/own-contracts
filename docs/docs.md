@@ -4,22 +4,34 @@
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPoolFactory | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
+| AssetPoolFactory | `0xF225f028F7cd2CbEF1C882224e4ae97AbBd352Dc` |
 
 ## Implementation Contract Addresses (Base Sepolia)
 
 | Contract             | Address                                      |
 | -------------------- | -------------------------------------------- |
-| AssetPool            | ``                                           |
-| PoolCylceManager     | `0x0f1A428320e1cd5E2ED40f1d1ACf91E337E96015` |
-| PoolLiquidityManager | `0xF73dB7066C192A84e55ea92D7fC161757f36345f` |
-| ProtocolRegistry     | ``                                           |
+| AssetPool            | `0x3A91E1E6Fd53Bf1efF573dBd551DA930f4937ea3` |
+| PoolCylceManager     | `0xda22816E7FeAD4a4639cC892d7Dfa0d1eCDB362C` |
+| PoolLiquidityManager | `0x3C6F5423287FCf768E2393735778a65f94d521e7` |
+| ProtocolRegistry     | `0xCEaBF7ed92bCA91920316f015C92F61a4F8bE761` |
 
 ## Strategy Contract Addresses (Base Sepolia)
 
 | Contract   | Address                                      |
 | ---------- | -------------------------------------------- |
-| Strategy A | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
+| Strategy A | `0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F` |
+| Strategy B | `0x17976DC403bd39DeF23485D86604d1fFf3A9D0F3` |
+
+## Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.
+
+## Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
+
+## Test Pool & Oracl Contract Addresses (Base Sepolia)
+
+| AAPL   | Address                                      |
+| ------ | -------------------------------------------- |
+| Pool   | `0xf2266E76547460be653a58F8929932921AE877b9` |
+| Oracle | `0x634344E170C47B71c2254be91094A01Ee8B98667` |
 
 ### Chainlink Oracle Details
 

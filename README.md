@@ -49,3 +49,5 @@ The protocol creates a market where users can gain exposure to asset performance
 - Comprehensive testing of all contracts
 - Clear separation between offchain and onchain rebalancing phases
 - Oracle price validation and anomaly detection
+
+### Check docs for deployment instructions and contract addresses
