@@ -187,7 +187,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
             }
         }
 
-        (,cyclePriceHigh, cyclePriceLow, ,) = assetOracle.getOHLCData();
+        (,cyclePriceHigh, cyclePriceLow, ,) = assetOracle.ohlcData();
 
         // Accrue interest before changing cycle state
         _accrueInterest();

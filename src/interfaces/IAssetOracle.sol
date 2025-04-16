@@ -158,7 +158,7 @@ interface IAssetOracle {
      * @return close The closing price
      * @return timestamp The timestamp of the OHLC data
      */
-    function getOHLCData() external view returns (
+    function ohlcData() external view returns (
         uint256 open,
         uint256 high,
         uint256 low,

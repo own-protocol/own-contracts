@@ -195,30 +195,6 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     }
     
     /**
-     * @notice Returns the current OHLC data for the asset
-     * @return open The opening price
-     * @return high The highest price
-     * @return low The lowest price
-     * @return close The closing price
-     * @return timestamp The timestamp of the OHLC data
-     */
-    function getOHLCData() external view returns (
-        uint256 open,
-        uint256 high,
-        uint256 low,
-        uint256 close,
-        uint256 timestamp
-    ) {
-        return (
-            ohlcData.open,
-            ohlcData.high,
-            ohlcData.low,
-            ohlcData.close,
-            ohlcData.timestamp
-        );
-    }
-
-    /**
      * @notice Checks if the market for the tracked asset is currently open
      * @dev Determines market status by comparing the data source timestamp with the oracle update time
      * @dev The market status is at the time of the last update. To get the current status, call this function after a new update

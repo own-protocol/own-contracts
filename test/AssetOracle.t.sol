@@ -174,7 +174,7 @@ contract AssetOracleTest is Test {
         assertEq(assetOracle.lastUpdated(), block.timestamp, "Last updated timestamp not set");
         
         // Verify OHLC data
-        (uint256 open, uint256 high, uint256 low, uint256 close, uint256 dataTimestamp) = assetOracle.getOHLCData();
+        (uint256 open, uint256 high, uint256 low, uint256 close, uint256 dataTimestamp) = assetOracle.ohlcData();
         assertEq(open, openPrice, "Open price not updated correctly");
         assertEq(high, highPrice, "High price not updated correctly");
         assertEq(low, lowPrice, "Low price not updated correctly");
@@ -256,7 +256,7 @@ contract AssetOracleTest is Test {
         assertEq(assetOracle.assetPrice(), 110e18, "Second price update failed");
         
         // Verify OHLC data update
-        (uint256 open, uint256 high, uint256 low, uint256 close, ) = assetOracle.getOHLCData();
+        (uint256 open, uint256 high, uint256 low, uint256 close, ) = assetOracle.ohlcData();
         assertEq(open, 105e18, "Open price not updated correctly");
         assertEq(high, 115e18, "High price not updated correctly");
         assertEq(low, 100e18, "Low price not updated correctly");

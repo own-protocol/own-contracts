@@ -209,22 +209,6 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
         emit AssetSymbolUpdated(newAssetSymbol);
     }
     
-    function getOHLCData() external view returns (
-        uint256 open,
-        uint256 high,
-        uint256 low,
-        uint256 close,
-        uint256 timestamp
-    ) {
-        return (
-            ohlcData.open,
-            ohlcData.high,
-            ohlcData.low,
-            ohlcData.close,
-            ohlcData.timestamp
-        );
-    }
-    
     function isMarketOpen() external view returns (bool) {
         if (lastUpdated == 0) {
             return false;

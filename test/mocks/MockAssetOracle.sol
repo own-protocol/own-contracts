@@ -227,22 +227,6 @@ contract MockAssetOracle {
         return symbol;
     }
     
-    function getOHLCData() external view returns (
-        uint256 open,
-        uint256 high,
-        uint256 low,
-        uint256 close,
-        uint256 timestamp
-    ) {
-        return (
-            ohlcData.open,
-            ohlcData.high,
-            ohlcData.low,
-            ohlcData.close,
-            ohlcData.timestamp
-        );
-    }
-    
     // Add market open state variable that can be controlled
     bool private marketOpen = true;
     
