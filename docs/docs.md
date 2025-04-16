@@ -115,6 +115,18 @@ forge clean
 # Build contracts
 forge build
 
+# Build with sizes
+forge build --sizes
+
+# Run a specific test file
+forge test --match-path test/MyContract.t.sol
+
+# Run a specific test in a test file
+forge test --match-path test/MyContract.t.sol --match-test testMyFunction
+
+# Run all tests with gas report
+forge test --gas-report
+
 # Check contract verification status
 forge verify-check $GUID --chain-id $CHAIN_ID
 ```
