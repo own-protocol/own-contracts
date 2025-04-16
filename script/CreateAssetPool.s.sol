@@ -8,19 +8,19 @@ import "../src/protocol/AssetPoolFactory.sol";
 contract CreatePoolScript is Script {
     // Pool configuration
     address constant DEPOSIT_TOKEN = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on base sepolia
-    string constant ASSET_SYMBOL = "xTSLA";
-    address constant PRICE_ORACLE = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
-    address constant POOL_STRATEGY = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
+    string constant ASSET_SYMBOL = "xAAPL";
+    address constant PRICE_ORACLE = 0x634344E170C47B71c2254be91094A01Ee8B98667;
+    address constant POOL_STRATEGY = 0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F;
 
     // Deployed contract addresses (replace with actual addresses after deployment)
-    address constant ASSET_POOL_FACTORY = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c; 
+    address constant ASSET_POOL_FACTORY = 0xF225f028F7cd2CbEF1C882224e4ae97AbBd352Dc;
 
     function setUp() public pure {
         // Validate addresses
-        require(ASSET_POOL_FACTORY == 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c, "AssetPoolFactory address not set");
+        require(ASSET_POOL_FACTORY == 0xF225f028F7cd2CbEF1C882224e4ae97AbBd352Dc, "AssetPoolFactory address not set");
         require(DEPOSIT_TOKEN == 0x036CbD53842c5426634e7929541eC2318f3dCF7e, "Deposit token address not set");
-        require(PRICE_ORACLE == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Oracle address not set");
-        require(POOL_STRATEGY == 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0, "Interest rate strategy address not set");
+        require(PRICE_ORACLE == 0x634344E170C47B71c2254be91094A01Ee8B98667, "Oracle address not set");
+        require(POOL_STRATEGY == 0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F, "Interest rate strategy address not set");
     }
 
     function run() public {

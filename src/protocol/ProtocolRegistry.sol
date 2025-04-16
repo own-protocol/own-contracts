@@ -9,7 +9,6 @@ import "../interfaces/IProtocolRegistry.sol";
 /**
  * @title ProtocolRegistry
  * @notice Tracks verified protocol contracts (strategies, oracles, pools)
- * @dev Only the owner can add or remove components
  */
 contract ProtocolRegistry is IProtocolRegistry, Ownable {
     // Mapping of strategy addresses to verification status
