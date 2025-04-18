@@ -1,8 +1,8 @@
 # Own Protocol
 
-Own is a permissionless protocol for fully collateralized asset swaps, enabling synthetic exposure to any real-world asset onchain.
+Own is a permissionless protocol for fully collateralized Total Return Swaps (Equity Swap), enabling synthetic exposure to stocks onchain. Think of Maker DAO or Uniswap but for creating synthetic stocks permissionlessly & traded as native ERC20 tokens.
 
-The protocol creates a market where users can gain exposure to asset performance by paying a floating interest rate, while liquidity providers earn this interest in exchange for offering asset exposure. As the default market makers in the protocol, LPs can also earn from market making.
+The protocol creates a market where users gain exposure to stock performance by paying a floating interest rate, while liquidity providers earn this interest in exchange for offering that exposure. As default market makers, LPs can also earn from trading activity. Since the protocol is fully collateralized, LPs take no directional risk, enabling delta-neutral strategies.
 
 ## Contract Architecture
 
