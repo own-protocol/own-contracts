@@ -383,8 +383,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         position.collateralAmount += collateralAmount;
         scaledAssetBalance[user] += scaledAssetAmount;
         
-        // Mint tokens
-        assetToken.mint(user, assetAmount);
+        // Transfer asset tokens to user
+        _safeTransferBalance(user, assetAmount, true);
         
         emit AssetClaimed(user, assetAmount, requestCycle);
     }
@@ -438,12 +438,14 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
-           _safeTransferBalance(user, totalAmount);
+            // Transfer reserve tokens to the user
+           _safeTransferBalance(user, totalAmount, false);
         } else if (requestType == RequestType.LIQUIDATE) {
             // Liquidation case - transfer reserve tokens to the liquidator
             address liquidator = liquidationInitiators[user];
             if (liquidator == address(0)) revert InvalidLiquidationRequest();
-            _safeTransferBalance(liquidator, totalAmount);
+            // Transfer reserve tokens to the liquidator
+            _safeTransferBalance(liquidator, totalAmount, false);
             // Clear liquidation initiator
             delete liquidationInitiators[user];
 
@@ -497,7 +499,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         totalAmount -= r.interestDebt;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
 
-        _safeTransferBalance(msg.sender, totalAmount);
+        // Transfer reserve tokens to the user
+        _safeTransferBalance(msg.sender, totalAmount, false);
 
         emit ReserveWithdrawn(msg.sender, totalAmount, cycle);
     }
@@ -601,10 +604,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external {
         _requirePoolCycleManager();
-        uint256 assetBalance = assetToken.balanceOf(address(this));
         reserveBackingAsset = reserveBackingAsset 
             + cycleTotalDeposits
             - _convertAssetToReserve(cycleTotalRedemptions, rebalancePrice);
+
+        int256 nettAssetChange = int256(_convertReserveToAsset(cycleTotalDeposits, rebalancePrice)) - int256(cycleTotalRedemptions);
 
         if (rebalanceAmount > 0) {
             reserveBackingAsset += uint256(rebalanceAmount);
@@ -614,8 +618,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             aggregatePoolReserves -= uint256(-rebalanceAmount);
         }
 
-        if (assetBalance > 0) {
-            assetToken.burn(address(this), assetBalance);
+        if (nettAssetChange > 0) {
+            assetToken.mint(address(this), uint256(nettAssetChange));
+        } else if (nettAssetChange < 0) {
+            assetToken.burn(address(this), uint256(-nettAssetChange));
         }
 
         cycleTotalDeposits = 0;
@@ -794,11 +800,16 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @notice Safely transfers the balance of reserve to a specified address
      * @param to Address to which the tokens will be transferred
      * @param amount Amount of tokens to transfer
+     * @param isAsset Boolean indicating if the transfer is for asset tokens
      */
-    function _safeTransferBalance(address to, uint256 amount) internal {
-        uint256 balance = reserveToken.balanceOf(address(this));
+    function _safeTransferBalance(address to, uint256 amount, bool isAsset) internal {
+        uint256 balance = isAsset ? assetToken.balanceOf(address(this)) : reserveToken.balanceOf(address(this));
         uint256 transferAmount = balance < amount ? balance : amount;
-        reserveToken.transfer(to, transferAmount);
+        if (isAsset) {
+            assetToken.transfer(to, transferAmount);
+        } else {
+            reserveToken.transfer(to, transferAmount);
+        }
     }
 
     /**
