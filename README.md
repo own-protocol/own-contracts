@@ -64,4 +64,4 @@ forge script script/CreateAssetPool.s.sol:CreatePoolScript \
     --rpc-url base_sepolia --broadcast
 ```
 
-**Checkout docs for more details**
+**Checkout [docs](https://own-protocol.gitbook.io/docs) for more details**
