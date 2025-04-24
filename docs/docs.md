@@ -25,7 +25,7 @@
 Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
 Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
 
-## Test Pool & Oracl Contract Addresses (Base Sepolia)
+## Test Pool & Oracle Contract Addresses (Base Sepolia)
 
 | AAPL   | Address                                      |
 | ------ | -------------------------------------------- |

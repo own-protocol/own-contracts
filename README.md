@@ -48,6 +48,13 @@ The protocol creates a market where users gain exposure to stock performance by 
 Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
 Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
 
+## Test Pool & Oracle Contract Addresses (Base Sepolia)
+
+| AAPL   | Address                                      |
+| ------ | -------------------------------------------- |
+| Pool   | `0xf2266E76547460be653a58F8929932921AE877b9` |
+| Oracle | `0x634344E170C47B71c2254be91094A01Ee8B98667` |
+
 ## Deploy & Create Commands
 
 ### Create New Oracle
