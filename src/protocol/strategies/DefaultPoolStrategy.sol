@@ -484,7 +484,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return rate Current interest rate (scaled by 10000)
      */
     function calculatePoolInterestRate(address assetPool) public view returns (uint256 rate) {
-        uint256 utilization = calculatePoolUtilization(assetPool);
+        uint256 utilization = calculatePoolUtilizationRatio(assetPool);
         return calculateInterestRate(utilization);
     }
 
@@ -495,7 +495,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @return rate interest rate (scaled by 10000)
      */
     function calculateCycleInterestRate(address assetPool) public view returns (uint256 rate) {
-        uint256 utilization = calculateCyclePoolUtilization(assetPool);
+        uint256 utilization = calculateCyclePoolUtilizationRatio(assetPool);
         return calculateInterestRate(utilization);
     }
 
