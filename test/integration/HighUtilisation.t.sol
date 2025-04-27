@@ -64,8 +64,8 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
     function createHighUtilization() internal {
         // Calculate deposit amount based on total LP liquidity
         uint256 totalLiquidity = liquidityManager.totalLPLiquidityCommited();
-        // deposit amount is 70% of total liquidity so that utilisation will be close to 90%
-        uint256 targetDeposit = (totalLiquidity * 7) / 10;
+        // deposit amount is 90% of total liquidity so that utilisation will be close to 90%
+        uint256 targetDeposit = (totalLiquidity * 9) / 10;
         
         // Adjust for proper decimals
         uint256 depositAmount = targetDeposit;

@@ -12,7 +12,7 @@ import "../utils/ProtocolTestUtils.sol";
 contract InterestAndFeeTest is ProtocolTestUtils {
     // Base amounts (will be adjusted based on token decimals)
     uint256 constant INITIAL_PRICE = 100 * 1e18; // $100.00 per asset (always 18 decimals)
-    uint256 constant USER_INITIAL_BALANCE = 1_000_000; 
+    uint256 constant USER_INITIAL_BALANCE = 1_500_000; 
     uint256 constant LP_INITIAL_BALANCE = 1_000_000;
     uint256 constant LP_LIQUIDITY_AMOUNT = 500_000;
     uint256 constant USER_DEPOSIT_AMOUNT = 10_000;
@@ -426,8 +426,8 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         // Get current total liquidity
         uint256 totalLiquidity = liquidityManager.totalLPLiquidityCommited();
         
-        // Calculate deposit amounts needed to reach target utilization & divide by 130% to account for collateral
-        uint256 targetDepositValue = Math.mulDiv(totalLiquidity, targetUtilization * 100, BPS * 130);
+        // Calculate deposit amounts needed to reach target utilization
+        uint256 targetDepositValue = Math.mulDiv(totalLiquidity, targetUtilization, BPS);
         
         // Adjust for reserve token decimals
         uint256 depositAmount = targetDepositValue;
@@ -468,7 +468,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         uint256 totalLiquidity = liquidityManager.totalLPLiquidityCommited();
         
         // Calculate total deposit needed to reach target utilization
-        uint256 targetDepositValue = Math.mulDiv(totalLiquidity, targetUtilization * 100, BPS * 130);
+        uint256 targetDepositValue = Math.mulDiv(totalLiquidity, targetUtilization, BPS);
         
         // Divide among 3 users (40%, 30%, 30%)
         uint256 user1DepositAmount = Math.mulDiv(targetDepositValue, 40, 100);
