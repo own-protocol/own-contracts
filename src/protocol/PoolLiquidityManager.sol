@@ -463,7 +463,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getLPAssetHoldingValue(address lp) public view returns (uint256) {
         if (!registeredLPs[lp]) return 0;
         
-        uint256 poolValue = assetPool.getPoolValue();
+        uint256 poolValue = assetPool.getUtilisedLiquidity();
         uint256 lpShare = getLPLiquidityShare(lp);
         uint256 lpAssetHolding = Math.mulDiv(lpShare, poolValue, PRECISION);
         

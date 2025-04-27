@@ -443,21 +443,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Calculate utilised liquidity in the pool
-     * @param assetPool Address of the asset pool
-     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
-     */
-    function calculateUtilisedLiquidity(address assetPool) public view returns (uint256 utilisedLiquidity) {
-        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
-        
-        uint256 poolValue = pool.getPoolValue();
-        uint256 healthyRatio = lpHealthyCollateralRatio;
-        uint256 totalRatio = BPS + healthyRatio;
-
-        return Math.mulDiv(poolValue, totalRatio, BPS);
-    }
-
-    /**
      * @notice Calculate utilised liquidity (including cycle changes)
      * @param assetPool Address of the asset pool
      * @return cycleUtilisedLiquidity Total utilised liquidity
@@ -468,8 +453,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 price = cycleManager.cycleRebalancePrice(prevCycle); 
-        uint256 totalRatio = BPS + lpHealthyCollateralRatio;
-        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        uint256 utilisedLiquidity = pool.getUtilisedLiquidity();
         uint256 cycleTotalDeposits = pool.cycleTotalDeposits();
         uint256 cycleTotalRedemptions = pool.cycleTotalRedemptions();
         uint256 cycleRedemptionsInReserveToken = 0;
@@ -484,11 +468,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         if (cycleTotalDeposits > cycleRedemptionsInReserveToken) {
             nettChange = cycleTotalDeposits - cycleRedemptionsInReserveToken;
-            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
             cycleUtilisedLiquidity = utilisedLiquidity + nettChange;
         } else if (cycleTotalDeposits < cycleRedemptionsInReserveToken) {
             nettChange = cycleRedemptionsInReserveToken - cycleTotalDeposits;
-            nettChange = Math.mulDiv(nettChange, totalRatio, BPS);
             cycleUtilisedLiquidity = utilisedLiquidity > nettChange ? utilisedLiquidity - nettChange : 0;
         } else {
             cycleUtilisedLiquidity = utilisedLiquidity;
@@ -527,7 +509,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
         if (totalLiquidity == 0) return 0;
-        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        uint256 utilisedLiquidity = pool.getUtilisedLiquidity();
         
         return Math.min((utilisedLiquidity * BPS) / totalLiquidity, BPS);
     }
@@ -558,7 +540,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
 
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
-        uint256 utilisedLiquidity = calculateUtilisedLiquidity(assetPool);
+        uint256 utilisedLiquidity = pool.getUtilisedLiquidity();
         
         return totalLiquidity - utilisedLiquidity;
     }

@@ -359,8 +359,8 @@ interface IAssetPool {
     function reserveYieldAccrued() external view returns (uint256);
 
      /**
-     * @notice Calculate pool value
-     * @return value Pool value in reserve tokens
+     * @notice Get utilised liquidity of the pool
+     * @return value Amount of utilised liquidity
      */
-    function getPoolValue() external view returns (uint256 value);
+    function getUtilisedLiquidity() external view returns (uint256 value);
 }
