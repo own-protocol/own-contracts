@@ -447,7 +447,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         assetPool.claimAsset(user2);
         
         // Verify target utilization is reached (approximately)
-        uint256 actualUtilization = poolStrategy.calculatePoolUtilization(address(assetPool));
+        uint256 actualUtilization = poolStrategy.calculatePoolUtilizationRatio(address(assetPool));
         assertApproxEqRel(
             actualUtilization, 
             targetUtilization, 
@@ -509,7 +509,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         assetPool.claimAsset(user3);
         
         // Verify target utilization is reached (approximately)
-        uint256 actualUtilization = poolStrategy.calculatePoolUtilization(address(assetPool));
+        uint256 actualUtilization = poolStrategy.calculatePoolUtilizationRatio(address(assetPool));
         assertApproxEqRel(
             actualUtilization, 
             targetUtilization, 

@@ -277,13 +277,6 @@ interface IPoolStrategy {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Calculate utilised liquidity in the pool
-     * @param assetPool Address of the asset pool
-     * @return utilisedLiquidity Total utilised liquidity in reserve tokens
-     */
-    function calculateUtilisedLiquidity(address assetPool) external view returns (uint256 utilisedLiquidity);
-
-    /**
      * @notice Calculate utilised liquidity (including cycle changes)
      * @param assetPool Address of the asset pool
      * @return cycleUtilisedLiquidity Total utilised liquidity
@@ -308,7 +301,7 @@ interface IPoolStrategy {
      * @notice Calculate pool utilization ratio
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
-    function calculatePoolUtilization(address assetPool) external view returns (uint256 utilization);
+    function calculatePoolUtilizationRatio(address assetPool) external view returns (uint256 utilization);
 
     /**
      * @notice Calculate pool utilization ratio (including cycle changes)
@@ -316,7 +309,7 @@ interface IPoolStrategy {
      * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */    
-    function calculateCyclePoolUtilization(address assetPool) external view returns (uint256 utilization);
+    function calculateCyclePoolUtilizationRatio(address assetPool) external view returns (uint256 utilization);
 
     /**
      * @notice Calculate available liquidity in the pool

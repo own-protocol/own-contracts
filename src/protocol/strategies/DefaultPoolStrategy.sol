@@ -503,7 +503,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Calculate pool utilization ratio
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */
-    function calculatePoolUtilization(address assetPool) public view returns (uint256 utilization) {
+    function calculatePoolUtilizationRatio(address assetPool) public view returns (uint256 utilization) {
         IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
 
@@ -520,7 +520,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @dev It takes into account the new deposits, redemptions & liquidity changes in the cycle
      * @return utilization Pool utilization as a percentage (scaled by 10000)
      */    
-    function calculateCyclePoolUtilization(address assetPool) public view returns (uint256 utilization) {
+    function calculateCyclePoolUtilizationRatio(address assetPool) public view returns (uint256 utilization) {
         IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         IPoolLiquidityManager poolLiquidityManager = pool.poolLiquidityManager();
 
