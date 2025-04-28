@@ -530,10 +530,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     }
 
     /**
-     * @notice Calculate pool value
-     * @return value Pool value in reserve tokens
+     * @notice Get utilised liquidity of the pool (in reserve tokens)
+     * @return value Amount of utilised liquidity in reserve tokens
      */
-    function getPoolValue() public view returns (uint256 value) {
+    function getUtilisedLiquidity() public view returns (uint256 value) {
         uint256 prevCycle = poolCycleManager.cycleIndex() - 1;
         uint256 assetSupply = assetToken.totalSupply();
         uint256 assetPrice = poolCycleManager.cycleRebalancePrice(prevCycle);

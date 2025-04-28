@@ -48,7 +48,7 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
         createHighUtilization();
         
         // 2. Verify utilization is high
-        uint256 utilization = poolStrategy.calculateCyclePoolUtilization(address(assetPool));
+        uint256 utilization = poolStrategy.calculateCyclePoolUtilizationRatio(address(assetPool));
         assertApproxEqRel(utilization, 90 * 100, 0.02e18, "Utilization should be approximately 90%");
         
         // 3. Initiate offchain rebalance
@@ -64,8 +64,8 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
     function createHighUtilization() internal {
         // Calculate deposit amount based on total LP liquidity
         uint256 totalLiquidity = liquidityManager.totalLPLiquidityCommited();
-        // deposit amount is 70% of total liquidity so that utilisation will be close to 90%
-        uint256 targetDeposit = (totalLiquidity * 7) / 10;
+        // deposit amount is 90% of total liquidity so that utilisation will be close to 90%
+        uint256 targetDeposit = (totalLiquidity * 9) / 10;
         
         // Adjust for proper decimals
         uint256 depositAmount = targetDeposit;
@@ -86,7 +86,7 @@ contract HighUtilizationRebalanceTest is ProtocolTestUtils {
         assertEq(assetPool.cycleTotalDeposits(), depositAmount, "Total deposits should match expected amount");
         
         // Verify target utilization is reached
-        uint256 utilization = poolStrategy.calculateCyclePoolUtilization(address(assetPool));
+        uint256 utilization = poolStrategy.calculateCyclePoolUtilizationRatio(address(assetPool));
         assertApproxEqRel(
             utilization, 
             TARGET_UTILIZATION_PERCENT * 100, // BPS format (90% = 9000)
