@@ -65,13 +65,11 @@ interface IPoolCycleManager {
     /**
      * @notice Emitted when a rebalance period is initiated
      * @param cycleIndex Current operational cycle index
-     * @param cyclePriceHigh Highest price of the asset during the rebalance
-     * @param cyclePriceLow Lowest price of the asset during the rebalance
+     * @param cycleState Current state of the cycle
      */
     event RebalanceInitiated(
         uint256 indexed cycleIndex,
-        uint256 cyclePriceHigh,
-        uint256 cyclePriceLow
+        CycleState cycleState
     );
 
     /**

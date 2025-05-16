@@ -170,6 +170,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         if (!assetOracle.isMarketOpen()) revert MarketClosed();
 
         cycleState = CycleState.POOL_REBALANCING_OFFCHAIN;
+
+        emit RebalanceInitiated(cycleIndex, cycleState);
     }
 
     /**
@@ -198,11 +200,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleState = CycleState.POOL_REBALANCING_ONCHAIN;
         cycleLPCount = poolLiquidityManager.lpCount();
 
-        emit RebalanceInitiated(
-            cycleIndex,
-            cyclePriceHigh,
-            cyclePriceLow
-        );
+        emit RebalanceInitiated(cycleIndex, cycleState);
     }
 
     /**
