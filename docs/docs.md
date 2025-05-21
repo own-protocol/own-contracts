@@ -53,6 +53,13 @@ Strategy B - To be used for high volatility assets. It has higher lp collateral 
 | Pool   | `0xf2266E76547460be653a58F8929932921AE877b9` |
 | Oracle | `0x634344E170C47B71c2254be91094A01Ee8B98667` |
 
+## Test Reserve Token Contract Addresses (Base Sepolia)
+
+| Token | Address                                      |
+| ----- | -------------------------------------------- |
+| USDC  | `0x2cDAEADd29E6Ba0C3AF2551296D9729fB3c7eD99` |
+| USDT  | `0x7763CeA1702d831c29656b0400a31471e9dDd55d` |
+
 ### Chainlink Oracle Details
 
 - **Functions Router:** `0xf9B8fc078197181C841c296C876945aaa425B278`
