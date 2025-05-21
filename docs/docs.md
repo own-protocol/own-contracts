@@ -48,10 +48,10 @@ Strategy B - To be used for high volatility assets. It has higher lp collateral 
 
 ## Test Pool & Oracle Contract Addresses (Base Sepolia)
 
-| AAPL   | Address                                      |
+| TSLA   | Address                                      |
 | ------ | -------------------------------------------- |
-| Pool   | `0xf2266E76547460be653a58F8929932921AE877b9` |
-| Oracle | `0x634344E170C47B71c2254be91094A01Ee8B98667` |
+| Pool   | `0x688878805152CE79CD930071cD32481B11A5b95B` |
+| Oracle | `0x845d51C05c482198A7C543D3BFaB95846E3E0a50` |
 
 ## Test Reserve Token Contract Addresses (Base Sepolia)
 
@@ -101,7 +101,7 @@ forge script script/DeployPoolFactory.s.sol:AssetPoolFactoryDeployScript \
 
 ```bash
 forge script script/CreateAssetOracle.s.sol:CreateAssetOracleScript \
-    --rpc-url base_sepolia --broadcast --verify
+    --rpc-url base_sepolia --broadcast
 ```
 
 ### Fetch Asset Price
