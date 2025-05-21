@@ -13,9 +13,9 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant HALT_THRESHOLD = 5 days;          // 5 days for halting the pool
     
     // Interest rate parameters
-    uint256 constant BASE_INTEREST_RATE = 900;         // 9.00% base interest rate
-    uint256 constant INTEREST_RATE1 = 1800;            // 18.00% tier 1 interest rate
-    uint256 constant MAX_INTEREST_RATE = 7200;         // 72.00% maximum interest rate
+    uint256 constant BASE_INTEREST_RATE = 600;         // 6.00% base interest rate
+    uint256 constant INTEREST_RATE1 = 1200;            // 12.00% tier 1 interest rate
+    uint256 constant MAX_INTEREST_RATE = 4800;         // 48.00% maximum interest rate
     uint256 constant UTILIZATION_TIER1 = 6500;         // 65.00% first utilization tier
     uint256 constant UTILIZATION_TIER2 = 7500;         // 75.00% second utilization tier
     
@@ -23,7 +23,7 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant PROTOCOL_FEE = 1000;              // 10.00% fee on interest
     
     // User collateral parameters
-    uint256 constant USER_HEALTHY_RATIO = 2000;        // 18.00% healthy collateral ratio
+    uint256 constant USER_HEALTHY_RATIO = 2000;        // 20.00% healthy collateral ratio
     uint256 constant USER_LIQUIDATION_THRESHOLD = 1250; // 12.50% liquidation threshold
     
     // LP parameters

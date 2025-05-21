@@ -27,7 +27,7 @@ The protocol creates a market where users gain exposure to stock performance by 
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPoolFactory | `0xF225f028F7cd2CbEF1C882224e4ae97AbBd352Dc` |
+| AssetPoolFactory | `0x6eA99f37b4c3ad5B3353cF7CBf7db916fd78ee63` |
 
 ## Implementation Contract Addresses (Base Sepolia)
 
@@ -42,8 +42,8 @@ The protocol creates a market where users gain exposure to stock performance by 
 
 | Contract   | Address                                      |
 | ---------- | -------------------------------------------- |
-| Strategy A | `0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F` |
-| Strategy B | `0x17976DC403bd39DeF23485D86604d1fFf3A9D0F3` |
+| Strategy A | `0x7dFC74B1dAfd918D66B35E5237C7A5b170710386` |
+| Strategy B | `0x627d18FAe968Ad8d73CE9f54680B2e6F3b15700e` |
 
 Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
 Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.

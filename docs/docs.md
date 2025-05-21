@@ -4,7 +4,7 @@
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPoolFactory | `0xF225f028F7cd2CbEF1C882224e4ae97AbBd352Dc` |
+| AssetPoolFactory | `0x6eA99f37b4c3ad5B3353cF7CBf7db916fd78ee63` |
 
 ## Implementation Contract Addresses (Base Sepolia)
 
@@ -19,11 +19,32 @@
 
 | Contract   | Address                                      |
 | ---------- | -------------------------------------------- |
-| Strategy A | `0xE94a39c718fF6Ffa91E91eFc486B6a031338a31F` |
-| Strategy B | `0x17976DC403bd39DeF23485D86604d1fFf3A9D0F3` |
+| Strategy A | `0x7dFC74B1dAfd918D66B35E5237C7A5b170710386` |
+| Strategy B | `0x627d18FAe968Ad8d73CE9f54680B2e6F3b15700e` |
 
 Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
 Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
+
+## Asset Pool Factory (Sepolia)
+
+| Contract         | Address                                      |
+| ---------------- | -------------------------------------------- |
+| AssetPoolFactory | `0xFA41F88b5e350C3E4e0f29dB5FDE02d866E8902c` |
+
+## Implementation Contract Addresses (Sepolia)
+
+| Contract             | Address                                      |
+| -------------------- | -------------------------------------------- |
+| AssetPool            | `0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0` |
+| PoolCylceManager     | `0x105B599CDbC0B6EFa4C04C8dbbc4313894487713` |
+| PoolLiquidityManager | `0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b` |
+| ProtocolRegistry     | `0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c` |
+
+## Strategy Contract Addresses (Sepolia)
+
+| Contract   | Address                                      |
+| ---------- | -------------------------------------------- |
+| Strategy A | `0x38b04F6a1cCdd02c0105BE3Aa64f6b7Fa4A104b3` |
 
 ## Test Pool & Oracle Contract Addresses (Base Sepolia)
 
@@ -41,32 +62,32 @@ Strategy B - To be used for high volatility assets. It has higher lp collateral 
 
 ## Deployment Commands
 
-### Deploy AssetPool Implementation
+### Deploy Implementations
 
 ```bash
 forge script script/DeployPoolImplementations.s.sol:DeployPoolImplementations \
-    --rpc-url base_sepolia --broadcast --verify
+    --rpc-url base_sepolia --etherscan-api-key base_sepolia --broadcast --verify
 ```
 
 ### Deploy Protocol Registry
 
 ```bash
 forge script script/DeployProtocolRegistry.s.sol:DeployProtocolRegistryScript \
-    --rpc-url base_sepolia --broadcast --verify
+    --rpc-url base_sepolia --etherscan-api-key base_sepolia --broadcast --verify
 ```
 
 ### Deploy Pool Strategy
 
 ```bash
 forge script script/DeployPoolStrategy.s.sol:DeployPoolStrategyScript \
-    --rpc-url base_sepolia --broadcast --verify
+    --rpc-url base_sepolia --etherscan-api-key base_sepolia --broadcast --verify
 ```
 
 ### Deploy Pool Factory
 
 ```bash
-forge script script/DeployPoolFactory.s.sol:AssetPoolDeployScript \
-    --rpc-url base_sepolia --broadcast --verify
+forge script script/DeployPoolFactory.s.sol:AssetPoolFactoryDeployScript \
+    --rpc-url base_sepolia --etherscan-api-key base_sepolia --broadcast --verify
 ```
 
 ### Create Oracle
