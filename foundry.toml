@@ -2,11 +2,20 @@
 src = "src" 
 out = "out"
 libs = ["lib"]
+solc = "0.8.20"
+evm_version = "shanghai"
+optimizer = true
+optimizer_runs = 100
 remappings = [
   '@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/src/',
 ]
 
 [rpc_endpoints]
-base_sepolia = "${BASE_SEPOLIA_RPC}"
+sepolia = "${RPC_URL_SEPOLIA}"
+base_sepolia = "${RPC_URL_BASE_SEPOLIA}"
+
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY_SEPOLIA}", chain = 11155111 }
+base_sepolia = { key = "${ETHERSCAN_API_KEY_BASE_SEPOLIA}", chain = 84532 }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
