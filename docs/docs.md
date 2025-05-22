@@ -60,12 +60,19 @@ Strategy B - To be used for high volatility assets. It has higher lp collateral 
 | USDC  | `0x2cDAEADd29E6Ba0C3AF2551296D9729fB3c7eD99` |
 | USDT  | `0x7763CeA1702d831c29656b0400a31471e9dDd55d` |
 
-### Chainlink Oracle Details
+### Chainlink Oracle Details (Base Sepolia)
 
 - **Functions Router:** `0xf9B8fc078197181C841c296C876945aaa425B278`
 - **DON ID:** `0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000`
   - Human-readable: `fun-base-sepolia-1`
 - **Subscription ID:** `254`
+
+### Chainlink Oracle Details (Sepolia)
+
+- **Functions Router:** `0xb83E47C2bC239B3bf370bc41e1459A34b41238D0`
+- **DON ID:** `0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000`
+  - Human-readable: `fun-ethereum-sepolia-1`
+- **Subscription ID:** `4808`
 
 ## Deployment Commands
 
