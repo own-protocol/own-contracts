@@ -46,6 +46,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public registeredLPs;
 
+    // Mapping to track LP delegates
+    mapping(address => address) public lpDelegates;
+
     // Mapping to track liquidation initiators
     mapping(address => address) public liquidationInitiators;
 
@@ -286,6 +289,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         reserveToken.transfer(msg.sender, interestAccrued + reserveYield);
         
         emit InterestClaimed(msg.sender, interestAccrued + reserveYield);
+    }
+
+    /**
+    * @notice Set a delegate address that can rebalance on behalf of the LP
+    * @param delegate Address of the delegate (use address(0) to remove)
+    */
+    function setDelegate(address delegate) external onlyRegisteredLP {
+        lpDelegates[msg.sender] = delegate;
+        emit DelegateSet(msg.sender, delegate);
     }
 
     /**
