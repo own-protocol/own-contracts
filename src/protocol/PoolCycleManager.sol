@@ -209,7 +209,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
      * @param rebalancePrice Price at which the rebalance was executed
      */
     function rebalancePool(address lp, uint256 rebalancePrice) external onlyLP {
-        if (lp != msg.sender) revert UnauthorizedCaller();
+        address delegate = poolLiquidityManager.lpDelegates(lp);
+        if (lp != msg.sender && (delegate == address(0) || msg.sender != delegate)) revert UnauthorizedCaller();
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (block.timestamp > lastCycleActionDateTime + poolStrategy.rebalanceLength()) revert RebalancingExpired();

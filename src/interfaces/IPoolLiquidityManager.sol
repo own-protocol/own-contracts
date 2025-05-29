@@ -114,6 +114,13 @@ interface IPoolLiquidityManager {
     event FeeDeducted(address indexed user, uint256 amount);
 
     /**
+    * @notice Emitted when an LP sets or removes a delegate
+    * @param lp Address of the LP
+    * @param delegate Address of the delegate (address(0) if removed)
+    */
+    event DelegateSet(address indexed lp, address indexed delegate);
+
+    /**
      * @notice Emitted when rebalance amount is transferred to an LP
      * @param lp Address of the LP
      * @param amount Amount of rebalance funds transferred
@@ -278,6 +285,12 @@ interface IPoolLiquidityManager {
     function claimInterest() external;
 
     /**
+    * @notice Set a delegate address that can rebalance on behalf of the LP
+    * @param delegate Address of the delegate (use address(0) to remove)
+    */
+    function setDelegate(address delegate) external;
+
+    /**
      * @notice Liquidate an LP below threshold
      * @param lp Address of the LP to liquidate\
      * @param liquidationAmount Amount of liquidity to liquidate
@@ -425,4 +438,11 @@ interface IPoolLiquidityManager {
      * @return uint256 The current liquidity amount
      */
     function getLPLiquidityCommitment(address lp) external view returns (uint256);
+
+    /**
+    * @notice Get the delegate address for an LP
+    * @param lp Address of the LP
+    * @return delegate Address of the delegate (address(0) if none set)
+    */
+    function lpDelegates(address lp) external view returns (address delegate);
 }
