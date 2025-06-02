@@ -165,6 +165,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
      */
     function initiateOffchainRebalance() external {
         if (cycleState != CycleState.POOL_ACTIVE) revert InvalidCycleState();
+        if (poolLiquidityManager.lpCount() == 0) revert InvalidCycleState();
         uint256 oracleLastUpdated = assetOracle.lastUpdated();
         if (block.timestamp - oracleLastUpdated > poolStrategy.oracleUpdateThreshold()) revert OracleNotUpdated();
         if (!assetOracle.isMarketOpen()) revert MarketClosed();
