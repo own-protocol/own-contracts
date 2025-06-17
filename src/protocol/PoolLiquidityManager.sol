@@ -420,20 +420,24 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             uint256 liquidationAmount = request.requestAmount;
             uint256 rewardAmount = Math.mulDiv(liquidationAmount, poolStrategy.lpLiquidationReward(), BPS);
             position.liquidityCommitment -= liquidationAmount;
-            if (position.collateralAmount >= rewardAmount){
+            uint256 transferAmount = rewardAmount;
+            if (position.collateralAmount < rewardAmount) {
+                transferAmount = position.collateralAmount;
+            }
 
+            if (transferAmount > 0) {
                 uint256 reserveYield = 0;
                 if (poolStrategy.isYieldBearing()) {
-                    reserveYield = _handleYieldBearingWithdrawal(lp, rewardAmount, position);
+                    reserveYield = _handleYieldBearingWithdrawal(lp, transferAmount, position);
                 } 
 
-                position.collateralAmount -= rewardAmount;
-                totalLPCollateral -= rewardAmount;
-                aggregatePoolReserves -= rewardAmount;
+                position.collateralAmount -= transferAmount;
+                totalLPCollateral -= transferAmount;
+                aggregatePoolReserves -= transferAmount;
 
-                reserveToken.transfer(liquidationInitiators[lp], rewardAmount + reserveYield);
+                reserveToken.transfer(liquidationInitiators[lp], transferAmount + reserveYield);
             }
-            emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, rewardAmount);
+            emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, transferAmount);
 
             if(position.liquidityCommitment == 0) {
                 _removeLP(lp);
