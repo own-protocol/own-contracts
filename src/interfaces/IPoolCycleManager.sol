@@ -255,7 +255,7 @@ interface IPoolCycleManager {
      * @notice Returns the cumulative pool interest paid per asset till the current cycle.
      * @param cycle Cycle index to query
      */
-    function interestIndex(uint256 cycle) external view returns (uint256);
+    function cumulativeInterestIndex(uint256 cycle) external view returns (uint256);
 
     /**
      * @notice Returns the interest amount accrued in the current cycle (interms of asset)

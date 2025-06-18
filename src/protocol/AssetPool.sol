@@ -367,7 +367,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         
         // Get the rebalance price from the pool cycle manager
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
-        uint256 interestIndex = poolCycleManager.interestIndex(requestCycle);
+        uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
         
         // Clear request
         delete userRequests[user];
@@ -522,7 +522,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 scaledAssetAmount = scaledAssetBalance[user];
         if (assetAmount == 0) return 0;
 
-        uint256 interestIndex = poolCycleManager.interestIndex(cycle);
+        uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(cycle);
         uint256 assetWithInterest = Math.mulDiv(scaledAssetAmount, interestIndex, PRECISION);
         if(assetWithInterest < assetAmount) return 0;
 

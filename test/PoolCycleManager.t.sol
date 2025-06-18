@@ -809,7 +809,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         updateOraclePrice(INITIAL_PRICE);
         
         // Record initial interest data
-        uint256 initialCycleInterest =cycleManager.interestIndex(cycleManager.cycleIndex());
+        uint256 initialCycleInterest =cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex());
         uint256 initialInterestAmount =cycleManager.cycleInterestAmount();
         uint256 initialAccrualTime =cycleManager.lastInterestAccrualTimestamp();
         
@@ -817,7 +817,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         cycleManager.initiateOnchainRebalance();
         
         // Verify interest was accrued
-        uint256 newCycleInterest = cycleManager.interestIndex(cycleManager.cycleIndex());
+        uint256 newCycleInterest = cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex());
         uint256 newInterestAmount = cycleManager.cycleInterestAmount();
         uint256 newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
         
