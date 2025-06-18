@@ -70,9 +70,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
     uint256 public lastInterestAccrualTimestamp;
 
     /**
-     * @notice Cumulative pool interest accrued over time (in Precision units) as of the current cycle.
+     * @notice Cumulative pool interest paid per asset till the current cycle.
      */
-    mapping (uint256 => uint256) public cyclePoolInterest;
+    mapping (uint256 => uint256) public interestIndex;
 
     /**
      * @notice Tracks the last cycle an lp rebalanced.
@@ -136,7 +136,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
-        cyclePoolInterest[cycleIndex] = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -257,6 +256,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, rebalancePrice, PRECISION);
             // Calculate the LP's share of the interest amount
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+
+            // Update the cycle interest index
+            interestIndex[cycleIndex] += lpCycleInterest;
+
             // Deduct interest from the pool and add to LP's collateral
             if (lpCycleInterest > 0) {
                 assetPool.deductInterest(lp, lpCycleInterest, false);
@@ -330,6 +333,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+            // Update the cycle interest index
+            interestIndex[cycleIndex] += lpCycleInterest;
             // Deduct interest from the pool and add to LP's collateral
             if (lpCycleInterest > 0) {
                 assetPool.deductInterest(lp, lpCycleInterest, false);
@@ -386,6 +391,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
+            // Update the cycle interest index
+            interestIndex[cycleIndex] += lpCycleInterest;
             // Deduct interest from the pool and add to LP's collateral
             if (lpCycleInterest > 0) {
                 assetPool.deductInterest(lp, lpCycleInterest, true);
@@ -441,7 +448,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
 
     /**
      * @notice Accrues interest based on the current rate, time elapsed, and cycle/rebalance periods
-     * @dev Updates cyclePoolInterest
+     * @dev Calculates cycleInterestAmount
      */
     function _accrueInterest() internal {
         uint256 currentTimestamp = block.timestamp;
@@ -460,15 +467,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         // Formula: interest = rate * timeElapsed / secondsPerYear
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
         
-        // Add interest to cumulative total
-        cyclePoolInterest[cycleIndex] = Math.mulDiv(cyclePoolInterest[cycleIndex], PRECISION + interest, PRECISION);
         // Calculate the interest amount in terms of asset
         cycleInterestAmount += _convertAssetToReserve(assetToken.totalSupply(), interest);
         
         // Update last accrual timestamp
         lastInterestAccrualTimestamp = currentTimestamp;
         
-        emit InterestAccrued(interest, cyclePoolInterest[cycleIndex], currentTimestamp);
+        emit InterestAccrued(interest, currentTimestamp);
     }
 
     // --------------------------------------------------------------------------------
@@ -521,6 +526,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         uint256 price = (cycleWeightedSum * PRECISION) / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
         cycleRebalancePrice[cycleIndex] = price;
         int256 finalRebalanceAmount = calculateRebalanceAmount(price);
+        // Calculate the interest index for the cycle
+        interestIndex[cycleIndex] = interestIndex[cycleIndex - 1] 
+            + Math.mulDiv(interestIndex[cycleIndex], reserveToAssetDecimalFactor * PRECISION, assetToken.totalSupply());
 
         assetPool.updateCycleData(price, finalRebalanceAmount);
 
@@ -530,7 +538,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
         cycleInterestAmount = 0;
-        cyclePoolInterest[cycleIndex] = cyclePoolInterest[cycleIndex - 1];
         cyclePriceHigh = 0;
         cyclePriceLow = 0;
         

@@ -75,12 +75,10 @@ interface IPoolCycleManager {
     /**
      * @notice Emitted when interest is accrued
      * @param interestAccrued Amount of interest accrued in this calculation
-     * @param cumulativeInterest Total cumulative interest after this accrual
      * @param timestamp Timestamp when interest was accrued
      */
     event InterestAccrued(
         uint256 interestAccrued,
-        uint256 cumulativeInterest,
         uint256 timestamp
     );
 
@@ -254,10 +252,10 @@ interface IPoolCycleManager {
     function cycleRebalancePrice(uint256 cycle) external view returns (uint256);
 
     /**
-     * @notice Returns the cumulative interest percent accrued in the pool as of the current cycle
+     * @notice Returns the cumulative pool interest paid per asset till the current cycle.
      * @param cycle Cycle index to query
      */
-    function cyclePoolInterest(uint256 cycle) external view returns (uint256);
+    function interestIndex(uint256 cycle) external view returns (uint256);
 
     /**
      * @notice Returns the interest amount accrued in the current cycle (interms of asset)
