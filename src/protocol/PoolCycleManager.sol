@@ -528,8 +528,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleRebalancePrice[cycleIndex] = price;
         int256 finalRebalanceAmount = calculateRebalanceAmount(price);
         // Calculate the interest index for the cycle
-        cumulativeInterestIndex[cycleIndex] = Math.mulDiv(cumulativeInterestIndex[cycleIndex], reserveToAssetDecimalFactor * PRECISION, assetToken.totalSupply());
-        cumulativeInterestIndex[cycleIndex] = cumulativeInterestIndex[cycleIndex] + cumulativeInterestIndex[cycleIndex - 1];
+        if (assetToken.totalSupply() == 0) {
+            cumulativeInterestIndex[cycleIndex] = cumulativeInterestIndex[cycleIndex - 1];
+        } else {
+            // Calculate the cumulative interest index for the cycle
+            cumulativeInterestIndex[cycleIndex] = Math.mulDiv(cumulativeInterestIndex[cycleIndex], reserveToAssetDecimalFactor * PRECISION, assetToken.totalSupply());
+            cumulativeInterestIndex[cycleIndex] = cumulativeInterestIndex[cycleIndex] + cumulativeInterestIndex[cycleIndex - 1];
+        }
 
         assetPool.updateCycleData(price, finalRebalanceAmount);
 
