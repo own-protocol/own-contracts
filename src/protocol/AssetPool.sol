@@ -511,7 +511,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Get interest debt for a user (in asset tokens)
+     * @notice Get interest debt for a user (in reserve tokens)
      * @param user User address
      * @param cycle Cycle index
      * @return interestDebt Amount of interest debt in reserve tokens
@@ -526,7 +526,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 assetWithInterest = Math.mulDiv(scaledAssetAmount, interestIndex, PRECISION);
         if(assetWithInterest < assetAmount) return 0;
 
-        return assetWithInterest - assetAmount;
+        return (assetWithInterest - assetAmount) / reserveToAssetDecimalFactor;
     }
 
     /**
@@ -764,8 +764,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         r.scaledAssetAmount = scaledAssetBalance[user];
         
         r.interestDebt = getInterestDebt(user, requestCycle);
-        // Calculate interest debt in reserve tokens
-        r.interestDebt = _convertAssetToReserve(r.interestDebt, rebalancePrice);
         
         // If partial redemption, calculate proportional interest debt
         if (positionAssetAmount > assetAmount) {

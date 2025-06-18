@@ -136,6 +136,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
+        interestIndex[0] = 1e18; // Initialize interest index for cycle 0
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -527,8 +528,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleRebalancePrice[cycleIndex] = price;
         int256 finalRebalanceAmount = calculateRebalanceAmount(price);
         // Calculate the interest index for the cycle
-        interestIndex[cycleIndex] = interestIndex[cycleIndex - 1] 
-            + Math.mulDiv(interestIndex[cycleIndex], reserveToAssetDecimalFactor * PRECISION, assetToken.totalSupply());
+        interestIndex[cycleIndex] = Math.mulDiv(interestIndex[cycleIndex], reserveToAssetDecimalFactor * PRECISION, assetToken.totalSupply());
+        interestIndex[cycleIndex] = interestIndex[cycleIndex] + interestIndex[cycleIndex - 1];
 
         assetPool.updateCycleData(price, finalRebalanceAmount);
 
