@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IAssetOracle} from "../interfaces/IAssetOracle.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -18,6 +19,7 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages LP liquidity requirements and registry for the asset pool
  */
 contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyGuard {
+    using SafeERC20 for IERC20Metadata;
     
     // Total liquidity committed by LPs
     uint256 public totalLPLiquidityCommited;
@@ -147,7 +149,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             _handleYieldBearingDeposit(msg.sender, requiredCollateral);
         } else {
             // Transfer required collateral
-            reserveToken.transferFrom(msg.sender, address(this), requiredCollateral);
+            reserveToken.safeTransferFrom(msg.sender, address(this), requiredCollateral);
         }
 
         uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
@@ -221,7 +223,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             _handleYieldBearingDeposit(lp, amount);
         } else {
             // Transfer required collateral
-            reserveToken.transferFrom(lp, address(this), amount);
+            reserveToken.safeTransferFrom(lp, address(this), amount);
         }
 
         lpPositions[lp].collateralAmount += amount;
@@ -266,7 +268,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
         aggregatePoolReserves -= amount;
-        reserveToken.transfer(msg.sender, amount + reserveYield);
+        reserveToken.safeTransfer(msg.sender, amount + reserveYield);
         
         emit CollateralReduced(msg.sender, amount + reserveYield);
     }
@@ -286,7 +288,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         position.interestAccrued = 0;
         aggregatePoolReserves -= interestAccrued;
-        reserveToken.transfer(msg.sender, interestAccrued + reserveYield);
+        reserveToken.safeTransfer(msg.sender, interestAccrued + reserveYield);
         
         emit InterestClaimed(msg.sender, interestAccrued + reserveYield);
     }
@@ -388,7 +390,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         totalLPCollateral -= amount;
         aggregatePoolReserves -= amount;
 
-        reserveToken.transfer(address(assetPool), amount + reserveYield);
+        reserveToken.safeTransfer(address(assetPool), amount + reserveYield);
     }
 
     /**
@@ -435,7 +437,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 totalLPCollateral -= transferAmount;
                 aggregatePoolReserves -= transferAmount;
 
-                reserveToken.transfer(liquidationInitiators[lp], transferAmount + reserveYield);
+                reserveToken.safeTransfer(liquidationInitiators[lp], transferAmount + reserveYield);
             }
             emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, transferAmount);
 
@@ -694,7 +696,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             position.collateralAmount = 0;
             totalLPCollateral -= collateralAmount;
             aggregatePoolReserves -= collateralAmount;
-            reserveToken.transfer(lp, collateralAmount + reserveYield);
+            reserveToken.safeTransfer(lp, collateralAmount + reserveYield);
 
             emit CollateralReduced(lp, collateralAmount);
         }
@@ -710,7 +712,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
             position.interestAccrued = 0;
             aggregatePoolReserves -= interestAmount;
-            reserveToken.transfer(lp, interestAmount + reserveYield);
+            reserveToken.safeTransfer(lp, interestAmount + reserveYield);
 
             emit InterestClaimed(lp, interestAmount);
         }
@@ -736,7 +738,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));
         
         // Transfer collateral from LP to this contract
-        reserveToken.transferFrom(lp, address(this), amount);
+        reserveToken.safeTransferFrom(lp, address(this), amount);
         
         uint256 yieldAccrued = poolStrategy.calculateYieldAccrued(
             aggregatePoolReserves,
@@ -820,7 +822,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         uint256 protocolFeeAmount = (protocolFee > 0) ? Math.mulDiv(amount, protocolFee, BPS) : 0;
             
         if (protocolFeeAmount > 0) {   
-            reserveToken.transfer(poolStrategy.feeRecipient(), protocolFeeAmount);
+            reserveToken.safeTransfer(poolStrategy.feeRecipient(), protocolFeeAmount);
             emit FeeDeducted(lp, protocolFeeAmount);
         }
 
