@@ -219,8 +219,8 @@ contract InterestAndFeeTest is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test interest debt calculation when user increases position
-     */
+    * @notice Test interest debt calculation when user increases position
+    */
     function testInterestDebt_UserIncreasesPosition() public {
         // Create medium utilization scenario
         _createUtilizationScenario(MEDIUM_UTILIZATION_TARGET);
@@ -267,6 +267,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         
         // Record state after second deposit
         uint256 secondCycleIndex = cycleManager.cycleIndex();
+        uint256 totalAssetAmount = assetToken.balanceOf(user1);
         
         // Advance time to accrue more interest
         vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD / 2);
@@ -277,28 +278,40 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         // Check interest debt accrued on combined position
         uint256 finalInterestDebt = assetPool.getInterestDebt(user1, secondCycleIndex);
         
-        // Interest on combined position should be greater than interest on initial position
-        assertGt(finalInterestDebt, firstInterestDebt, "Interest on combined position should be higher");
+        // Calculate expected interest debt
+        uint256 initialIndex = cycleManager.cumulativeInterestIndex(firstCycleIndex - 1);
+        uint256 secondIndex = cycleManager.cumulativeInterestIndex(secondCycleIndex - 1);
+        uint256 finalIndex = cycleManager.cumulativeInterestIndex(secondCycleIndex);
         
-        // Verify that interest accrued on increased position is higher than it would be on initial position alone
-        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
-        uint256 accrualPeriod = (INTEREST_ACCRUAL_PERIOD / 2) + poolStrategy.rebalanceLength();
-        uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
-        uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
+        // Calculate weighted user index after second deposit
+        uint256 weightedOld = Math.mulDiv(initialAssetAmount, initialIndex, totalAssetAmount);
+        uint256 weightedNew = Math.mulDiv(totalAssetAmount - initialAssetAmount, secondIndex, totalAssetAmount);
+        uint256 userIndexAfterDeposit = weightedOld + weightedNew;
         
-        uint256 expectedInterestOnInitial = Math.mulDiv(initialAssetAmount, effectiveRate, 1e18);
-        assertGt(finalInterestDebt, expectedInterestOnInitial * 3, "Interest debt should account for increased position");
+        // Expected interest debt = assetAmount * (finalIndex - userIndexAfterDeposit) / (PRECISION * reserveToAssetDecimalFactor)
+        uint256 expectedInterestDebt = Math.mulDiv(
+            totalAssetAmount,
+            finalIndex - userIndexAfterDeposit,
+            PRECISION * assetPool.reserveToAssetDecimalFactor()
+        );
+        
+        assertApproxEqRel(
+            finalInterestDebt,
+            expectedInterestDebt,
+            0.0001e18,
+            "Interest debt calculation incorrect for increased position"
+        );
     }
 
     /**
-     * @notice Test interest debt calculation when user partially decreases position
+     * @notice Test interest debt calculation when user reduces position
      */
-    function testInterestDebt_UserDecreasesPosition() public {
-        // Create medium utilization scenario
+    function testInterestDebt_UserReducesPosition() public {
+        // Create medium utilization scenario (~75%)
         _createUtilizationScenario(MEDIUM_UTILIZATION_TARGET);
         
-        // User1 initial deposit and claim
-        uint256 depositAmount = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT * 2, 6); // Larger initial deposit
+        // User1 deposits and claims assets
+        uint256 depositAmount = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
         uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
         
         vm.startPrank(user1);
@@ -316,57 +329,75 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         uint256 firstCycleIndex = cycleManager.cycleIndex();
         
         // Advance time to accrue some interest
-        vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD);
+        vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD / 2);
         
-        // Complete another cycle to record interest debt
-        completeCycleWithPriceChange(INITIAL_PRICE);
-        
-        // Check interest debt on full position
-        uint256 fullPositionInterestDebt = assetPool.getInterestDebt(user1, firstCycleIndex);
-        assertGt(fullPositionInterestDebt, 0, "Should have accrued interest on full position");
-        
-        // User1 redeems half of their assets
-        uint256 redeemAmount = initialAssetAmount / 2;
+        // User1 requests redemption for half of their position
+        uint256 redemptionAmount = initialAssetAmount / 2;
         
         vm.startPrank(user1);
-        assetToken.approve(address(assetPool), redeemAmount);
-        assetPool.redemptionRequest(redeemAmount);
+        // Approve AssetPool to spend xTSLA tokens for redemption
+        assetToken.approve(address(assetPool), redemptionAmount);
+        assetPool.redemptionRequest(redemptionAmount);
         vm.stopPrank();
         
-        // Complete a cycle
+        // Complete a cycle to process redemption
         completeCycleWithPriceChange(INITIAL_PRICE);
+        
+        // Check interest debt accrued on initial position
+        uint256 firstInterestDebt = assetPool.getInterestDebt(user1, firstCycleIndex);
+        assertGt(firstInterestDebt, 0, "Should have accrued interest on initial position");
         
         // Claim redemption
         vm.prank(user1);
         assetPool.claimReserve(user1);
         
-        // Record state after partial redemption
-        uint256 remainingAssetAmount = assetToken.balanceOf(user1);
-        assertEq(remainingAssetAmount, initialAssetAmount - redeemAmount, "Should have half the initial assets left");
-        
+        // Record state after redemption
         uint256 secondCycleIndex = cycleManager.cycleIndex();
+        uint256 remainingAssetAmount = assetToken.balanceOf(user1);
         
         // Advance time to accrue more interest
-        vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD);
+        vm.warp(block.timestamp + INTEREST_ACCRUAL_PERIOD / 2);
         
         // Complete another cycle
         completeCycleWithPriceChange(INITIAL_PRICE);
         
-        // Check interest debt on reduced position
-        uint256 reducedPositionInterestDebt = assetPool.getInterestDebt(user1, secondCycleIndex);
+        // Check interest debt accrued on remaining position
+        uint256 finalInterestDebt = assetPool.getInterestDebt(user1, secondCycleIndex);
         
-        // Interest on reduced position should be accruing at approximately half the rate
-        uint256 interestRate = poolStrategy.calculatePoolInterestRate(address(assetPool));
-        uint256 accrualPeriod = INTEREST_ACCRUAL_PERIOD * 2 + poolStrategy.rebalanceLength();
-        uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
-        uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
+        // Calculate expected interest debt
+        uint256 initialIndex = cycleManager.cumulativeInterestIndex(firstCycleIndex - 1);
+        uint256 secondIndex = cycleManager.cumulativeInterestIndex(secondCycleIndex - 1);
+        uint256 finalIndex = cycleManager.cumulativeInterestIndex(secondCycleIndex);
         
-        uint256 expectedInterestOnFull = Math.mulDiv(initialAssetAmount, effectiveRate, 1e18);
+        // Calculate interest debt for initial position (before redemption)
+        uint256 interestDebtBeforeRedemption = Math.mulDiv(
+            initialAssetAmount,
+            secondIndex - initialIndex,
+            PRECISION * assetPool.reserveToAssetDecimalFactor()
+        );
+        
+        // Calculate proportional interest debt paid during redemption
+        uint256 interestDebtPaid = Math.mulDiv(
+            interestDebtBeforeRedemption,
+            redemptionAmount,
+            initialAssetAmount
+        );
+        
+        // Calculate interest debt for remaining position
+        uint256 expectedInterestDebt = Math.mulDiv(
+            remainingAssetAmount,
+            finalIndex - secondIndex,
+            PRECISION * assetPool.reserveToAssetDecimalFactor()
+        );
+        
+        // Total expected interest debt is the remaining debt after redemption
+        uint256 totalExpectedInterestDebt = interestDebtBeforeRedemption - interestDebtPaid + expectedInterestDebt;
+        
         assertApproxEqRel(
-            reducedPositionInterestDebt * 2, 
-            expectedInterestOnFull,
-            0.1e18,
-            "Interest debt should account for partial redemption"
+            finalInterestDebt,
+            totalExpectedInterestDebt,
+            0.0001e18,
+            "Interest debt calculation incorrect for reduced position"
         );
     }
 
