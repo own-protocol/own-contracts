@@ -71,7 +71,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         uint256 postClaimCycleIndex = cycleManager.cycleIndex();
         
         // No interest debt yet as this is the first cycle after deposit
-        uint256 initialDebt = assetPool.getInterestDebt(user1, postClaimCycleIndex - 1);
+        uint256 initialDebt = assetPool.getInterestDebt(user1, postClaimCycleIndex);
         assertEq(initialDebt, 0, "No interest debt expected immediately after deposit");
         
         // Advance time to accrue interest
@@ -88,14 +88,17 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         completeCycleWithPriceChange(INITIAL_PRICE);
         
         // Check interest debt after 1 month
-        uint256 interestDebt = assetPool.getInterestDebt(user1, postClaimCycleIndex);
+        uint256 currentCycle = cycleManager.cycleIndex();
+        uint256 interestDebt = assetPool.getInterestDebt(user1, currentCycle);
+
+        // Calculate expected interest debt using cumulativeInterestIndex
+        uint256 currentCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(currentCycle);
+        uint256 initialCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(postClaimCycleIndex-1);
         
-        // Calculate expected interest for the period
-        // Convert annual rate to the accrual period (30 days) + rebalance length
-        uint256 accrualPeriod = INTEREST_ACCRUAL_PERIOD + poolStrategy.rebalanceLength();
-        uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
-        uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
-        uint256 expectedInterestDebt = Math.mulDiv(user1AssetAmount, effectiveRate, 1e18);
+        // Calculate expected asset growth due to interest
+        uint256 indexGrowth = currentCumulativeInterestIndex - initialCumulativeInterestIndex;
+        uint256 expectedAdditionalAssets = Math.mulDiv(user1AssetAmount, indexGrowth, PRECISION);
+        uint256 expectedInterestDebt = expectedAdditionalAssets / assetPool.reserveToAssetDecimalFactor();
         
         assertApproxEqRel(interestDebt, expectedInterestDebt, 0.0001e18, "Interest debt calculation incorrect for low utilization");
     }
@@ -143,13 +146,17 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         completeCycleWithPriceChange(INITIAL_PRICE);
         
         // Check interest debt after accrual period
-        uint256 interestDebt = assetPool.getInterestDebt(user1, postClaimCycleIndex);
+        uint256 currentCycle = cycleManager.cycleIndex();
+        uint256 interestDebt = assetPool.getInterestDebt(user1, currentCycle);
+
+        // Calculate expected interest debt using cumulativeInterestIndex
+        uint256 currentCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(currentCycle);
+        uint256 initialCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(postClaimCycleIndex-1);
         
-        // Calculate expected interest for the period
-        uint256 accrualPeriod = INTEREST_ACCRUAL_PERIOD + poolStrategy.rebalanceLength();
-        uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
-        uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
-        uint256 expectedInterestDebt = Math.mulDiv(user1AssetAmount, effectiveRate, 1e18);
+        // Calculate expected asset growth due to interest
+        uint256 indexGrowth = currentCumulativeInterestIndex - initialCumulativeInterestIndex;
+        uint256 expectedAdditionalAssets = Math.mulDiv(user1AssetAmount, indexGrowth, PRECISION);
+        uint256 expectedInterestDebt = expectedAdditionalAssets / assetPool.reserveToAssetDecimalFactor();
         
         assertApproxEqRel(interestDebt, expectedInterestDebt, 0.0001e18, "Interest debt calculation incorrect for medium utilization");
     }
@@ -196,13 +203,17 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         completeCycleWithPriceChange(INITIAL_PRICE);
         
         // Check interest debt after accrual period
-        uint256 interestDebt = assetPool.getInterestDebt(user1, postClaimCycleIndex);
+        uint256 currentCycle = cycleManager.cycleIndex();
+        uint256 interestDebt = assetPool.getInterestDebt(user1, currentCycle);
+
+        // Calculate expected interest debt using cumulativeInterestIndex
+        uint256 currentCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(currentCycle);
+        uint256 initialCumulativeInterestIndex = cycleManager.cumulativeInterestIndex(postClaimCycleIndex-1);
         
-        // Calculate expected interest for the period
-        uint256 accrualPeriod = INTEREST_ACCRUAL_PERIOD + poolStrategy.rebalanceLength();
-        uint256 accrualFactor = Math.mulDiv(accrualPeriod, 1e18, 365 days);
-        uint256 effectiveRate = Math.mulDiv(interestRate, accrualFactor, BPS);
-        uint256 expectedInterestDebt = Math.mulDiv(user1AssetAmount, effectiveRate, 1e18);
+        // Calculate expected asset growth due to interest
+        uint256 indexGrowth = currentCumulativeInterestIndex - initialCumulativeInterestIndex;
+        uint256 expectedAdditionalAssets = Math.mulDiv(user1AssetAmount, indexGrowth, PRECISION);
+        uint256 expectedInterestDebt = expectedAdditionalAssets / assetPool.reserveToAssetDecimalFactor();
         
         assertApproxEqRel(interestDebt, expectedInterestDebt, 0.0001e18, "Interest debt calculation incorrect for high utilization");
     }
@@ -389,12 +400,6 @@ contract InterestAndFeeTest is ProtocolTestUtils {
             }
         }
         
-        // Convert total interest debt from asset to reserve tokens
-        uint256 convertedInterestDebt = _convertAssetToReserve(
-            totalUserInterestDebt, 
-            cycleManager.cycleRebalancePrice(currentCycle - 1)
-        );
-        
         // Record fee recipient balance after rebalance
         uint256 feeRecipientBalanceAfter = reserveToken.balanceOf(feeRecipient);
         uint256 actualFeeCollected = feeRecipientBalanceAfter - feeRecipientBalanceBefore;
@@ -406,7 +411,7 @@ contract InterestAndFeeTest is ProtocolTestUtils {
         
         // Verify interest balance across the system
         assertApproxEqRel(
-            convertedInterestDebt - actualFeeCollected,
+            totalUserInterestDebt - actualFeeCollected,
             totalLPInterest,
             0.0001e18, 
             "Total interest debt accrued should match total interest amount"

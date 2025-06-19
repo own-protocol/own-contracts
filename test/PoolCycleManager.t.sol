@@ -809,19 +809,25 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         updateOraclePrice(INITIAL_PRICE);
         
         // Record initial interest data
-        uint256 initialCycleInterest =cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex());
-        uint256 initialInterestAmount =cycleManager.cycleInterestAmount();
-        uint256 initialAccrualTime =cycleManager.lastInterestAccrualTimestamp();
-        
+        uint256 initialInterestIndex = cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex()-1);
+        uint256 initialInterestAmount = cycleManager.cycleInterestAmount();
+        uint256 initialAccrualTime = cycleManager.lastInterestAccrualTimestamp();
+
         vm.prank(owner);
         cycleManager.initiateOnchainRebalance();
-        
-        // Verify interest was accrued
-        uint256 newCycleInterest = cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex());
+
         uint256 newInterestAmount = cycleManager.cycleInterestAmount();
-        uint256 newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
+
+        vm.prank(liquidityProvider1);
+        cycleManager.rebalancePool(liquidityProvider1, INITIAL_PRICE);
         
-        assertGt(newCycleInterest, initialCycleInterest, "Cycle interest should increase again");
+        vm.prank(liquidityProvider2);
+        cycleManager.rebalancePool(liquidityProvider2, INITIAL_PRICE);
+        
+        uint256 newCycleInterest = cycleManager.cumulativeInterestIndex(cycleManager.cycleIndex()-1);
+        uint256 newAccrualTime = cycleManager.lastInterestAccrualTimestamp();
+
+        assertGt(newCycleInterest, initialInterestIndex, "Cycle interest should increase again");
         assertGt(newInterestAmount, initialInterestAmount, "Cycle interest amount should increase again");
         assertGt(newAccrualTime, initialAccrualTime, "Interest accrual timestamp should be updated again");
     }
