@@ -70,9 +70,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
     uint256 public lastInterestAccrualTimestamp;
 
     /**
-     * @notice Cumulative pool interest accrued over time (in Precision units) as of the current cycle.
+     * @notice Cumulative pool interest paid per asset till the current cycle.
      */
-    mapping (uint256 => uint256) public cyclePoolInterest;
+    mapping (uint256 => uint256) public cumulativeInterestIndex;
 
     /**
      * @notice Tracks the last cycle an lp rebalanced.
@@ -136,7 +136,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleState = CycleState.POOL_ACTIVE;
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
-        cyclePoolInterest[cycleIndex] = 1e18;
+        cumulativeInterestIndex[1] = 1e18; // Initialize interest index for cycle 1
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -441,7 +441,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
 
     /**
      * @notice Accrues interest based on the current rate, time elapsed, and cycle/rebalance periods
-     * @dev Updates cyclePoolInterest
+     * @dev Calculates cycleInterestAmount
      */
     function _accrueInterest() internal {
         uint256 currentTimestamp = block.timestamp;
@@ -460,15 +460,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         // Formula: interest = rate * timeElapsed / secondsPerYear
         uint256 interest = Math.mulDiv(rateWithPrecision, timeElapsed, SECONDS_PER_YEAR);
         
-        // Add interest to cumulative total
-        cyclePoolInterest[cycleIndex] = Math.mulDiv(cyclePoolInterest[cycleIndex], PRECISION + interest, PRECISION);
         // Calculate the interest amount in terms of asset
         cycleInterestAmount += _convertAssetToReserve(assetToken.totalSupply(), interest);
         
         // Update last accrual timestamp
         lastInterestAccrualTimestamp = currentTimestamp;
         
-        emit InterestAccrued(interest, cyclePoolInterest[cycleIndex], currentTimestamp);
+        emit InterestAccrued(interest, currentTimestamp);
     }
 
     // --------------------------------------------------------------------------------
@@ -521,6 +519,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         uint256 price = (cycleWeightedSum * PRECISION) / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
         cycleRebalancePrice[cycleIndex] = price;
         int256 finalRebalanceAmount = calculateRebalanceAmount(price);
+        // Calculate the cumulative interest index
+        if (assetToken.totalSupply() > 0) {
+            cumulativeInterestIndex[cycleIndex] += Math.mulDiv(cycleInterestAmount * reserveToAssetDecimalFactor, price, assetToken.totalSupply());
+        }
 
         assetPool.updateCycleData(price, finalRebalanceAmount);
 
@@ -530,9 +532,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
         cycleInterestAmount = 0;
-        cyclePoolInterest[cycleIndex] = cyclePoolInterest[cycleIndex - 1];
         cyclePriceHigh = 0;
         cyclePriceLow = 0;
+        cumulativeInterestIndex[cycleIndex] = cumulativeInterestIndex[cycleIndex - 1];
         
         emit CycleStarted(cycleIndex, block.timestamp);
     }

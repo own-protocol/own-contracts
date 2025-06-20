@@ -60,7 +60,6 @@ interface IAssetPool {
         uint256 reserveAmount;
         uint256 depositAmount;
         uint256 collateralAmount;
-        uint256 scaledAssetAmount;
         uint256 interestDebt;
     }
 

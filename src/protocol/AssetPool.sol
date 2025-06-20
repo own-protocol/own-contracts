@@ -76,9 +76,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     mapping(address => address) public liquidationInitiators;
 
     /**
-     * @notice Scaled asset balance for interest calculation
+     * @notice Interest index for each user, used to calculate interest on their positions
      */
-    mapping(address => uint256) private scaledAssetBalance;
+    mapping(address => uint256) private userInterestIndex;
 
     /**
      * @notice Scaled reserve balance for interest calculation
@@ -357,35 +357,45 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      */
     function claimAsset(address user) external nonReentrant {
         _requireActiveOrHaltedPool();
+
         UserRequest storage request = userRequests[user];
+        if (
+            request.requestCycle >= poolCycleManager.cycleIndex() ||
+            request.requestType != RequestType.DEPOSIT
+        ) revert NothingToClaim();
+
+        // Cache request fields
         uint256 amount = request.amount;
         uint256 collateralAmount = request.collateralAmount;
         uint256 requestCycle = request.requestCycle;
-        
-        if (requestCycle >= poolCycleManager.cycleIndex()) revert NothingToClaim();
-        if (request.requestType != RequestType.DEPOSIT) revert NothingToClaim();
-        
-        // Get the rebalance price from the pool cycle manager
-        uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
-        uint256 poolInterest = poolCycleManager.cyclePoolInterest(requestCycle);
-        
-        // Clear request
+
+        // Clear request early to free stack
         delete userRequests[user];
 
-        UserPosition storage position = userPositions[user];
-        
+        uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
+        uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
         uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
-        uint256 scaledAssetAmount = Math.mulDiv(assetAmount, PRECISION, poolInterest);
 
-        // Update user's position
-        position.assetAmount += assetAmount;
+        UserPosition storage position = userPositions[user];
+        uint256 oldPrincipal = position.assetAmount;
+        uint256 newPrincipal = oldPrincipal + assetAmount;
+
+        uint256 newUserIndex;
+        {
+            // Isolate newUserIndex computation to limit locals in outer scope
+            uint256 uIndex = userInterestIndex[user];
+            uint256 weightedOld = (oldPrincipal == 0) ? 0 : Math.mulDiv(oldPrincipal, uIndex, newPrincipal);
+            uint256 weightedNew = Math.mulDiv(assetAmount, interestIndex, newPrincipal);
+            newUserIndex = (oldPrincipal == 0) ? interestIndex : weightedOld + weightedNew;
+        }
+
+        // Update user state
+        position.assetAmount = newPrincipal;
         position.depositAmount += amount;
         position.collateralAmount += collateralAmount;
-        scaledAssetBalance[user] += scaledAssetAmount;
-        
-        // Transfer asset tokens to user
+        userInterestIndex[user] = newUserIndex;
+
         _safeTransferBalance(user, assetAmount, true);
-        
         emit AssetClaimed(user, assetAmount, requestCycle);
     }
 
@@ -421,12 +431,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         if(position.assetAmount == amount) {
             delete userPositions[user];
-            scaledAssetBalance[user] = 0;
         } else {
             position.assetAmount -= amount;
             position.depositAmount -= r.depositAmount;
             position.collateralAmount -= r.collateralAmount;
-            scaledAssetBalance[user] -= r.scaledAssetAmount;
         }
 
         totalAmount -= r.interestDebt;
@@ -486,12 +494,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         if(position.assetAmount == amount) {
             delete userPositions[msg.sender];
-            scaledAssetBalance[msg.sender] = 0;
         } else {
             position.assetAmount -= amount;
             position.depositAmount -= r.depositAmount;
             position.collateralAmount -= r.collateralAmount;
-            scaledAssetBalance[msg.sender] -= r.scaledAssetAmount;
         }
         // Update total user deposits and collateral
         totalUserDeposits -= r.depositAmount;
@@ -511,7 +517,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Get interest debt for a user (in asset tokens)
+     * @notice Get interest debt for a user (in reserve tokens)
      * @param user User address
      * @param cycle Cycle index
      * @return interestDebt Amount of interest debt in reserve tokens
@@ -519,14 +525,14 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     function getInterestDebt(address user, uint256 cycle) public view returns (uint256 interestDebt) {
         UserPosition storage position = userPositions[user];
         uint256 assetAmount = position.assetAmount;
-        uint256 scaledAssetAmount = scaledAssetBalance[user];
+        uint256 userIndex = userInterestIndex[user];
         if (assetAmount == 0) return 0;
 
-        uint256 cycleInterest = poolCycleManager.cyclePoolInterest(cycle);
-        uint256 assetWithInterest = Math.mulDiv(scaledAssetAmount, cycleInterest, PRECISION);
-        if(assetWithInterest < assetAmount) return 0;
+        uint256 poolIndex = poolCycleManager.cumulativeInterestIndex(cycle);
+        if (userIndex == 0 || poolIndex <= userIndex) return 0;
+        uint256 debt = Math.mulDiv(assetAmount, poolIndex - userIndex, PRECISION * reserveToAssetDecimalFactor);
 
-        return assetWithInterest - assetAmount;
+        return debt;
     }
 
     /**
@@ -761,18 +767,13 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 positionAssetAmount = position.assetAmount;
         r.depositAmount = position.depositAmount;
         r.collateralAmount = position.collateralAmount;
-        r.scaledAssetAmount = scaledAssetBalance[user];
-        
         r.interestDebt = getInterestDebt(user, requestCycle);
-        // Calculate interest debt in reserve tokens
-        r.interestDebt = _convertAssetToReserve(r.interestDebt, rebalancePrice);
         
         // If partial redemption, calculate proportional interest debt
         if (positionAssetAmount > assetAmount) {
             r.interestDebt = Math.mulDiv(r.interestDebt, assetAmount, positionAssetAmount);
             r.depositAmount = Math.mulDiv(r.depositAmount, assetAmount, positionAssetAmount);
             r.collateralAmount = Math.mulDiv(r.collateralAmount, assetAmount, positionAssetAmount);
-            r.scaledAssetAmount = Math.mulDiv(r.scaledAssetAmount, assetAmount, positionAssetAmount);
         }
         
         return r;
