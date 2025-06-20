@@ -6,6 +6,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
 import {IPoolLiquidityManager} from "../interfaces/IPoolLiquidityManager.sol";
@@ -21,6 +22,9 @@ import {xToken} from "./xToken.sol";
  * @dev Handles the lifecycle of user positions and calculates interest based on pool utilization
  */
 contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
+    using SafeERC20 for IERC20Metadata;
+    using SafeERC20 for IXToken;
+
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -165,7 +169,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
                 address liquidationInitiator = liquidationInitiators[user];
                 cycleTotalRedemptions -= requestAmount;
                 // Refund the liquidator's tokens
-                assetToken.transfer(liquidationInitiator, requestAmount);
+                assetToken.safeTransfer(liquidationInitiator, requestAmount);
 
                 delete userRequests[user];
                 delete liquidationInitiators[user];
@@ -206,7 +210,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         aggregatePoolReserves -= amount;
         
         // Transfer collateral to user
-        reserveToken.transfer(msg.sender, amount + reserveYield);
+        reserveToken.safeTransfer(msg.sender, amount + reserveYield);
         
         emit CollateralWithdrawn(msg.sender, amount + reserveYield);
     }
@@ -277,7 +281,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 currentCycle = poolCycleManager.cycleIndex();
         
         // Transfer asset tokens from user to pool
-        assetToken.transferFrom(msg.sender, address(this), amount);
+        assetToken.safeTransferFrom(msg.sender, address(this), amount);
         
         // Update request state
         request.requestType = RequestType.REDEEM;
@@ -326,7 +330,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             if(request.amount >= amount) revert BetterLiquidationRequestExists();
             cycleTotalRedemptions -= request.amount;
             // Refund the previous liquidator's tokens
-            assetToken.transfer(liquidationInitiators[user], request.amount);
+            assetToken.safeTransfer(liquidationInitiators[user], request.amount);
             emit LiquidationCancelled(user, liquidationInitiators[user], request.amount);
 
         } else if (request.requestType != RequestType.NONE) {
@@ -336,7 +340,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         
         uint256 currentCycle = poolCycleManager.cycleIndex();
         // Transfer xTokens from liquidator to pool
-        assetToken.transferFrom(msg.sender, address(this), amount);
+        assetToken.safeTransferFrom(msg.sender, address(this), amount);
         
         // Create the liquidation request
         request.requestType = RequestType.LIQUIDATE;
@@ -569,10 +573,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (isSettle) {
             poolLiquidityManager.addToCollateral(lp, amount);    
             // Transfer the rebalance amount to the liquidity manager
-            reserveToken.transfer(address(poolLiquidityManager), amount);  
+            reserveToken.safeTransfer(address(poolLiquidityManager), amount);  
         } else {
             // Transfer the rebalance amount to the LP
-            reserveToken.transfer(lp, amount);
+            reserveToken.safeTransfer(lp, amount);
         }
     }
 
@@ -595,13 +599,13 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
        if (isSettle) {
             // During settlement, all interest goes to the protocol as penalty
-            reserveToken.transfer(poolStrategy.feeRecipient(), amount);
+            reserveToken.safeTransfer(poolStrategy.feeRecipient(), amount);
             emit FeeDeducted(lp, amount);
         } else {
             uint256 lpCycleInterest = _deductProtocolFee(lp, amount);
             poolLiquidityManager.addToInterest(lp, lpCycleInterest);
             // Transfer remaining interest to liquidity manager for the LP
-            reserveToken.transfer(address(poolLiquidityManager), lpCycleInterest);
+            reserveToken.safeTransfer(address(poolLiquidityManager), lpCycleInterest);
         }
     }
 
@@ -682,7 +686,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (poolStrategy.isYieldBearing()) {
             uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));
             // Transfer collateral from user to this contract
-            reserveToken.transferFrom(user, address(this), amount);
+            reserveToken.safeTransferFrom(user, address(this), amount);
             
             uint256 yieldAccrued = poolStrategy.calculateYieldAccrued(
                 aggregatePoolReserves, 
@@ -697,7 +701,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             scaledReserveBalance[user] += Math.mulDiv(amount, PRECISION, reserveYieldAccrued);
         } else {
             // Transfer collateral from user to this contract
-            reserveToken.transferFrom(user, address(this), amount);
+            reserveToken.safeTransferFrom(user, address(this), amount);
         }
     }
 
@@ -790,7 +794,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 protocolFeeAmount = (protocolFee > 0) ? Math.mulDiv(amount, protocolFee, BPS) : 0;
             
         if (protocolFeeAmount > 0) {   
-            reserveToken.transfer(poolStrategy.feeRecipient(), protocolFeeAmount);
+            reserveToken.safeTransfer(poolStrategy.feeRecipient(), protocolFeeAmount);
             emit FeeDeducted(user, protocolFeeAmount);
         }
 
@@ -807,9 +811,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 balance = isAsset ? assetToken.balanceOf(address(this)) : reserveToken.balanceOf(address(this));
         uint256 transferAmount = balance < amount ? balance : amount;
         if (isAsset) {
-            assetToken.transfer(to, transferAmount);
+            assetToken.safeTransfer(to, transferAmount);
         } else {
-            reserveToken.transfer(to, transferAmount);
+            reserveToken.safeTransfer(to, transferAmount);
         }
     }
 

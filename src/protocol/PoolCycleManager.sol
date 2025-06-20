@@ -6,6 +6,8 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import "openzeppelin-contracts/contracts/utils/Multicall.sol";
 import {IPoolCycleManager} from "../interfaces/IPoolCycleManager.sol";
 import {IAssetPool} from "../interfaces/IAssetPool.sol";
 import {IXToken} from "../interfaces/IXToken.sol";
@@ -19,7 +21,9 @@ import {PoolStorage} from "./PoolStorage.sol";
  * @notice Manages the lifecycle of operational cycles in the protocol
  * @dev Handles cycle transitions and LP rebalancing operations
  */
-contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
+contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall {
+    using SafeERC20 for IERC20Metadata;
+
     // --------------------------------------------------------------------------------
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
@@ -235,7 +239,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable {
             
             if (amount > 0) {
                 // Transfer funds from LP's wallet to the pool
-                reserveToken.transferFrom(lp, address(assetPool), amount);
+                reserveToken.safeTransferFrom(lp, address(assetPool), amount);
             }
             
         } else if (rebalanceAmount < 0) {
