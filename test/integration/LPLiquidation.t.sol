@@ -158,7 +158,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         assertEq(request.requestCycle, cycleManager.cycleIndex(), "Request cycle should match current cycle");
         
         // Assert liquidator is recorded
-        address liquidationInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        address liquidationInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(liquidationInitiator, liquidator, "Liquidation initiator should be recorded");     
     }
 
@@ -217,7 +217,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify first liquidation request
-        address firstInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        address firstInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(firstInitiator, liquidator, "First liquidator should be recorded");
         
         // Second liquidator attempts to liquidate the same LP
@@ -230,7 +230,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify first liquidator still recorded
-        address currentInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        address currentInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(currentInitiator, liquidator, "First liquidator should still be recorded");
         
         // Get updated request to verify amount
@@ -345,7 +345,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         assertEq(uint(request.requestType), uint(IPoolLiquidityManager.RequestType.NONE), "Request should be cancelled");
          
         // Verify liquidation initiator was cleared
-        address liquidationInitiator = liquidityManager.getLPLiquidationIntiator(liquidityProvider1);
+        address liquidationInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(liquidationInitiator, address(0), "Liquidation initiator should be cleared");
     }
 
