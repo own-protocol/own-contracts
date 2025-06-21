@@ -30,7 +30,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Combined reserve balance of the liquidity manager (including collateral and interest)
     uint256 public aggregatePoolReserves;
     
-    // Number of registered LPs
+    // Number of acitve LPs
     uint256 public lpCount;
 
     // Add liquidity requests for the current cycle
@@ -47,6 +47,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     
     // Mapping to check if an address is a registered LP
     mapping(address => bool) public isLP;
+
+    // Mapping to track active LPs
+    mapping(address => bool) public isLPActive;
 
     // Mapping to track LP delegates
     mapping(address => address) public lpDelegates;
@@ -162,6 +165,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             if (request.requestType != RequestType.NONE) revert RequestPending();              
         } else {
             isLP[msg.sender] = true;
+            isLPActive[msg.sender] = true;
             lpCount++;
 
             emit LPAdded(msg.sender, amount, requiredCollateral);
@@ -326,8 +330,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice When the pool is halted exit pool
      */
     function exitPool() external nonReentrant onlyRegisteredLP {
-
-        if (!_isPoolHalted()) revert InvalidCycleState();
+        if (!_isPoolHalted() && isLPActive[msg.sender]) revert InvalidCycleState();
         _removeLP(msg.sender);
     }
 
@@ -415,7 +418,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             emit LiquidityReduced(lp, request.requestAmount);
 
             if(position.liquidityCommitment == 0) {
-                _removeLP(lp);
+                lpCount--;
+                isLPActive[lp] = false;
             }
         } else if (request.requestType == RequestType.LIQUIDATE) {
             // Transfer liquidation reward to liquidator
@@ -437,12 +441,26 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 totalLPCollateral -= transferAmount;
                 aggregatePoolReserves -= transferAmount;
 
-                reserveToken.safeTransfer(liquidationInitiators[lp], transferAmount + reserveYield);
+                // Transfer the reward to the liquidator using low-level call to handle transfer failures
+                (bool success, bytes memory data) =
+                    address(reserveToken).call(
+                        abi.encodeWithSelector(IERC20.transfer.selector, liquidationInitiators[lp], transferAmount + reserveYield)
+                    );
+                
+                // Check if transfer succeeded (handles tokens that return false or no return value)
+                bool transferSucceeded = success && (data.length == 0 || abi.decode(data, (bool)));
+
+                // If transfer failed, send to fee recipient instead
+                if (!transferSucceeded) {
+                    reserveToken.safeTransfer(poolStrategy.feeRecipient(), transferAmount + reserveYield);
+                }
             }
             emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, transferAmount);
 
             if(position.liquidityCommitment == 0) {
-                _removeLP(lp);
+                lpCount--;
+                isLPActive[lp] = false;
+                delete liquidationInitiators[lp]; // Clear liquidator
             }
         }
         
@@ -692,10 +710,14 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             emit InterestClaimed(lp, interestAmount);
         }
         
+        // If LP has liquidity commitment, reduce the count. If the commitment is zero, lp count is already reduced
+        if (getLPLiquidityCommitment(lp) > 0) {
+            lpCount--;
+            isLPActive[lp] = false;
+        }
+
         // Mark LP as removed
         isLP[lp] = false;
-        lpCount--;
-        
         // Clean up storage
         delete lpPositions[lp];
         // We keep lpRequests for historical reference

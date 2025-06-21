@@ -408,6 +408,13 @@ interface IPoolLiquidityManager {
      * @return bool True if the address is a registered LP
      */
     function isLP(address lp) external view returns (bool);
+
+    /**
+     * @notice Check if an LP is active
+     * @param lp The address of the LP
+     * @return bool True if the LP is active
+     */
+    function isLPActive(address lp) external view returns (bool);
     
     /**
      * @notice Returns the number of active LPs

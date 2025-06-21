@@ -407,9 +407,9 @@ contract ReserveTokenYield is ProtocolTestUtils {
     }
     
     /**
-     * @notice Test removing LP with yield accrual
+     * @notice Test exit LP inactive by reducing liquidity with yield accrued
      */
-    function testRemoveLPWithYield() public {
+    function testExitLPWithYield() public {
         // Get LP's current position
         IPoolLiquidityManager.LPPosition memory initialPosition = liquidityManager.getLPPosition(liquidityProvider1);
         uint256 initialCollateral = initialPosition.collateralAmount;
@@ -425,18 +425,20 @@ contract ReserveTokenYield is ProtocolTestUtils {
         vm.startPrank(liquidityProvider1);
         liquidityManager.reduceLiquidity(initialLiquidity);
         vm.stopPrank();
-        
-        uint256 balanceBeforeExit = yieldToken.balanceOf(liquidityProvider1);
 
+        uint256 balanceBeforeExit = yieldToken.balanceOf(liquidityProvider1);
+    
         // Complete cycle to process the request
         completeCycleWithPriceChange(INITIAL_PRICE);
-        
-        // Check LP is removed and collateral is returned with yield
-        
-        // LP is automatically removed when liquidity is reduced to zero
-        bool isStillLP = liquidityManager.isLP(liquidityProvider1);
-        assertFalse(isStillLP, "LP should be removed after reducing all liquidity");
-        
+    
+        // LP should be inactive now
+        bool isLPActive = liquidityManager.isLPActive(liquidityProvider1);
+        assertFalse(isLPActive, "LP should be inactive after reducing liquidity to zero");
+
+        vm.startPrank(liquidityProvider1);
+        liquidityManager.exitPool();
+        vm.stopPrank();
+
         // Verify LP received collateral plus yield
         uint256 receivedAmount = yieldToken.balanceOf(liquidityProvider1) - balanceBeforeExit;
         assertGt(receivedAmount, initialCollateral, "LP should receive collateral plus yield");
