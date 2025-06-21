@@ -404,10 +404,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
-        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
         IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
         uint256 lpCollateral = position.collateralAmount;
+
+        uint256 baseCollateral = Math.mulDiv(position.liquidityCommitment, lpBaseCollateralRatio, BPS);
+        if (lpCollateral < baseCollateral) return 1;
         
+        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
         uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
         uint256 reqLiquidity = Math.mulDiv(lpAssetValue, lpLiquidationThreshold, BPS);
         
