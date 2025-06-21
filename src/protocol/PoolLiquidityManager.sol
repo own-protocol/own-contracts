@@ -46,7 +46,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     mapping(address => LPPosition) private lpPositions;
     
     // Mapping to check if an address is a registered LP
-    mapping(address => bool) public registeredLPs;
+    mapping(address => bool) public isLP;
 
     // Mapping to track LP delegates
     mapping(address => address) public lpDelegates;
@@ -84,7 +84,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Modifier to ensure the caller is a registered LP
      */
     modifier onlyRegisteredLP() {
-        if (!registeredLPs[msg.sender]) revert NotRegisteredLP();
+        if (!isLP[msg.sender]) revert NotRegisteredLP();
         _;
     }
 
@@ -157,11 +157,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         LPPosition storage position = lpPositions[msg.sender]; 
         
-        if (registeredLPs[msg.sender]) {
+        if (isLP[msg.sender]) {
             LPRequest storage request = lpRequests[msg.sender];
             if (request.requestType != RequestType.NONE) revert RequestPending();              
         } else {
-            registeredLPs[msg.sender] = true;
+            isLP[msg.sender] = true;
             lpCount++;
 
             emit LPAdded(msg.sender, amount, requiredCollateral);
@@ -337,7 +337,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param amount Amount to add
      */
     function addToInterest(address lp, uint256 amount) external onlyAssetPool {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        if (!isLP[lp]) revert NotRegisteredLP();
 
         if (poolStrategy.isYieldBearing()) {
             _updateScaledReserveBalance(lp, amount);
@@ -356,7 +356,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param amount Amount to add
      */
     function addToCollateral(address lp, uint256 amount) external onlyAssetPool {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        if (!isLP[lp]) revert NotRegisteredLP();
 
         if (poolStrategy.isYieldBearing()) {
             _updateScaledReserveBalance(lp, amount);
@@ -376,7 +376,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param amount Amount to deduct
      */
     function deductFromCollateral(address lp, uint256 amount) external onlyPoolCycleManager {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        if (!isLP[lp]) revert NotRegisteredLP();
         
         LPPosition storage position = lpPositions[lp];
         if (position.collateralAmount < amount) revert InvalidAmount();
@@ -399,7 +399,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP
      */
     function resolveRequest(address lp) external onlyPoolCycleManager {
-        if (!registeredLPs[lp]) revert NotRegisteredLP();
+        if (!isLP[lp]) revert NotRegisteredLP();
         
         LPRequest storage request = lpRequests[lp];
         LPPosition storage position = lpPositions[lp];
@@ -479,7 +479,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP
      */
     function getLPAssetHoldingValue(address lp) public view returns (uint256) {
-        if (!registeredLPs[lp]) return 0;
+        if (!isLP[lp]) return 0;
         
         uint256 poolValue = assetPool.getUtilisedLiquidity();
         uint256 lpShare = getLPLiquidityShare(lp);
@@ -493,7 +493,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP
      */
     function getLPLiquidityShare(address lp) public view returns (uint256) {
-        if (!registeredLPs[lp]) return 0;
+        if (!isLP[lp]) return 0;
         // If no total liquidity, return 0
         if (totalLPLiquidityCommited == 0) return 0;
         return Math.mulDiv(lpPositions[lp].liquidityCommitment, PRECISION, totalLPLiquidityCommited);
@@ -504,7 +504,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP
      */
     function getLPAssetShare(address lp) public view returns (uint256) {
-        if (!registeredLPs[lp]) return 0;
+        if (!isLP[lp]) return 0;
         // If no total liquidity, return 0
         if (totalLPLiquidityCommited == 0) return 0;
         uint256 assetSupply = assetToken.totalSupply();
@@ -519,7 +519,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      */
     function getLPCycleAssetShare(address lp, uint256 expectedRebalancePrice) public view returns (uint256) {
         // If not a registered LP or no request pending, return current share
-        if (!registeredLPs[lp]) return 0;
+        if (!isLP[lp]) return 0;
         // If rebalance price is zero, revert
         if (expectedRebalancePrice == 0) revert InvalidAmount();
         
@@ -595,31 +595,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function getLPRequest(address lp) public view returns (LPRequest memory) {
         return lpRequests[lp];
     }
-
-    /**
-     * @notice Get LP's current liquidation initiator
-     * @param lp Address of the LP
-     */
-    function getLPLiquidationIntiator(address lp) public view returns (address) {
-        return liquidationInitiators[lp];
-    }
-
-    /**
-     * @notice Check if an address is a registered LP
-     * @param lp The address to check
-     * @return bool True if the address is a registered LP
-     */
-    function isLP(address lp) public view returns (bool) {
-        return registeredLPs[lp];
-    }
-    
-    /**
-     * @notice Returns the number of LPs registered
-     * @return uint256 The number of registered LPs
-     */
-    function getLPCount() public view returns (uint256) {
-        return lpCount;
-    }
     
     /**
      * @notice Returns the current liquidity commited by the LP
@@ -652,7 +627,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param liquidationAmount Amount of liquidity to liquidate
      */
     function _validateLiquidation(address lp, uint256 liquidationAmount) internal view {
-        if (!registeredLPs[lp] || lp == msg.sender) revert InvalidLiquidation();
+        if (!isLP[lp] || lp == msg.sender) revert InvalidLiquidation();
         if (liquidationAmount == 0) revert InvalidAmount();
 
         if (!_isPoolActive()) revert InvalidCycleState();
@@ -718,7 +693,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
         
         // Mark LP as removed
-        registeredLPs[lp] = false;
+        isLP[lp] = false;
         lpCount--;
         
         // Clean up storage

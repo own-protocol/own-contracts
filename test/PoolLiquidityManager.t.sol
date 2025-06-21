@@ -69,7 +69,7 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         
         // Verify LP is now registered
         assertTrue(liquidityManager.isLP(newLP), "LP should be registered after adding liquidity");
-        assertEq(liquidityManager.getLPCount(), 3, "LP count should increase to 3");
+        assertEq(liquidityManager.lpCount(), 3, "LP count should increase to 3");
         
         // Verify LP has pending liquidity request
         IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(newLP);
@@ -116,27 +116,27 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Initial LP count should be 2 (from setup)
-        assertEq(liquidityManager.getLPCount(), 2, "Initial LP count should be 2");
+        assertEq(liquidityManager.lpCount(), 2, "Initial LP count should be 2");
         
         // Add first new LP
         vm.startPrank(newLP1);
         liquidityManager.addLiquidity(liquidityAmount);
         vm.stopPrank();
         
-        assertEq(liquidityManager.getLPCount(), 3, "LP count should increase to 3");
+        assertEq(liquidityManager.lpCount(), 3, "LP count should increase to 3");
         
         // Add second new LP
         vm.startPrank(newLP2);
         liquidityManager.addLiquidity(liquidityAmount);
         vm.stopPrank();
         
-        assertEq(liquidityManager.getLPCount(), 4, "LP count should increase to 4");
+        assertEq(liquidityManager.lpCount(), 4, "LP count should increase to 4");
         
         // Complete a cycle to process the liquidity requests
         completeCycleWithPriceChange(INITIAL_PRICE);
         
         // Verify LP count remains correct after cycle
-        assertEq(liquidityManager.getLPCount(), 4, "LP count should remain 4 after cycle");
+        assertEq(liquidityManager.lpCount(), 4, "LP count should remain 4 after cycle");
     }
 
     // ==================== LIQUIDITY ADDITION TESTS ====================
