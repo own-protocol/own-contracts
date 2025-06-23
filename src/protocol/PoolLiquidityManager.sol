@@ -156,9 +156,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
 
         uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
-        if (collateralHealth < 3) revert InsufficientCollateralHealth(collateralHealth);
+        if (collateralHealth == 1) revert InsufficientCollateralHealth(collateralHealth);
 
-        LPPosition storage position = lpPositions[msg.sender]; 
+        LPPosition storage position = lpPositions[msg.sender];
         
         if (isLP[msg.sender]) {
             LPRequest storage request = lpRequests[msg.sender];
@@ -204,7 +204,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (amount > allowedReduction) revert OperationExceedsAvailableLiquidity(amount, allowedReduction);
 
         uint8 collateralHealth = poolStrategy.getLPLiquidityHealth(address(this), msg.sender);
-        if (collateralHealth < 2) revert InsufficientCollateralHealth(collateralHealth);
+        if (collateralHealth == 1) revert InsufficientCollateralHealth(collateralHealth);
 
         // Create the reduction request
         _createRequest(msg.sender, RequestType.REDUCE_LIQUIDITY, amount);

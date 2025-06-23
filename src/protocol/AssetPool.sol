@@ -228,6 +228,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         _requireActivePool();
         if (amount == 0) revert InvalidAmount();
         if (collateralAmount == 0) revert InvalidAmount();
+
+        uint8 userHealth = poolStrategy.getUserCollateralHealth(address(this), msg.sender);
+        if (userHealth == 1) revert InsufficientCollateral();
         
         UserRequest storage request = userRequests[msg.sender];
         if (request.amount > 0) revert RequestPending();
@@ -270,6 +273,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     function redemptionRequest(uint256 amount) external nonReentrant {
         _requireActivePool();
         if (amount == 0) revert InvalidAmount();
+
+        uint8 userHealth = poolStrategy.getUserCollateralHealth(address(this), msg.sender);
+        if (userHealth == 1) revert InsufficientCollateral();
 
         UserPosition memory position = userPositions[msg.sender];
         if (position.assetAmount < amount || assetToken.balanceOf(msg.sender) < amount)
