@@ -223,7 +223,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         _validateRebalancingPrice(rebalancePrice);
 
         uint8 lpLiquidityHealth = poolStrategy.getLPLiquidityHealth(address(poolLiquidityManager), lp);
-        if (lpLiquidityHealth < 3) revert InsufficientLPLiquidity();
+        if (lpLiquidityHealth == 1) revert InsufficientLPLiquidity();
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
 
