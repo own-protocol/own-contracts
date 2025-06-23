@@ -139,7 +139,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         // Record cycle data before onchain rebalance
         uint256 initialCycleIndex = cycleManager.cycleIndex();
         uint256 initialLastAction = cycleManager.lastCycleActionDateTime();
-        uint256 lpCount = liquidityManager.getLPCount();
+        uint256 lpCount = liquidityManager.lpCount();
         
         // Call the initiateOnchainRebalance function
         vm.prank(owner);

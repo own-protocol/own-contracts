@@ -248,11 +248,6 @@ interface IPoolLiquidityManager {
      * @notice Combined reserve balance of the liquidity manager (including collateral and interest)
      */
     function aggregatePoolReserves() external view returns (uint256);
-    
-    /**
-     * @notice Number of registered LPs
-     */
-    function lpCount() external view returns (uint256);
 
     /**
      * @notice Add lp liquidity
@@ -405,7 +400,7 @@ interface IPoolLiquidityManager {
      * @notice Get LP's current liquidation initiator
      * @param lp Address of the LP
      */
-    function getLPLiquidationIntiator(address lp) external view returns (address);
+    function liquidationInitiators(address lp) external view returns (address);
     
     /**
      * @notice Check if an address is a registered LP
@@ -413,12 +408,19 @@ interface IPoolLiquidityManager {
      * @return bool True if the address is a registered LP
      */
     function isLP(address lp) external view returns (bool);
+
+    /**
+     * @notice Check if an LP is active
+     * @param lp The address of the LP
+     * @return bool True if the LP is active
+     */
+    function isLPActive(address lp) external view returns (bool);
     
     /**
-     * @notice Returns the number of LPs registered
-     * @return uint256 The number of registered LPs
+     * @notice Returns the number of active LPs
+     * @return uint256 The number of active LPs
      */
-    function getLPCount() external view returns (uint256);
+    function lpCount() external view returns (uint256);
 
     /**
      * @notice Returns the total amount of liquidity added in the current cycle
