@@ -673,7 +673,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             if (request.requestAmount >= liquidationAmount){
                 revert BetterLiquidationRequestExists();
             } else {
-                cycleTotalReduceLiquidityAmount -= request.requestAmount; // Remove previous liquidation amount if exists
+                // Remove previous liquidation amount if exists
+                cycleTotalReduceLiquidityAmount -= request.requestAmount;
             }     
         }
     }

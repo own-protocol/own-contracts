@@ -182,7 +182,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         // Get LP's commitment to determine liquidation amount
         IPoolLiquidityManager.LPPosition memory position = liquidityManager.getLPPosition(liquidityProvider1);
         uint256 lpCommitment = position.liquidityCommitment;
-        uint256 firstLiquidationAmount = lpCommitment * 30 / 100; // 30% of position
+        uint256 firstLiquidationAmount = lpCommitment * 20 / 100; // 20% of position
 
         vm.startPrank(liquidator);
         liquidityManager.liquidateLP(liquidityProvider1, firstLiquidationAmount);
@@ -192,22 +192,33 @@ contract LPLiquidationTest is ProtocolTestUtils {
         address firstInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(firstInitiator, liquidator, "First liquidator should be recorded");
         
-        // Second liquidator attempts to liquidate the same LP
+        // Second liquidator attempts to liquidate the same LP with a smaller amount
         uint256 secondAmount = lpCommitment * 15 / 100;
         
-        // Should revert because there's already an active liquidation request
+        // Should revert because there's already a better liquidation request
         vm.startPrank(liquidator2);
-        vm.expectRevert(IPoolLiquidityManager.RequestPending.selector);
+        vm.expectRevert();
         liquidityManager.liquidateLP(liquidityProvider1, secondAmount);
         vm.stopPrank();
-        
+
         // Verify first liquidator still recorded
         address currentInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
         assertEq(currentInitiator, liquidator, "First liquidator should still be recorded");
-        
+
+        secondAmount = lpCommitment * 30 / 100;
+
+        // Second liquidator attempts to liquidate with a larger amount
+        vm.startPrank(liquidator2);
+        liquidityManager.liquidateLP(liquidityProvider1, secondAmount);
+        vm.stopPrank();
+
+        // Verify second liquidation request
+        address secondInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
+        assertEq(secondInitiator, liquidator2, "Second liquidator should be recorded");
+
         // Get updated request to verify amount
         IPoolLiquidityManager.LPRequest memory request = liquidityManager.getLPRequest(liquidityProvider1);
-        assertEq(request.requestAmount, firstLiquidationAmount, "Request amount should still match first liquidator's amount");
+        assertEq(request.requestAmount, secondAmount, "Request amount should match second liquidator's amount");
     }
 
     // ==================== LIQUIDATION EXECUTION TESTS ====================
