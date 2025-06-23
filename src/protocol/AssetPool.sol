@@ -802,7 +802,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     }
 
     /**
-     * @notice Safely transfers the balance of reserve to a specified address
+     * @notice Safely transfers the balance of asset or reserve to a specified address
+     * @dev If the transfer function fails because the address is blacklisted within the reserve token contract,
+     * @dev we handle it gracefully by sending the tokens to the fee recipient instead.
+     * @dev This ensures that the pool does not get stuck with untransferable tokens.
      * @param to Address to which the tokens will be transferred
      * @param amount Amount of tokens to transfer
      * @param isAsset Boolean indicating if the transfer is for asset tokens
@@ -813,7 +816,19 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (isAsset) {
             assetToken.safeTransfer(to, transferAmount);
         } else {
-            reserveToken.safeTransfer(to, transferAmount);
+            // Transfer the amount to the receiver using low-level call to handle transfer failures
+            (bool success, bytes memory data) =
+                address(reserveToken).call(
+                    abi.encodeWithSelector(IERC20.transfer.selector, to, transferAmount)
+                );
+            
+            // Check if transfer succeeded (handles tokens that return false or no return value)
+            bool transferSucceeded = success && (data.length == 0 || abi.decode(data, (bool)));
+
+            // If transfer failed, send to fee recipient instead
+            if (!transferSucceeded) {
+                reserveToken.safeTransfer(poolStrategy.feeRecipient(), transferAmount);
+            }
         }
     }
 

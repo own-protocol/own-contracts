@@ -399,6 +399,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     /**
      * @notice Resolves an LP request after a rebalance cycle
      * @dev This should be called after a rebalance to clear pending request flags
+     * @dev If the transfer function fails because the address is blacklisted within the token contract etc,
+     * @dev we handle it gracefully by sending the tokens to the fee recipient instead.
+     * @dev This ensures that the pool does not get stuck with untransferable tokens.
      * @param lp Address of the LP
      */
     function resolveRequest(address lp) external onlyPoolCycleManager {
@@ -441,6 +444,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 totalLPCollateral -= transferAmount;
                 aggregatePoolReserves -= transferAmount;
 
+                // If the liquidator can't receive funds, send the reward to the fee recipient
                 // Transfer the reward to the liquidator using low-level call to handle transfer failures
                 (bool success, bytes memory data) =
                     address(reserveToken).call(
