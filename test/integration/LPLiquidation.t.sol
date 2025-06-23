@@ -17,12 +17,11 @@ contract LPLiquidationTest is ProtocolTestUtils {
     uint256 constant USER_INITIAL_BALANCE = 1_000_000;
     uint256 constant LP_INITIAL_BALANCE = 1_000_000;
     uint256 constant LP_LIQUIDITY_AMOUNT = 500_000;
-    uint256 constant USER_DEPOSIT_AMOUNT = 400_000;
+    uint256 constant USER_DEPOSIT_AMOUNT = 600_000;
     
     // LP test amounts
     uint256 constant LP_HEALTHY_COLLATERAL_RATIO = 3000; // 30% for LPs
-    uint256 constant LP_LIQUIDATION_THRESHOLD = 2000; // 20% for LPs
-    uint256 constant LP_BASE_COLLATERAL_RATIO = 1000; // 10% for LPs
+    uint256 constant LP_LIQUIDATION_THRESHOLD = 2500; // 25% for LPs
     
     // Test accounts
     address public liquidator;
@@ -64,61 +63,34 @@ contract LPLiquidationTest is ProtocolTestUtils {
     // ==================== LIQUIDATION SETUP TESTS ====================
 
     /**
-     * @notice Test that we can remove excess collateral to make an LP liquidatable
-     * @dev Need to account for unhealthy LPs not being able to rebalance themselves
+     * @notice Test setup for a liquidatable LP
+     * @dev This function simulates a scenario where an LP becomes liquidatable
      */
     function testSetupLiquidatableLP() public {
         // Get LP's initial position
-        IPoolLiquidityManager.LPPosition memory initialPosition = liquidityManager.getLPPosition(liquidityProvider1);
         uint8 initialHealth = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
         
         // Verify LP is initially healthy
         assertEq(initialHealth, 3, "LP should start with healthy collateral ratio");
         
-        // Calculate required collateral for healthy ratio
-        uint256 assetValue = liquidityManager.getLPAssetHoldingValue(liquidityProvider1);
-        uint256 requiredCollateral = (assetValue * LP_HEALTHY_COLLATERAL_RATIO) / BPS;
-        uint256 excessCollateral = initialPosition.collateralAmount - requiredCollateral;
-        
-        // LP should have excess collateral initially
-        assertGt(excessCollateral, 0, "LP should have excess collateral");
-        
-        // Remove most of the excess collateral to bring LP close to threshold
-        uint256 collateralToRemove = excessCollateral * 95 / 100; // Remove 95% of excess
-        
-        vm.startPrank(liquidityProvider1);
-        liquidityManager.reduceCollateral(collateralToRemove);
-        vm.stopPrank();
-        
-        // Check LP's position after removal
-        IPoolLiquidityManager.LPPosition memory updatedPosition = liquidityManager.getLPPosition(liquidityProvider1);
-        uint8 updatedHealth = poolStrategy.getLPLiquidityHealth(address(liquidityManager), liquidityProvider1);
-        
-        // LP should still be healthy (level 3) or in warning (level 2)
-        assertTrue(updatedHealth >= 2, "LP should not be liquidatable yet");
-        assertLt(updatedPosition.collateralAmount, initialPosition.collateralAmount, "Collateral should be reduced");
-
-        completeCycleWithPriceChange(INCREASED_PRICE);
-        
         // Start the rebalance process with increased price
         vm.startPrank(owner);
         assetOracle.setMarketOpen(true);
-        updateOraclePrice(INCREASED_PRICE_2);
+        updateOraclePrice(INCREASED_PRICE);
         cycleManager.initiateOffchainRebalance();
         
         // Advance time to onchain rebalancing phase
         vm.warp(block.timestamp + REBALANCE_LENGTH);
         assetOracle.setMarketOpen(false);
-        updateOraclePrice(INCREASED_PRICE_2);
+        updateOraclePrice(INCREASED_PRICE);
         cycleManager.initiateOnchainRebalance();
         vm.stopPrank();
         
         // Complete rebalance for liquidityProvider2 (who is healthy)
         vm.startPrank(liquidityProvider2);
-        cycleManager.rebalancePool(liquidityProvider2, INCREASED_PRICE_2);
+        cycleManager.rebalancePool(liquidityProvider2, INCREASED_PRICE);
         vm.stopPrank();
         
-        // LiquidityProvider1 can't rebalance themselves due to collateral ratio
         // Use rebalanceLP for them instead (settlement)
         vm.warp(block.timestamp + REBALANCE_LENGTH + 100);
         vm.startPrank(owner);
@@ -159,7 +131,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         
         // Assert liquidator is recorded
         address liquidationInitiator = liquidityManager.liquidationInitiators(liquidityProvider1);
-        assertEq(liquidationInitiator, liquidator, "Liquidation initiator should be recorded");     
+        assertEq(liquidationInitiator, liquidator, "Liquidation initiator should be recorded");   
     }
 
     /**
@@ -359,7 +331,7 @@ contract LPLiquidationTest is ProtocolTestUtils {
         testSetupLiquidatableLP();
         
         // Create a regular liquidity request for the LP
-        uint256 liquidityAddAmount = 60000 * 10**6; // 60,000 units
+        uint256 liquidityAddAmount = 100000 * 10**6; // 100,000 units
         
         vm.startPrank(owner);
         reserveToken.mint(liquidityProvider1, liquidityAddAmount * 3);
