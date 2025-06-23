@@ -235,6 +235,11 @@ interface IPoolLiquidityManager {
     error InsufficientCollateralHealth(uint256 cuurentHealth);
 
     /**
+     * @notice Error when a better liquidation request already exists
+     */
+    error BetterLiquidationRequestExists();
+
+    /**
      * @notice Total liquidity committed by LPs
      */
     function totalLPLiquidityCommited() external view returns (uint256);
