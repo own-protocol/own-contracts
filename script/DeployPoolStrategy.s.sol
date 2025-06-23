@@ -29,7 +29,6 @@ contract DeployPoolStrategyScript is Script {
     // LP parameters
     uint256 constant LP_HEALTHY_RATIO = 3000;          // 30.00% healthy collateral ratio
     uint256 constant LP_LIQUIDATION_THRESHOLD = 2000;  // 20.00% liquidation threshold
-    uint256 constant LP_BASE_RATIO = 1500;              // 15.00% base collateral ratio
     uint256 constant LP_LIQUIDATION_REWARD = 50;       // 0.50% liquidation reward
     
     function run() public {
@@ -75,7 +74,6 @@ contract DeployPoolStrategyScript is Script {
         poolStrategy.setLPLiquidityParams(
             LP_HEALTHY_RATIO,
             LP_LIQUIDATION_THRESHOLD,
-            LP_BASE_RATIO,
             LP_LIQUIDATION_REWARD
         );
         

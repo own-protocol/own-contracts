@@ -43,7 +43,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // LP liquidity parameters 
     uint256 public lpHealthyCollateralRatio;    // Healthy ratio (e.g., 30%)
     uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%)
-    uint256 public lpBaseCollateralRatio;       // Base collateral ratio (e.g., 10%)
     uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
 
     // Yield generating reserve
@@ -172,28 +171,23 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the LP collateral parameters
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Warning threshold (scaled by 10000)
-     * @param baseRatio Base collateral ratio (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 baseRatio,
         uint256 liquidationReward
     ) external onlyOwner {
         require(liquidationThreshold <= healthyRatio, "liquidation threshold must be <= healthy ratio");
-        require(baseRatio <= healthyRatio, "Base ratio must be <= healthy ratio");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
         
         lpHealthyCollateralRatio = healthyRatio;
         lpLiquidationThreshold = liquidationThreshold;
-        lpBaseCollateralRatio = baseRatio;
         lpLiquidationReward = liquidationReward;
         
         emit LPLiquidityParamsUpdated(
             healthyRatio,
             liquidationThreshold,
-            baseRatio,
             liquidationReward
         );
     }
@@ -306,13 +300,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPLiquidityParams() external view returns (
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 baseCollateralRatio,
         uint256 liquidationReward
     ) {
         return (
             lpHealthyCollateralRatio,
             lpLiquidationThreshold,
-            lpBaseCollateralRatio,
             lpLiquidationReward
         );
     }
@@ -349,16 +341,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
-        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
-        uint256 baseCollateral = Math.mulDiv(manager.getLPLiquidityCommitment(lp), lpBaseCollateralRatio, BPS);
-        uint256 healthyCollateral = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
-        if (lpAssetValue == 0) {
-            return baseCollateral;
-        } else if (healthyCollateral < baseCollateral) {
-            return baseCollateral;
-        } else {
-            return healthyCollateral;
-        }
+        uint256 lpCommitment = manager.getLPLiquidityCommitment(lp);
+        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
+        return healthyCollateral;
     }
 
     /**
@@ -404,12 +389,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getLPLiquidityHealth(address liquidityManager, address lp) external view returns (uint8 health) {
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         
-        uint256 lpAssetValue = manager.getLPAssetHoldingValue(lp);
         IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
         uint256 lpCollateral = position.collateralAmount;
+        uint256 lpCommitment = position.liquidityCommitment;
         
-        uint256 healthyLiquidity = Math.mulDiv(lpAssetValue, lpHealthyCollateralRatio, BPS);
-        uint256 reqLiquidity = Math.mulDiv(lpAssetValue, lpLiquidationThreshold, BPS);
+        uint256 healthyLiquidity = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
+        uint256 reqLiquidity = Math.mulDiv(lpCommitment, lpLiquidationThreshold, BPS);
         
         if (lpCollateral >= healthyLiquidity) {
             return 3; // Healthy
