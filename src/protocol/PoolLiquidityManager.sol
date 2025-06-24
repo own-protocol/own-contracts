@@ -648,7 +648,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param lp Address of the LP to liquidate
      * @param liquidationAmount Amount of liquidity to liquidate
      */
-    function _validateLiquidation(address lp, uint256 liquidationAmount) internal view {
+    function _validateLiquidation(address lp, uint256 liquidationAmount) internal {
         if (!isLP[lp] || lp == msg.sender) revert InvalidLiquidation();
         if (liquidationAmount == 0) revert InvalidAmount();
 
@@ -657,9 +657,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Check if LP is liquidatable
         uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
         if (liquidityHealth != 1) revert NotEligibleForLiquidation();
-
-        LPRequest storage request = lpRequests[lp];
-        if (request.requestType != RequestType.NONE) revert RequestPending();
 
         // Get LP position details
         LPPosition storage position = lpPositions[lp];
@@ -672,6 +669,17 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Ensure liquidation amount doesn't exceed allowed reduction
         if (liquidationAmount > allowedReduction) {
             revert OperationExceedsAvailableLiquidity(liquidationAmount, allowedReduction);
+        }
+
+        LPRequest storage request = lpRequests[lp];
+        // If there is an existing liquidation request, check if the current request is better 
+        if (request.requestType == RequestType.LIQUIDATE) {
+            if (request.requestAmount >= liquidationAmount){
+                revert BetterLiquidationRequestExists();
+            } else {
+                // Remove previous liquidation amount if exists
+                cycleTotalReduceLiquidityAmount -= request.requestAmount;
+            }     
         }
     }
 
