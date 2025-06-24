@@ -44,6 +44,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
     uint256 public rebalancedLPs;
 
     /**
+     * @notice Amount of reserve to be rebalanced in the current cycle.
+     */
+    int256 public cycleRebalanceAmount;
+
+    /**
      * @notice Weighted sum of rebalance prices for the current cycle.
      */
     uint256 private cycleWeightedSum;
@@ -235,6 +240,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             // The LP needs to cover the difference with their collateral
             amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            cycleRebalanceAmount += int256(amount);
             isDeposit = true;
             
             if (amount > 0) {
@@ -246,7 +252,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Negative rebalance amount means Pool needs to add to LP liquidity
             // The LP gets back funds which are added to their liquidity
             amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
-            
+            cycleRebalanceAmount -= int256(amount);
             if (amount > 0) {
                 // Request the asset pool to transfer funds to the LP
                 assetPool.transferRebalanceAmount(lp, amount, false);
@@ -310,10 +316,11 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         uint256 amount = 0;
         bool isDeposit = false;
         int256 rebalanceAmount = calculateRebalanceAmount(settlementPrice);
-        
+
         if (rebalanceAmount > 0) {
             // Positive rebalance amount means Pool needs to withdraw from LP collateral
             amount = Math.mulDiv(uint256(rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
+            cycleRebalanceAmount += int256(amount);
             isDeposit = true;
             
             if (amount > 0) {
@@ -323,7 +330,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         } else if (rebalanceAmount < 0) {
             // Negative rebalance amount means Pool needs to add to LP liquidity
             amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
-            
+            cycleRebalanceAmount -= int256(amount);
             if (amount > 0) {
                 // Transfer funds to the LP
                 assetPool.transferRebalanceAmount(lp, amount, true);
@@ -378,6 +385,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (lpCollateral > 0) {
             // Use LP's balance collateral to settle as much as possible
             poolLiquidityManager.deductFromCollateral(lp, lpCollateral);
+            cycleRebalanceAmount += int256(lpCollateral);
             isDeposit = true;
         }
 
@@ -522,19 +530,19 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         // The cycleWeightedSum is divided by the total LP liquidity committed to get the average price
         uint256 price = (cycleWeightedSum * PRECISION) / (poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
         cycleRebalancePrice[cycleIndex] = price;
-        int256 finalRebalanceAmount = calculateRebalanceAmount(price);
         // Calculate the cumulative interest index
         if (assetToken.totalSupply() > 0) {
             cumulativeInterestIndex[cycleIndex] += Math.mulDiv(cycleInterestAmount * reserveToAssetDecimalFactor, price, assetToken.totalSupply());
         }
 
-        assetPool.updateCycleData(price, finalRebalanceAmount);
+        assetPool.updateCycleData(price, cycleRebalanceAmount);
 
         cycleIndex++;
         cycleState = newCycleState;
         rebalancedLPs = 0;
         cycleWeightedSum = 0;
         lastCycleActionDateTime = block.timestamp;
+        cycleRebalanceAmount = 0;
         cycleInterestAmount = 0;
         cyclePriceHigh = 0;
         cyclePriceLow = 0;

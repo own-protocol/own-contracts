@@ -258,6 +258,11 @@ interface IPoolCycleManager {
     function cumulativeInterestIndex(uint256 cycle) external view returns (uint256);
 
     /**
+     * @notice Returns the cycle rebalance amount for the current cycle
+     */
+    function cycleRebalanceAmount() external view returns (int256);
+
+    /**
      * @notice Returns the interest amount accrued in the current cycle (interms of asset)
      */
     function cycleInterestAmount() external view returns (uint256);
