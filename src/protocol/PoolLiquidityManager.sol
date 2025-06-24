@@ -143,6 +143,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function addLiquidity(uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
+        // Check minimum commitment requirement
+        uint256 minimumRequired = poolStrategy.lpMinCommitment();
+        if (minimumRequired > 0) {
+            uint256 scaledMinimum = minimumRequired * (10 ** reserveToken.decimals());
+            if (amount < scaledMinimum) {
+                revert InvalidAmount();
+            }
+        }
+
         if (!_isPoolActive()) revert InvalidCycleState();
         // Calculate additional required collateral
         uint256 requiredCollateral = Math.mulDiv(amount, poolStrategy.lpHealthyCollateralRatio(), BPS);

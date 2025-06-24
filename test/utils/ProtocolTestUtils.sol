@@ -72,6 +72,7 @@ contract ProtocolTestUtils is Test {
     uint256 public constant lpHealthyRatio = 3000;  // 30%
     uint256 public constant lpLiquidationThreshold = 2000;   // 20%
     uint256 public constant lpLiquidationReward = 50;        // 0.5%
+    uint256 public constant lpMinCommitment = 0; // 0, no minimum commitment
 
     // Event records for testing
     struct EventRecord {
@@ -170,7 +171,7 @@ contract ProtocolTestUtils is Test {
 
         poolStrategy.setCycleParams(rebalancePeriod, oracleUpdateThreshold, haltThreshold);
         poolStrategy.setInterestRateParams(baseRate, rate1, maxRate, utilTier1, utilTier2);
-        poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward);
+        poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward, lpMinCommitment);
         poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
         poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
     }
