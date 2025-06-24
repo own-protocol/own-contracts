@@ -574,7 +574,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         // Check if we have enough reserve tokens for the transfer
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
         if (reserveBalance < amount) revert InsufficientBalance();
-        aggregatePoolReserves -= amount;
 
         if (isSettle) {
             poolLiquidityManager.addToCollateral(lp, amount);    
