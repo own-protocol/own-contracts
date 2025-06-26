@@ -116,7 +116,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         // Set strategy parameters
         poolStrategy.setCycleParams(rebalancePeriod, oracleUpdateThreshold, haltThreshold);
         poolStrategy.setInterestRateParams(baseRate, rate1, maxRate, utilTier1, utilTier2);
-        poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward);
+        poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward, lpMinCommitment);
         poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
         poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
         

@@ -42,8 +42,9 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     // LP liquidity parameters 
     uint256 public lpHealthyCollateralRatio;    // Healthy ratio (e.g., 30%)
-    uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%)
+    uint256 public lpLiquidationThreshold;      // Liquidation threshold (e.g., 20%)
     uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
+    uint256 public lpMinCommitment;            // Minimum liquidity commitment for LPs (e.g., 100 tokens)
 
     // Yield generating reserve
     bool public isYieldBearing;                 // Flag to indicate if the reserve is yield generating
@@ -172,11 +173,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Warning threshold (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
+     * @param minCommitment Minimum liquidity commitment for LPs (in reserve tokens)
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 liquidationReward
+        uint256 liquidationReward,
+        uint256 minCommitment
     ) external onlyOwner {
         require(liquidationThreshold <= healthyRatio, "liquidation threshold must be <= healthy ratio");
         require(liquidationReward <= BPS, "Reward cannot exceed 100%");
@@ -184,11 +187,13 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         lpHealthyCollateralRatio = healthyRatio;
         lpLiquidationThreshold = liquidationThreshold;
         lpLiquidationReward = liquidationReward;
+        lpMinCommitment = minCommitment;
         
         emit LPLiquidityParamsUpdated(
             healthyRatio,
             liquidationThreshold,
-            liquidationReward
+            liquidationReward,
+            minCommitment
         );
     }
 

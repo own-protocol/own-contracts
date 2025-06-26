@@ -57,7 +57,8 @@ interface IPoolStrategy {
     event LPLiquidityParamsUpdated(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 liquidationReward
+        uint256 liquidationReward,
+        uint256 minCommitment
     );
 
     /**
@@ -125,11 +126,13 @@ interface IPoolStrategy {
      * @param healthyRatio Healthy collateral ratio (scaled by 10000)
      * @param liquidationThreshold Liquidation threshold (scaled by 10000)
      * @param liquidationReward Liquidation reward (scaled by 10000)
+     * @param minCommitment Minimum commitment amount for LPs
      */
     function setLPLiquidityParams(
         uint256 healthyRatio,
         uint256 liquidationThreshold,
-        uint256 liquidationReward
+        uint256 liquidationReward,
+        uint256 minCommitment
     ) external;
 
     /**
@@ -414,4 +417,10 @@ interface IPoolStrategy {
      * @return The liquidation reward for LPs (scaled by 10000)
      */
     function lpLiquidationReward() external view returns (uint256);
+
+    /**
+     * @notice Returns the minimum commitment amount for LPs
+     * @return The minimum commitment amount for LPs
+     */
+    function lpMinCommitment() external view returns (uint256);
 }
