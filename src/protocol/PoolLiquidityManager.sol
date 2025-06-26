@@ -216,7 +216,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         }
 
         // Alowed reduction is lower (50%) in case of normal reduction
-        uint256 allowedReduction = poolStrategy.calculateAvailableLiquidity(address(assetPool)) / 2;
+        uint256 allowedReduction = poolStrategy.calculateCycleAvailableLiquidity(address(assetPool)) / 2;
         // Ensure there is available liquidity for the operation
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
         // Ensure reduction amount doesn't exceed allowed reduction
@@ -680,15 +680,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         // Get LP position details
         LPPosition storage position = lpPositions[lp];
         if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
-        
-        // Allowed reduction is higher (75%) in case of liquidation
-        uint256 allowedReduction = (poolStrategy.calculateAvailableLiquidity(address(assetPool)) * 3) / 4;
-        if (allowedReduction == 0) revert UtilizationTooHighForOperation();
-
-        // Ensure liquidation amount doesn't exceed allowed reduction
-        if (liquidationAmount > allowedReduction) {
-            revert OperationExceedsAvailableLiquidity(liquidationAmount, allowedReduction);
-        }
 
         LPRequest storage request = lpRequests[lp];
         // If there is an existing liquidation request, check if the current request is better 
@@ -699,6 +690,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 // Remove previous liquidation amount if exists
                 cycleTotalReduceLiquidityAmount -= request.requestAmount;
             }     
+        }
+
+        // Allowed reduction is higher (75%) in case of liquidation
+        uint256 allowedReduction = (poolStrategy.calculateCycleAvailableLiquidity(address(assetPool)) * 3) / 4;
+        if (allowedReduction == 0) revert UtilizationTooHighForOperation();
+
+        // Ensure liquidation amount doesn't exceed allowed reduction
+        if (liquidationAmount > allowedReduction) {
+            revert OperationExceedsAvailableLiquidity(liquidationAmount, allowedReduction);
         }
     }
 
