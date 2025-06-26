@@ -42,7 +42,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     
     // LP liquidity parameters 
     uint256 public lpHealthyCollateralRatio;    // Healthy ratio (e.g., 30%)
-    uint256 public lpLiquidationThreshold;      // Liquidatiom threshold (e.g., 20%)
+    uint256 public lpLiquidationThreshold;      // Liquidation threshold (e.g., 20%)
     uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
     uint256 public lpMinCommitment;            // Minimum liquidity commitment for LPs (e.g., 100 tokens)
 
