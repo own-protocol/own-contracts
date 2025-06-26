@@ -205,6 +205,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[msg.sender];
         if (amount > position.liquidityCommitment) revert InvalidAmount();
 
+        // Check if the LP is maintaining liquidity commitment
+        uint256 minimumRequired = poolStrategy.lpMinCommitment();     
+        if (minimumRequired > 0) {
+            uint256 scaledMinimum = minimumRequired * (10 ** reserveToken.decimals());
+            uint256 balanceCommitment = position.liquidityCommitment - amount;
+            if (balanceCommitment != 0 && balanceCommitment < scaledMinimum) {
+                revert InvalidAmount();
+            }
+        }
+
         // Alowed reduction is lower (50%) in case of normal reduction
         uint256 allowedReduction = poolStrategy.calculateAvailableLiquidity(address(assetPool)) / 2;
         // Ensure there is available liquidity for the operation
