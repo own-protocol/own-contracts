@@ -245,7 +245,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 healthyRatio = poolStrategy.userHealthyCollateralRatio();
         
         // Calculate minimum required collateral & ensure provided collateral meets minimum requirement
-        if (collateralAmount < Math.mulDiv(amount, healthyRatio, BPS)) revert InsufficientCollateral();
+        if (collateralAmount < Math.mulDiv(amount, healthyRatio, BPS, Math.Rounding.Ceil)) revert InsufficientCollateral();
 
         uint256 totalDeposit = amount + collateralAmount;
 
