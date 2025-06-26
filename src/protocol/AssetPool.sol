@@ -437,8 +437,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         uint256 reserveYield = _handleWithdrawal(user, totalAmount, position);
 
-        totalAmount += reserveYield;
-
         if(position.assetAmount == amount) {
             delete userPositions[user];
         } else {
@@ -453,6 +451,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         totalUserDeposits -= r.depositAmount;
         totalUserCollateral -= r.collateralAmount;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
+
+        totalAmount += reserveYield;
 
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
@@ -500,8 +500,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         uint256 reserveYield = _handleWithdrawal(msg.sender, totalAmount, position);
 
-        totalAmount += reserveYield;
-
         if(position.assetAmount == amount) {
             delete userPositions[msg.sender];
         } else {
@@ -514,6 +512,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         totalUserCollateral -= r.collateralAmount;
         totalAmount -= r.interestDebt;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
+
+        totalAmount += reserveYield;
 
         // Transfer reserve tokens to the user
         _safeTransferBalance(msg.sender, totalAmount, false);
