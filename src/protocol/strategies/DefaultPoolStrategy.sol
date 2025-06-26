@@ -334,7 +334,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
 
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
-        uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
+        uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
         return requiredCollateral + interestDebt;
     }
     
@@ -374,8 +374,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 userCollateralBalance = collateralAmount - interestDebt;
 
-        uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS);
-        uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS);
+        uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
+        uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS, Math.Rounding.Ceil);
         
         if (userCollateralBalance >= healthyCollateral) {
             return 3; // Healthy
