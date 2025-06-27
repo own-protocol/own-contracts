@@ -391,9 +391,9 @@ interface IPoolLiquidityManager {
     function getLPCollateral(address lp) external view returns (uint256);
 
     /**
-     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     * @notice Reserve yield earned per token to date (if isYieldBearing).
      */
-    function reserveYieldAccrued() external view returns (uint256);
+    function reserveYieldIndex() external view returns (uint256);
 
     /**
      * @notice Get LP's current request
