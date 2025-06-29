@@ -177,7 +177,7 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
             if (assetPrice != 0 && _isPriceDeviationHigh(assetPrice, openPrice)) {
                 splitDetected = true;
                 preSplitPrice = assetPrice;
-                emit SplitDetected(assetPrice, openPrice, block.timestamp);
+                emit SplitDetected(assetPrice, block.timestamp);
             }
     
             // Update asset price
@@ -248,6 +248,12 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
         uint256 percentageDeviation = (priceDifference * 100) / prevPrice;
         
         return percentageDeviation > threshold;
+    }
+
+    function setSplitDetected() external onlyOwner {
+        splitDetected = true;
+        preSplitPrice = assetPrice;
+        emit SplitDetected(assetPrice, block.timestamp);
     }
     
     function resetSplitDetection() external onlyOwner {
