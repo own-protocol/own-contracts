@@ -154,7 +154,7 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
             if (assetPrice != 0 && _isPriceDeviationHigh(assetPrice, openPrice)) {
                 splitDetected = true;
                 preSplitPrice = assetPrice;
-                emit SplitDetected(assetPrice, openPrice, block.timestamp);
+                emit SplitDetected(assetPrice, block.timestamp);
             }
     
             // Update asset price
@@ -257,12 +257,23 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     }
 
     /**
+     * @notice Sets the split detected state. This function is used to manually set the split state
+     * @dev Can only be called by the contract owner
+     */
+    function setSplitDetected() external onlyOwner {
+        splitDetected = true;
+        preSplitPrice = assetPrice;
+        emit SplitDetected(preSplitPrice, block.timestamp);
+    }
+
+    /**
      * @notice Resets the split detection state
      * @dev Can only be called by the contract owner
      */
     function resetSplitDetection() external onlyOwner {
         splitDetected = false;
         preSplitPrice = 0;
+        emit SplitDetectionReset(block.timestamp);
     }
 
     /**

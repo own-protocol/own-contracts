@@ -79,6 +79,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
     uint256 public lastInterestAccrualTimestamp;
 
     /**
+     * @notice Number of token splits that have occurred in the pool.
+     */
+    uint256 public poolSplitIndex;
+
+    /**
+     * @notice Multiplier of each split that has occurred in the pool.
+     */
+    mapping(uint256 => uint256) public splitMultiplier;
+
+    /**
      * @notice Cumulative pool interest paid per asset till the current cycle.
      */
     mapping (uint256 => uint256) public cumulativeInterestIndex;
@@ -146,6 +156,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         lastCycleActionDateTime = block.timestamp;
         cycleIndex = 1;
         cumulativeInterestIndex[1] = 1e18; // Initialize interest index for cycle 1
+        splitMultiplier[0] = 1e18; // Initialize split multiplier for no splits
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -439,6 +450,10 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         
         if (isTokenSplit) {
             if (!assetOracle.verifySplit(splitRatio, splitDenominator)) revert InvalidSplit();
+            // Increment the pool split index
+            poolSplitIndex++;
+            // Update the split multiplier for the new split
+            splitMultiplier[poolSplitIndex] = Math.mulDiv(splitMultiplier[poolSplitIndex - 1], splitRatio, splitDenominator);
             // Execute token split
             _executeTokenSplit(splitRatio, splitDenominator);
         } 
