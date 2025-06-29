@@ -283,8 +283,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (userHealth == 1) revert InsufficientCollateral();
 
         UserPosition storage position = userPositions[msg.sender];
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), msg.sender, position.assetAmount);
-        userSplitIndex[msg.sender] = poolCycleManager.poolSplitIndex();
+        _splitCheck(position);
 
         if (position.assetAmount < amount || assetToken.balanceOf(msg.sender) < amount)
             revert InsufficientBalance();
@@ -323,8 +322,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         
         // Get user's current position
         UserPosition storage position = userPositions[user];
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), user, position.assetAmount);
-        userSplitIndex[user] = poolCycleManager.poolSplitIndex();
+        _splitCheck(position);
         uint256 userAssetAmount = position.assetAmount;
         
         // Verify that user has assets
@@ -397,8 +395,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
 
         UserPosition storage position = userPositions[user];
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), user, position.assetAmount);
-        userSplitIndex[user] = poolCycleManager.poolSplitIndex();
+        _splitCheck(position);
         uint256 oldPrincipal = position.assetAmount;
         uint256 newPrincipal = oldPrincipal + assetAmount;
 
@@ -442,9 +439,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         delete userRequests[user];
 
         UserPosition storage position = userPositions[user];
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), user, position.assetAmount);
         amount = poolStrategy.calculatePostSplitAmount(address(this), user, amount);
-        userSplitIndex[user] = poolCycleManager.poolSplitIndex();
+        _splitCheck(position);
         
         RedemptionValues memory r = _calculateRedemptionValues(user, amount, rebalancePrice, requestCycle);
 
@@ -496,10 +492,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (amount == 0) revert InvalidAmount();
         UserRequest memory request = userRequests[msg.sender];
         if (request.requestType != RequestType.NONE) revert RequestPending();
-        
+
         UserPosition storage position = userPositions[msg.sender];
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), msg.sender, position.assetAmount);
-        userSplitIndex[msg.sender] = poolCycleManager.poolSplitIndex();
+        _splitCheck(position);
 
         if (position.assetAmount < amount) revert InsufficientBalance();
         
@@ -701,6 +696,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
             revert("Pool not active or halted");
         }
+    }
+
+
+    function _splitCheck(UserPosition storage position) internal {
+        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), msg.sender, position.assetAmount);
+        userSplitIndex[msg.sender] = poolCycleManager.poolSplitIndex();
     }
 
     /**
