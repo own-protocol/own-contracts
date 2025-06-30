@@ -446,12 +446,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         }
 
         totalAmount -= r.interestDebt;
-        totalAmount += reserveYield;
-
         // Update total user deposits and collateral
         totalUserDeposits -= r.depositAmount;
         totalUserCollateral -= r.collateralAmount;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
+        totalAmount += reserveYield;
 
         // Transfer reserve tokens
         if (requestType == RequestType.REDEEM) {
@@ -510,8 +509,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         totalUserDeposits -= r.depositAmount;
         totalUserCollateral -= r.collateralAmount;
         totalAmount -= r.interestDebt;
-        totalAmount += reserveYield;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
+        totalAmount += reserveYield;
 
         // Transfer reserve tokens to the user
         _safeTransferBalance(msg.sender, totalAmount, false);
@@ -573,8 +572,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
         if (reserveBalance < amount) revert InsufficientBalance();
 
-        if (poolStrategy.isYieldBearing()) _updateReserveYieldIndex();
-
         if (isSettle) {
             poolLiquidityManager.addToCollateral(lp, amount);    
             // Transfer the rebalance amount to the liquidity manager
@@ -597,11 +594,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // Check if we have enough reserve tokens for the interest
         uint256 reserveBalance = reserveToken.balanceOf(address(this));
-
         if(reserveBalance < amount) revert InsufficientBalance();
-
-        if (poolStrategy.isYieldBearing()) _updateReserveYieldIndex();
-
         aggregatePoolReserves -= amount;
 
        if (isSettle) {
@@ -744,6 +737,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             uint256 userReserve = _getUserTotalReserveAmount(user);
             uint256 totalYield = Math.mulDiv(userReserve, reserveYieldIndex - userReserveYieldIndex[user], PRECISION);
             uint256 reserveYield = Math.mulDiv(totalYield, amount, userReserve);
+            aggregatePoolReserves -= reserveYield;
 
             // Deduct protocol fee from the yield
             return _deductProtocolFee(user, reserveYield);

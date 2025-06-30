@@ -291,7 +291,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         uint256 totalAmount = amount + reserveYield;
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
-        aggregatePoolReserves -= totalAmount;
+        aggregatePoolReserves -= amount;
         reserveToken.safeTransfer(msg.sender, totalAmount);
 
         emit CollateralReduced(msg.sender, totalAmount);
@@ -312,7 +312,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         uint256 totalAmount = interestAccrued + reserveYield;
         position.interestAccrued = 0;
-        aggregatePoolReserves -= totalAmount;
+        aggregatePoolReserves -= interestAccrued;
         reserveToken.safeTransfer(msg.sender, totalAmount);
 
         emit InterestClaimed(msg.sender, totalAmount);
@@ -407,17 +407,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[lp];
         if (position.collateralAmount < amount) revert InvalidAmount();
 
-        uint256 reserveYield = 0;
-        if (poolStrategy.isYieldBearing()) {
-           reserveYield = _handleYieldBearingWithdrawal(lp, amount);
-        }      
-
-        uint256 totalAmount = amount + reserveYield;
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
-        aggregatePoolReserves -= totalAmount;
+        aggregatePoolReserves -= amount;
 
-        reserveToken.safeTransfer(address(assetPool), totalAmount);
+        reserveToken.safeTransfer(address(assetPool), amount);
     }
 
     /**
@@ -467,7 +461,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 uint256 totalAmount = transferAmount + reserveYield;
                 position.collateralAmount -= transferAmount;
                 totalLPCollateral -= transferAmount;
-                aggregatePoolReserves -= totalAmount;
+                aggregatePoolReserves -= transferAmount;
 
                 // If the liquidator can't receive funds, send the reward to the fee recipient
                 // Transfer the reward to the liquidator using low-level call to handle transfer failures
@@ -723,13 +717,12 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 reserveYield = _handleYieldBearingWithdrawal(lp, collateralAmount);
             }
 
-            uint256 totalAmount = collateralAmount + reserveYield;
             position.collateralAmount = 0;
             totalLPCollateral -= collateralAmount;
-            aggregatePoolReserves -= totalAmount;
-            reserveToken.safeTransfer(lp, totalAmount);
+            aggregatePoolReserves -= collateralAmount;
+            reserveToken.safeTransfer(lp, collateralAmount + reserveYield);
 
-            emit CollateralReduced(lp, collateralAmount);
+            emit CollateralReduced(lp, collateralAmount + reserveYield);
         }
         
         // Transfer any remaining interest
@@ -741,12 +734,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 reserveYield = _handleYieldBearingWithdrawal(lp, interestAmount);
             }
 
-            uint256 totalAmount = interestAmount + reserveYield;
             position.interestAccrued = 0;
-            aggregatePoolReserves -= totalAmount;
-            reserveToken.safeTransfer(lp, totalAmount);
+            aggregatePoolReserves -= interestAmount;
+            reserveToken.safeTransfer(lp, interestAmount + reserveYield);
 
-            emit InterestClaimed(lp, interestAmount);
+            emit InterestClaimed(lp, interestAmount + reserveYield);
         }
         
         // If LP has liquidity commitment, reduce the count. If the commitment is zero, lp count is already reduced
@@ -792,6 +784,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         uint256 lpReserve = _getLPTotalReserveAmount(lp);
         uint256 totalYield = Math.mulDiv(lpReserve, reserveYieldIndex - lpReserveYieldIndex[lp], PRECISION);
         uint256 reserveYield = Math.mulDiv(totalYield, amount, lpReserve);
+        aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, reserveYield);
 
         // Deduct protocol fee from the yield
         return _deductProtocolFee(lp, reserveYield);
