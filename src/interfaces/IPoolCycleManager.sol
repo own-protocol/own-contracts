@@ -155,6 +155,18 @@ interface IPoolCycleManager {
     function rebalancePool(address lp, uint256 rebalancePrice) external;
 
     /**
+     * @notice Rebalance the pool with halt request. This can be used when lp wants to halt the pool
+     * @param lp Address of the LP to rebalance
+     * @param rebalancePrice The price to use for rebalancing
+     * @param haltPool Whether to halt the pool
+     */
+    function rebalancePool(
+        address lp,
+        uint256 rebalancePrice,
+        bool haltPool
+    ) external;
+
+    /**
      * @notice Rebalance an lp if the rebalance window has expired and the LP has not rebalanced
      * @param lp Address of the LP to settle
      */

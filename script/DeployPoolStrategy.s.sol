@@ -11,6 +11,7 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant REBALANCE_LENGTH = 3 hours;       // 3 hours for onchain rebalancing period
     uint256 constant ORACLE_UPDATE_THRESHOLD = 15 minutes; // 15 minutes for oracle update threshold
     uint256 constant HALT_THRESHOLD = 5 days;          // 5 days for halting the pool
+    uint256 constant HALT_LIQUIDITY_PERCENT = 7000;    // 70.00% liquidity commitment to halt (scaled by 10000)
     
     // Interest rate parameters
     uint256 constant BASE_INTEREST_RATE = 600;         // 6.00% base interest rate
@@ -49,6 +50,9 @@ contract DeployPoolStrategyScript is Script {
             ORACLE_UPDATE_THRESHOLD,
             HALT_THRESHOLD
         );
+
+        // Set halt liquidity percentage
+        poolStrategy.setHaltLiquidityPercent(HALT_LIQUIDITY_PERCENT);
         
         // Set interest rate parameters
         poolStrategy.setInterestRateParams(

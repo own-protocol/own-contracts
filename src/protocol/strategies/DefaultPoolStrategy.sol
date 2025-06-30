@@ -20,11 +20,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     //                               STATE VARIABLES
     // --------------------------------------------------------------------------------
 
-    // cycle parameters
+    // pool cycle parameters
     uint256 public rebalanceLength;             // length of onchain rebalancing period (default: 3 hours)
     uint256 public oracleUpdateThreshold;       // Threshold for oracle update (default: 15 minutes)
     uint256 public haltThreshold;               // Threshold for halting the pool (default: 5 days)
-    
+    uint256 public haltLiquidityPercent;        // Percentage of liquidity commitment to halt (default: 70%)
+
     // Asset interest rate parameters
     uint256 public baseInterestRate;            // Base interest rate (e.g., 9%)
     uint256 public interestRate1;               // Tier 1 interest rate (e.g., 18%)
@@ -205,6 +206,15 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         emit IsYieldBearingUpdated(
             isYieldBearing
+        );
+    }
+
+    function setHaltLiquidityPercent(uint256 percent) external onlyOwner {
+        require(percent <= BPS, "Halt liquidity percent cannot exceed 100%");
+        haltLiquidityPercent = percent;
+        
+        emit HaltLiquidityPercentUpdated(
+            haltLiquidityPercent
         );
     }
 

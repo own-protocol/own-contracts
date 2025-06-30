@@ -69,6 +69,14 @@ interface IPoolStrategy {
         bool isYieldBearing
     );
 
+    /**
+     * @notice Emitted when the halt liquidity percentage is updated
+     * @param haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
+     */
+    event HaltLiquidityPercentUpdated(
+        uint256 haltLiquidityPercent
+    );
+
     // --------------------------------------------------------------------------------
     //                             CONFIGURATION FUNCTIONS
     // --------------------------------------------------------------------------------
@@ -433,4 +441,9 @@ interface IPoolStrategy {
      * @return The minimum commitment amount for LPs
      */
     function lpMinCommitment() external view returns (uint256);
+
+    /**
+     * @notice Returns the halt liquidity percentage
+     */
+    function haltLiquidityPercent() external view returns (uint256);
 }
