@@ -147,6 +147,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @param amount Amount of collateral to deposit
      */
     function addCollateral(address user, uint256 amount) external nonReentrant {
+        _requireActivePool();
         if (amount == 0) revert InvalidAmount();
 
         UserPosition storage position = userPositions[user];
@@ -186,6 +187,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @param amount Amount of collateral to withdraw
      */
     function reduceCollateral(uint256 amount) external nonReentrant {
+        _requireActivePool();
         if (amount == 0) revert InvalidAmount();
         
         UserPosition storage position = userPositions[msg.sender];
