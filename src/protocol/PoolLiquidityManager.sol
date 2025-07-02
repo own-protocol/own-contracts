@@ -57,11 +57,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     // Mapping to track liquidation initiators
     mapping(address => address) public liquidationInitiators;
 
-    // Yield accrued  by the pool reserve tokens (if isYieldBearing)
-    uint256 public reserveYieldAccrued;
+    // Reserve yield earned per token to date (if isYieldBearing).
+    uint256 public reserveYieldIndex;
 
-    // Scaled reserve balance of an LP
-    mapping(address => uint256) public scaledReserveBalance;
+    // Interest index of the LP, used to calculate reserve yield on their positions
+    mapping(address => uint256) private lpReserveYieldIndex;
 
     // --------------------------------------------------------------------------------
     //                                  MODIFIERS
@@ -130,7 +130,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         poolCycleManager = IPoolCycleManager(_poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
-        reserveYieldAccrued = 1e18;
+        reserveYieldIndex = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
         
@@ -285,15 +285,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         uint256 reserveYield = 0;
         if (poolStrategy.isYieldBearing()) {
-           reserveYield = _handleYieldBearingWithdrawal(msg.sender, amount, position);
+           reserveYield = _handleYieldBearingWithdrawal(msg.sender, amount);
         }
         
+        uint256 totalAmount = amount + reserveYield;
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
         aggregatePoolReserves -= amount;
-        reserveToken.safeTransfer(msg.sender, amount + reserveYield);
-        
-        emit CollateralReduced(msg.sender, amount + reserveYield);
+        reserveToken.safeTransfer(msg.sender, totalAmount);
+
+        emit CollateralReduced(msg.sender, totalAmount);
     }
 
     /**
@@ -306,14 +307,15 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         uint256 reserveYield = 0;
         if (poolStrategy.isYieldBearing()) {
-           reserveYield = _handleYieldBearingWithdrawal(msg.sender, interestAccrued, position);
+           reserveYield = _handleYieldBearingWithdrawal(msg.sender, interestAccrued);
         }
 
+        uint256 totalAmount = interestAccrued + reserveYield;
         position.interestAccrued = 0;
         aggregatePoolReserves -= interestAccrued;
-        reserveToken.safeTransfer(msg.sender, interestAccrued + reserveYield);
-        
-        emit InterestClaimed(msg.sender, interestAccrued + reserveYield);
+        reserveToken.safeTransfer(msg.sender, totalAmount);
+
+        emit InterestClaimed(msg.sender, totalAmount);
     }
 
     /**
@@ -362,7 +364,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (!isLP[lp]) revert NotRegisteredLP();
 
         if (poolStrategy.isYieldBearing()) {
-            _updateScaledReserveBalance(lp, amount);
+            _updateReserveYieldIndex();
+            _updateLPReserveYieldIndex(lp, amount);
         }
         
         lpPositions[lp].interestAccrued += amount;
@@ -381,7 +384,8 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (!isLP[lp]) revert NotRegisteredLP();
 
         if (poolStrategy.isYieldBearing()) {
-            _updateScaledReserveBalance(lp, amount);
+           _updateReserveYieldIndex();
+           _updateLPReserveYieldIndex(lp, amount);
         }
         
         lpPositions[lp].collateralAmount += amount;
@@ -403,16 +407,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[lp];
         if (position.collateralAmount < amount) revert InvalidAmount();
 
-        uint256 reserveYield = 0;
-        if (poolStrategy.isYieldBearing()) {
-           reserveYield = _handleYieldBearingWithdrawal(lp, amount, position);
-        }      
-
         position.collateralAmount -= amount;
         totalLPCollateral -= amount;
         aggregatePoolReserves -= amount;
 
-        reserveToken.safeTransfer(address(assetPool), amount + reserveYield);
+        reserveToken.safeTransfer(address(assetPool), amount);
     }
 
     /**
@@ -456,9 +455,10 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             if (transferAmount > 0) {
                 uint256 reserveYield = 0;
                 if (poolStrategy.isYieldBearing()) {
-                    reserveYield = _handleYieldBearingWithdrawal(lp, transferAmount, position);
+                    reserveYield = _handleYieldBearingWithdrawal(lp, transferAmount);
                 } 
 
+                uint256 totalAmount = transferAmount + reserveYield;
                 position.collateralAmount -= transferAmount;
                 totalLPCollateral -= transferAmount;
                 aggregatePoolReserves -= transferAmount;
@@ -467,7 +467,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
                 // Transfer the reward to the liquidator using low-level call to handle transfer failures
                 (bool success, bytes memory data) =
                     address(reserveToken).call(
-                        abi.encodeWithSelector(IERC20.transfer.selector, liquidationInitiators[lp], transferAmount + reserveYield)
+                        abi.encodeWithSelector(IERC20.transfer.selector, liquidationInitiators[lp], totalAmount)
                     );
                 
                 // Check if transfer succeeded (handles tokens that return false or no return value)
@@ -475,7 +475,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
                 // If transfer failed, send to fee recipient instead
                 if (!transferSucceeded) {
-                    reserveToken.safeTransfer(poolStrategy.feeRecipient(), transferAmount + reserveYield);
+                    reserveToken.safeTransfer(poolStrategy.feeRecipient(), totalAmount);
                 }
             }
             emit LPLiquidationExecuted(lp, liquidationInitiators[lp], liquidationAmount, transferAmount);
@@ -714,7 +714,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             
             uint256 reserveYield = 0;
             if (poolStrategy.isYieldBearing()) {
-                reserveYield = _handleYieldBearingWithdrawal(lp, collateralAmount, position);
+                reserveYield = _handleYieldBearingWithdrawal(lp, collateralAmount);
             }
 
             position.collateralAmount = 0;
@@ -722,7 +722,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             aggregatePoolReserves -= collateralAmount;
             reserveToken.safeTransfer(lp, collateralAmount + reserveYield);
 
-            emit CollateralReduced(lp, collateralAmount);
+            emit CollateralReduced(lp, collateralAmount + reserveYield);
         }
         
         // Transfer any remaining interest
@@ -731,14 +731,14 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
             uint256 reserveYield = 0;
             if (poolStrategy.isYieldBearing()) {
-                reserveYield = _handleYieldBearingWithdrawal(lp, interestAmount, position);
+                reserveYield = _handleYieldBearingWithdrawal(lp, interestAmount);
             }
 
             position.interestAccrued = 0;
             aggregatePoolReserves -= interestAmount;
             reserveToken.safeTransfer(lp, interestAmount + reserveYield);
 
-            emit InterestClaimed(lp, interestAmount);
+            emit InterestClaimed(lp, interestAmount + reserveYield);
         }
         
         // If LP has liquidity commitment, reduce the count. If the commitment is zero, lp count is already reduced
@@ -762,82 +762,76 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @param amount Amount being deposited
      */
     function _handleYieldBearingDeposit(address lp, uint256 amount) internal {
-        // Capture the reserve balance before the transfer
-        uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));
-        
-        // Transfer collateral from LP to this contract
+        // Update the reserve yield index
+        _updateReserveYieldIndex();
+        // Transfer amount from LP to this contract
         reserveToken.safeTransferFrom(lp, address(this), amount);
-        
-        uint256 yieldAccrued = poolStrategy.calculateYieldAccrued(
-            aggregatePoolReserves,
-            reserveBalanceBefore,
-            aggregatePoolReserves
-        );
-        
-        reserveYieldAccrued = Math.mulDiv(reserveYieldAccrued, PRECISION + yieldAccrued, PRECISION);
-        
-        // Update scaled reserve balance for interest calculation
-        scaledReserveBalance[lp] += Math.mulDiv(amount, PRECISION, reserveYieldAccrued);
-    }
-
-    /**
-     * @notice Update scaled reserve balance with yield accrual
-     * @param lp Address of the LP
-     * @param amount Unscaled amount
-     */
-    function _updateScaledReserveBalance(address lp, uint256 amount) internal {
-        // Capture the reserve balance before any operations
-        uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));
-        
-        uint256 yieldAccrued = poolStrategy.calculateYieldAccrued(
-            aggregatePoolReserves, 
-            reserveBalanceBefore,
-            aggregatePoolReserves
-        );
-        
-        reserveYieldAccrued = Math.mulDiv(reserveYieldAccrued, PRECISION + yieldAccrued, PRECISION);
-        
-        // Update scaled reserve balance for interest calculation
-        scaledReserveBalance[lp] += Math.mulDiv(amount, PRECISION, reserveYieldAccrued);
+        // Update the LP's reserve yield index
+        _updateLPReserveYieldIndex(lp, amount);
     }
 
     /**
      * @notice Handle withdrawal for yield-bearing tokens with yield calculation
      * @param lp Address of the lp
-     * @param amount Unscaled amount
-     * @param position Position of the lp
+     * @param amount amount being withdrawn
      * @return reserveYield The calculated yield amount
      */
     function _handleYieldBearingWithdrawal(
         address lp, 
-        uint256 amount,
-        LPPosition memory position
+        uint256 amount
     ) internal returns (uint256) {
-        // Capture reserve balance before any operations
-        uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));
+        _updateReserveYieldIndex();
+        uint256 lpReserve = _getLPTotalReserveAmount(lp);
+        uint256 totalYield = Math.mulDiv(lpReserve, reserveYieldIndex - lpReserveYieldIndex[lp], PRECISION);
+        uint256 reserveYield = Math.mulDiv(totalYield, amount, lpReserve);
+        aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, reserveYield);
 
-        uint256 yieldAccrued = poolStrategy.calculateYieldAccrued(
-            aggregatePoolReserves, 
-            reserveBalanceBefore,
-            aggregatePoolReserves
-        );
-        
-        reserveYieldAccrued = Math.mulDiv(reserveYieldAccrued, PRECISION + yieldAccrued, PRECISION);
-        
-        // Update scaled reserve balance for interest calculation
-        uint256 scaledBalance = Math.mulDiv(
-            scaledReserveBalance[lp], 
-            amount, 
-            position.collateralAmount + position.interestAccrued
-        );
-        
-        scaledReserveBalance[lp] -= scaledBalance;
-        uint256 reserveYield = _safeSubtract(Math.mulDiv(scaledBalance, reserveYieldAccrued, PRECISION), amount);
-        
         // Deduct protocol fee from the yield
         return _deductProtocolFee(lp, reserveYield);
     }
 
+    /**
+     * @notice Update the reserve yield index
+     */
+    function _updateReserveYieldIndex() internal {
+        uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));         
+        uint256 yIndex = poolStrategy.calculateYieldAccrued(
+            aggregatePoolReserves,
+            reserveBalanceBefore,
+            aggregatePoolReserves
+        );
+        aggregatePoolReserves = reserveBalanceBefore;
+        reserveYieldIndex += yIndex;
+    }
+
+    /**
+     * @notice Get the total reserve amount for an LP
+     * @param lp Address of the LP
+     * @return Total reserve amount including collateral and interest accrued
+     */
+    function _getLPTotalReserveAmount(address lp) internal view returns (uint256) {
+        LPPosition storage position = lpPositions[lp];
+        return position.collateralAmount + position.interestAccrued;
+    }
+
+    /**
+     * @notice Update the LP's reserve yield index
+     * @param lp Address of the LP
+     * @param amount Amount to update
+     */
+    function _updateLPReserveYieldIndex(address lp, uint256 amount) internal {
+        uint256 oldPrincipal = _getLPTotalReserveAmount(lp);
+        uint256 newPrincipal = oldPrincipal + amount;
+        uint256 newLPIndex;
+        {
+            // Isolate newLPIndex computation to limit locals in outer scope
+            uint256 uIndex = lpReserveYieldIndex[lp];
+            uint256 weightedOld = (oldPrincipal == 0) ? 0 : Math.mulDiv(oldPrincipal, uIndex, newPrincipal);
+            uint256 weightedNew = Math.mulDiv(amount, reserveYieldIndex, newPrincipal);
+            newLPIndex = (oldPrincipal == 0) ? reserveYieldIndex : weightedOld + weightedNew;
+        }
+        lpReserveYieldIndex[lp] = newLPIndex;
+    }
 
     /**
      * @notice Deduct protocol fee

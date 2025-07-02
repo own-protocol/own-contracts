@@ -353,9 +353,9 @@ interface IAssetPool {
     function aggregatePoolReserves() external view returns (uint256);
 
     /**
-     * @notice Yield accrued  by the pool reserve tokens (if isYieldBearing)
+     * @notice Reserve yield earned per token to date (if isYieldBearing).
      */
-    function reserveYieldAccrued() external view returns (uint256);
+    function reserveYieldIndex() external view returns (uint256);
 
      /**
      * @notice Get utilised liquidity of the pool
