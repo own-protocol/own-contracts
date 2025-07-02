@@ -439,6 +439,7 @@ contract MockAssetPoolForStrategy {
     address public poolCycleManager;
     uint256 public reserveToAssetDecimalFactor;
     uint256 public interestDebtValue;
+    mapping(address => uint256) public userSplitIndex;
     
     constructor() {
         poolCycleManager = address(new MockCycleManager());
@@ -468,6 +469,10 @@ contract MockAssetPoolForStrategy {
     function setInterestDebt(uint256 debt) external {
         interestDebtValue = debt;
     }
+
+    function setUserSplitIndex(address user, uint256 index) external {
+        userSplitIndex[user] = index;
+    }
     
     // Interface functions required by DefaultPoolStrategy
     
@@ -486,10 +491,16 @@ contract MockAssetPoolForStrategy {
 
 contract MockCycleManager {
     uint256 public cycleIndex = 1;
+    uint256 public poolSplitIndex = 0;
     mapping(uint256 => uint256) public cycleRebalancePrice;
+    mapping(uint256 => uint256) public splitMultiplier;
     
     function setRebalancePrice(uint256 price) external {
         cycleRebalancePrice[cycleIndex - 1] = price;
+    }
+
+    function setSplitMultiplier(uint256 index, uint256 multiplier) external {
+        splitMultiplier[index] = multiplier;
     }
 }
 
