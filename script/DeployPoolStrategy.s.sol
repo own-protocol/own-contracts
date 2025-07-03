@@ -10,8 +10,6 @@ contract DeployPoolStrategyScript is Script {
     // Strategy parameters - adjust these as needed
     uint256 constant REBALANCE_LENGTH = 3 hours;       // 3 hours for onchain rebalancing period
     uint256 constant ORACLE_UPDATE_THRESHOLD = 15 minutes; // 15 minutes for oracle update threshold
-    uint256 constant HALT_THRESHOLD = 5 days;          // 5 days for halting the pool
-    uint256 constant HALT_LIQUIDITY_PERCENT = 7000;    // 70.00% liquidity commitment to halt (scaled by 10000)
     
     // Interest rate parameters
     uint256 constant BASE_INTEREST_RATE = 600;         // 6.00% base interest rate
@@ -32,6 +30,11 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant LP_LIQUIDATION_THRESHOLD = 2000;  // 20.00% liquidation threshold
     uint256 constant LP_LIQUIDATION_REWARD = 50;       // 0.50% liquidation reward
     uint256 constant LP_MIN_COMMITMENT = 100;         // Minimum LP commitment amount
+
+    // Halt parameters
+    uint256 constant HALT_THRESHOLD = 5 days;          // 5 days for halting the pool
+    uint256 constant HALT_LIQUIDITY_PERCENT = 7000;    // 70.00% liquidity commitment to halt (scaled by 10000)
+    uint256 constant HALT_FEE_PERCENT = 500;           // 5.00% fee on halted liquidity (scaled by 10000)
     
     function run() public {
         // Get deployer private key from the environment
@@ -47,13 +50,16 @@ contract DeployPoolStrategyScript is Script {
         // Set cycle parameters
         poolStrategy.setCycleParams(
             REBALANCE_LENGTH,
-            ORACLE_UPDATE_THRESHOLD,
-            HALT_THRESHOLD
+            ORACLE_UPDATE_THRESHOLD
         );
 
-        // Set halt liquidity percentage
-        poolStrategy.setHaltLiquidityPercent(HALT_LIQUIDITY_PERCENT);
-        
+        // Set halt parameters
+        poolStrategy.setHaltParams(
+            HALT_THRESHOLD,
+            HALT_LIQUIDITY_PERCENT,
+            HALT_FEE_PERCENT
+        );
+
         // Set interest rate parameters
         poolStrategy.setInterestRateParams(
             BASE_INTEREST_RATE,

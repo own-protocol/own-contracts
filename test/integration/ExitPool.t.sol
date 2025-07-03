@@ -95,8 +95,8 @@ contract ExitPoolTest is ProtocolTestUtils {
         
         // At this point, LP3 has not rebalanced, but we need to advance past the rebalance window
         // Get the halt threshold from the strategy
-        (, , uint256 haltThreshold) = poolStrategy.getCycleParams();
-        
+        uint256 haltThreshold = poolStrategy.haltThreshold();
+
         // Advance time past the halt threshold
         vm.warp(block.timestamp + haltThreshold + 1);
         

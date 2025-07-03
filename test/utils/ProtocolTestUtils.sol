@@ -51,7 +51,11 @@ contract ProtocolTestUtils is Test {
      // Set default values for tests
     uint256 public constant rebalancePeriod = 1 days;
     uint256 public constant oracleUpdateThreshold = 15 minutes;
+
+    // Set halt parameters
     uint256 public constant haltThreshold = 5 days;
+    uint256 public constant haltLiquidityPercent = 7000; // 70%
+    uint256 public constant haltFeePercent = 500; // 5%
     
     // Set interest rate parameters
     uint256 public constant baseRate = 900; // 9%
@@ -169,11 +173,12 @@ contract ProtocolTestUtils is Test {
         );
 
 
-        poolStrategy.setCycleParams(rebalancePeriod, oracleUpdateThreshold, haltThreshold);
+        poolStrategy.setCycleParams(rebalancePeriod, oracleUpdateThreshold);
         poolStrategy.setInterestRateParams(baseRate, rate1, maxRate, utilTier1, utilTier2);
         poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward, lpMinCommitment);
         poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
         poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
+        poolStrategy.setHaltParams(haltThreshold, haltLiquidityPercent, haltFeePercent);
     }
     
     /**

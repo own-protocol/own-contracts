@@ -98,7 +98,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         assetOracle.setMarketOpen(true);
         
         // Set oracle parameters to make it stale
-        (, uint256 oracleThreshold,) = poolStrategy.getCycleParams();
+        (, uint256 oracleThreshold) = poolStrategy.getCycleParams();
         
         // Advance time past the oracle update threshold
         vm.warp(block.timestamp + oracleThreshold + 1);
@@ -661,7 +661,7 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         cycleManager.initiateOnchainRebalance();
         
         // Get rebalance parameters
-        (uint256 rebalanceLength, , ) = poolStrategy.getCycleParams();
+        (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
         
         // LP1 rebalances normally
         vm.prank(liquidityProvider1);
@@ -738,8 +738,9 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         cycleManager.initiateOnchainRebalance();
         
         // Get rebalance parameters
-        (uint256 rebalanceLength, , uint256 haltThreshold) = poolStrategy.getCycleParams();
-        
+        (uint256 rebalanceLength, ) = poolStrategy.getCycleParams();
+        uint256 haltThreshold = poolStrategy.haltThreshold();
+
         // LP1 rebalances normally
         vm.prank(liquidityProvider1);
         cycleManager.rebalancePool(liquidityProvider1, INITIAL_PRICE);

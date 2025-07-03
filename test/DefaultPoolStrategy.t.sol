@@ -39,8 +39,7 @@ contract DefaultPoolStrategyTest is Test {
         // Set cycle parameters
         strategy.setCycleParams(
             1 days,        // Rebalance length
-            15 minutes,    // Oracle update threshold
-            5 days         // Halt threshold
+            15 minutes    // Oracle update threshold
         );
         
         // Set interest rate parameters
@@ -71,17 +70,30 @@ contract DefaultPoolStrategyTest is Test {
             50,            // Liquidation reward 0.5%
             0              // Minimum commitment amount
         );
+
+        // Set halt parameters
+        strategy.setHaltParams(
+            5 days,        // Halt threshold
+            7000,          // Halt liquidity percentage (70%)
+            500            // Halt fee percentage (5%)
+        );
     }
     
     // ==================== CONFIGURATION TESTS ====================
     
     function testInitialSettings() public view {
-        (uint256 rebalancePeriod, uint256 oracleThreshold, uint256 poolHaltThreshold) = strategy.getCycleParams();
+        (uint256 rebalancePeriod, uint256 oracleThreshold) = strategy.getCycleParams();
         assertEq(rebalancePeriod, 1 days, "Rebalance period should be set correctly");
         assertEq(oracleThreshold, 15 minutes, "Oracle threshold should be set correctly");
-        assertEq(poolHaltThreshold, 5 days, "Halt threshold should be set correctly");
-        
-        (uint256 baseRate, uint256 rate1, uint256 maxRate, uint256 utilTier1, uint256 utilTier2) = 
+
+        uint256 haltThreshold = strategy.haltThreshold();
+        uint256 haltLiquidityPercent = strategy.haltLiquidityPercent();
+        uint256 haltFeePercent = strategy.haltFeePercent();
+        assertEq(haltThreshold, 5 days, "Halt threshold should be set correctly");
+        assertEq(haltLiquidityPercent, 7000, "Halt liquidity percentage should be set correctly");
+        assertEq(haltFeePercent, 500, "Halt fee percentage should be set correctly");
+
+        (uint256 baseRate, uint256 rate1, uint256 maxRate, uint256 utilTier1, uint256 utilTier2) =
             strategy.getInterestRateParams();
         assertEq(baseRate, 900, "Base interest rate should be set correctly");
         assertEq(rate1, 1800, "Tier 1 interest rate should be set correctly");
@@ -104,12 +116,11 @@ contract DefaultPoolStrategyTest is Test {
     }
     
     function testCycleParamsUpdate() public {
-        strategy.setCycleParams(2 days, 30 minutes, 10 days);
+        strategy.setCycleParams(2 days, 30 minutes);
         
-        (uint256 rebalancePeriod, uint256 oracleThreshold, uint256 poolHaltThreshold) = strategy.getCycleParams();
+        (uint256 rebalancePeriod, uint256 oracleThreshold) = strategy.getCycleParams();
         assertEq(rebalancePeriod, 2 days, "Rebalance period should be updated");
         assertEq(oracleThreshold, 30 minutes, "Oracle threshold should be updated");
-        assertEq(poolHaltThreshold, 10 days, "Halt threshold should be updated");
     }
     
     function testInterestRateParamsUpdate() public {
@@ -292,8 +303,8 @@ contract DefaultPoolStrategyTest is Test {
         
         // Try to update parameters as non-owner
         vm.expectRevert();
-        strategy.setCycleParams(2 days, 30 minutes, 10 days);
-        
+        strategy.setCycleParams(2 days, 30 minutes);
+
         vm.expectRevert();
         strategy.setInterestRateParams(500, 1500, 6000, 7000, 9000);
         
@@ -311,9 +322,9 @@ contract DefaultPoolStrategyTest is Test {
         
         // Update as new owner should work
         vm.startPrank(newOwner);
-        strategy.setCycleParams(2 days, 30 minutes, 10 days);
+        strategy.setCycleParams(2 days, 30 minutes);
         
-        (uint256 rebalancePeriod, ,) = strategy.getCycleParams();
+        (uint256 rebalancePeriod,) = strategy.getCycleParams();
         assertEq(rebalancePeriod, 2 days, "Parameter should be updated when called by owner");
         vm.stopPrank();
     }

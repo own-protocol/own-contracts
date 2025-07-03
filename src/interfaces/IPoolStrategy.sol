@@ -20,8 +20,7 @@ interface IPoolStrategy {
      */
     event CycleParamsUpdated(
         uint256 rebalancePeriod,
-        uint256 oracleUpdateThreshold,
-        uint256 poolHaltThreshold
+        uint256 oracleUpdateThreshold
     );
 
     /**
@@ -70,11 +69,15 @@ interface IPoolStrategy {
     );
 
     /**
-     * @notice Emitted when the halt liquidity percentage is updated
+     * @notice Emitted when the pool halt params are updated
+     * @param haltThreshold Threshold for halting the pool (scaled by 10000)
      * @param haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
+     * @param haltFeePercent Percentage of fees to halt (scaled by 10000)
      */
-    event HaltLiquidityPercentUpdated(
-        uint256 haltLiquidityPercent
+    event HaltParamsUpdated(
+        uint256 haltThreshold,
+        uint256 haltLiquidityPercent,
+        uint256 haltFeePercent
     );
 
     // --------------------------------------------------------------------------------
@@ -85,12 +88,10 @@ interface IPoolStrategy {
      * @notice Sets the cycle parameters
      * @param rebalancePeriod Length of rebalancing period in seconds
      * @param oracleUpdateThreshold Threshold for Oracle update
-     * @param haltThreshold Threshold for halting the pool
      */
     function setCycleParams(
         uint256 rebalancePeriod,
-        uint256 oracleUpdateThreshold,
-        uint256 haltThreshold
+        uint256 oracleUpdateThreshold
     ) external;
     
     /**
@@ -143,6 +144,19 @@ interface IPoolStrategy {
         uint256 minCommitment
     ) external;
 
+
+    /**
+     * @notice Sets the halt parameters for the pool
+     * @param _haltThreshold Threshold for halting the pool (scaled by 10000)
+     * @param _haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
+     * @param _haltFeePercent Percentage of fees to halt (scaled by 10000)
+     */
+    function setHaltParams(
+        uint256 _haltThreshold,
+        uint256 _haltLiquidityPercent,
+        uint256 _haltFeePercent
+    ) external;
+
     /**
      * @notice Sets the yield generating reserve flag
      */
@@ -156,12 +170,10 @@ interface IPoolStrategy {
      * @notice Returns the cycle parameters
      * @return rebalancePeriod Length of rebalancing period in seconds
      * @return oracleThreshold Threshold for Oracle update
-     * @return poolHaltThreshold Threshold for halting the pool
      */
     function getCycleParams() external view returns (
         uint256 rebalancePeriod, 
-        uint256 oracleThreshold,
-        uint256 poolHaltThreshold
+        uint256 oracleThreshold
     );
     
     // --------------------------------------------------------------------------------
@@ -359,12 +371,6 @@ interface IPoolStrategy {
     function oracleUpdateThreshold() external view returns (uint256);
 
     /**
-     * @notice Returns the threshold for halting the pool
-     * @return The halt threshold in seconds
-     */
-    function haltThreshold() external view returns (uint256);
-
-    /**
      * @notice Returns the base interest rate
      * @return The base interest rate (scaled by 10000)
      */
@@ -443,7 +449,20 @@ interface IPoolStrategy {
     function lpMinCommitment() external view returns (uint256);
 
     /**
+     * @notice Returns the halt threshold for the pool
+     * @return The halt threshold in seconds
+     */
+    function haltThreshold() external view returns (uint256);
+
+    /**
      * @notice Returns the halt liquidity percentage
+     * @return The halt liquidity percentage (scaled by 10000)
      */
     function haltLiquidityPercent() external view returns (uint256);
+
+    /**
+     * @notice Returns the halt fee percentage
+     * @return The halt fee percentage (scaled by 10000)
+     */
+    function haltFeePercent() external view returns (uint256);
 }

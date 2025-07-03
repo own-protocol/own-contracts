@@ -23,8 +23,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     // pool cycle parameters
     uint256 public rebalanceLength;             // length of onchain rebalancing period (default: 3 hours)
     uint256 public oracleUpdateThreshold;       // Threshold for oracle update (default: 15 minutes)
-    uint256 public haltThreshold;               // Threshold for halting the pool (default: 5 days)
-    uint256 public haltLiquidityPercent;        // Percentage of liquidity commitment to halt (default: 70%)
 
     // Asset interest rate parameters
     uint256 public baseInterestRate;            // Base interest rate (e.g., 9%)
@@ -45,7 +43,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public lpHealthyCollateralRatio;    // Healthy ratio (e.g., 30%)
     uint256 public lpLiquidationThreshold;      // Liquidation threshold (e.g., 20%)
     uint256 public lpLiquidationReward;         // Liquidation reward (e.g., 0.5%)
-    uint256 public lpMinCommitment;            // Minimum liquidity commitment for LPs (e.g., 100 tokens)
+    uint256 public lpMinCommitment;             // Minimum liquidity commitment for LPs (e.g., 100 tokens)
+
+    // Pool halt parameters
+    uint256 public haltThreshold;               // Threshold for halting the pool (default: 5 days)
+    uint256 public haltLiquidityPercent;        // Percentage of liquidity commitment to halt (default: 70%)
+    uint256 public haltFeePercent;              // Percentage of fees to halt (default: 5%)
 
     // Yield generating reserve
     bool public isYieldBearing;                 // Flag to indicate if the reserve is yield generating
@@ -74,18 +77,15 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Sets the cycle parameters
      * @param _rebalanceLength Length of rebalancing period in seconds
      * @param _oracleUpdateThreshold Threshold for oracle update
-
      */
     function setCycleParams(
         uint256 _rebalanceLength,
-        uint256 _oracleUpdateThreshold,
-        uint256 _haltThreshold
+        uint256 _oracleUpdateThreshold
     ) external onlyOwner {
         rebalanceLength = _rebalanceLength;
         oracleUpdateThreshold = _oracleUpdateThreshold;
-        haltThreshold = _haltThreshold;
 
-        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold, _haltThreshold);
+        emit CycleParamsUpdated(_rebalanceLength, _oracleUpdateThreshold);
     }
     
     /**
@@ -199,6 +199,32 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     }
 
     /**
+     * @notice Sets the halt parameters
+     * @param _haltThreshold Threshold for halting the pool (in seconds)
+     * @param _haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
+     * @param _haltFeePercent Percentage of fees to halt (scaled by 10000)
+     */
+    function setHaltParams(
+        uint256 _haltThreshold,
+        uint256 _haltLiquidityPercent,
+        uint256 _haltFeePercent
+    ) external onlyOwner {
+        require(_haltThreshold > 0, "Halt threshold must be > 0");
+        require(_haltLiquidityPercent <= BPS, "Halt liquidity percent cannot exceed 100%");
+        require(_haltFeePercent <= BPS, "Halt fee percent cannot exceed 100%");
+
+        haltThreshold = _haltThreshold;
+        haltLiquidityPercent = _haltLiquidityPercent;
+        haltFeePercent = _haltFeePercent;
+
+        emit HaltParamsUpdated(
+            _haltThreshold,
+            _haltLiquidityPercent,
+            _haltFeePercent
+        );
+    }
+
+    /**
      * @notice Sets the yield generating reserve flag
      */
     function setIsYieldBearing() external onlyOwner {
@@ -206,15 +232,6 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         emit IsYieldBearingUpdated(
             isYieldBearing
-        );
-    }
-
-    function setHaltLiquidityPercent(uint256 percent) external onlyOwner {
-        require(percent <= BPS, "Halt liquidity percent cannot exceed 100%");
-        haltLiquidityPercent = percent;
-        
-        emit HaltLiquidityPercentUpdated(
-            haltLiquidityPercent
         );
     }
 
@@ -226,14 +243,12 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @notice Returns the cycle parameters
      * @return rebalancePeriod Length of rebalancing period in seconds
      * @return oracleThreshold Threshold for oracle update
-     * @return poolHaltThreshold Threshold for halting the pool
      */
     function getCycleParams() external view returns (
         uint256 rebalancePeriod,
-        uint256 oracleThreshold,
-        uint256 poolHaltThreshold
+        uint256 oracleThreshold
     ) {
-        return (rebalanceLength, oracleUpdateThreshold, haltThreshold);
+        return (rebalanceLength, oracleUpdateThreshold);
     }
     
     // --------------------------------------------------------------------------------
