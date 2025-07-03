@@ -357,6 +357,13 @@ interface IAssetPool {
      */
     function reserveYieldIndex() external view returns (uint256);
 
+    /**
+     * @notice Get the split index of a user
+     * @param user Address of the user
+     * @return Split index of the user
+     */
+    function userSplitIndex(address user) external view returns (uint256);
+
      /**
      * @notice Get utilised liquidity of the pool
      * @return value Amount of utilised liquidity

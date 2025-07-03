@@ -292,4 +292,16 @@ interface IPoolCycleManager {
      * @return True if the price deviation is valid, false otherwise
      */
     function isPriceDeviationValid() external view returns (bool);
+
+    /**
+     * @notice Returns the pool split index, indicating how many splits have occurred
+     */
+    function poolSplitIndex() external view returns (uint256);
+
+    /**
+     * @notice Returns the cumulative split multiplier for a given split index
+     * @param splitIndex Index of the split to query
+     * @return The cumulative multiplier for the specified split index
+     */
+    function splitMultiplier(uint256 splitIndex) external view returns (uint256);
 }

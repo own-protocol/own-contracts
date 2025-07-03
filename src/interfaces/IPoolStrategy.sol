@@ -323,6 +323,16 @@ interface IPoolStrategy {
      */
     function calculateCycleAvailableLiquidity(address assetPool) external view returns (uint256 availableLiquidity);
 
+    /**
+     * @notice Calculate post-split amount for a user
+     * @dev This function calculates the user's asset amount after accounting for any token splits
+     * @param assetPool Address of the asset pool
+     * @param user Address of the user
+     * @param amount User's asset amount before split adjustments
+     * @return postSplitAmount User's asset amount after split adjustments
+     */
+    function calculatePostSplitAmount(address assetPool, address user, uint256 amount) external view returns (uint256 postSplitAmount);
+
 
     // --------------------------------------------------------------------------------
     //                             VIEW FUNCTIONS

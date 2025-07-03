@@ -47,12 +47,10 @@ interface IAssetOracle {
     /**
      * @notice Emitted when a split is detected
      * @param prevPrice The price before the split
-     * @param newPrice The new price after the split
      * @param timestamp The timestamp when the split was detected
      */
     event SplitDetected(
         uint256 prevPrice,
-        uint256 newPrice,
         uint256 timestamp
     );
 
@@ -62,6 +60,12 @@ interface IAssetOracle {
      * @param newCooldown The new cooldown duration
      */
     event RequestCooldownUpdated(uint256 oldCooldown, uint256 newCooldown);
+
+    /**
+     * @notice Emitted when the split detection state is reset
+     * @param timestamp The timestamp when the split detection was reset
+     */
+    event SplitDetectionReset(uint256 timestamp);
 
     /**
      * @notice Thrown when received requestId doesn't match the expected one
@@ -183,6 +187,12 @@ interface IAssetOracle {
     function verifySplit(uint256 expectedRatio, uint256 expectedDenominator) external view returns (bool);
 
     /**
+     * @notice Sets the split detected state. This function is used to manually set the split state
+     * @dev Can only be called by the contract owner
+     */
+    function setSplitDetected() external;
+
+    /**
      * @notice Resets the split detection state
      * @dev Can only be called by the contract owner
      */
@@ -194,5 +204,4 @@ interface IAssetOracle {
      * @dev Can only be called by the contract owner
      */
     function updateRequestCooldown(uint256 newCooldown) external;
-
 }

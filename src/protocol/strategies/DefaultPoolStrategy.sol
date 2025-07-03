@@ -331,7 +331,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         if(assetAmount == 0) {
             return Math.mulDiv(depositAmount, userLiquidationThreshold, BPS);
         }
-
+        assetAmount = calculatePostSplitAmount(assetPool, user, assetAmount);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
@@ -365,6 +365,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         if (assetAmount == 0) {
             return 3; // Healthy - no asset balance means no risk
         }
+        assetAmount = calculatePostSplitAmount(assetPool, user, assetAmount);
 
         uint256 reserveToAssetDecimalFactor = pool.reserveToAssetDecimalFactor();
         // Get the previous cycle's rebalance price
@@ -550,4 +551,27 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         return cycleTotalLiquidity - cycleUtilisedLiquidity;
     }
 
+    /**
+     * @notice Calculate post-split amount for a user
+     * @dev This function calculates the user's asset amount after accounting for any token splits
+     * @param assetPool Address of the asset pool
+     * @param user Address of the user
+     * @param amount User's asset amount before split adjustments
+     * @return postSplitAmount User's asset amount after split adjustments
+     */
+    function calculatePostSplitAmount(address assetPool, address user, uint256 amount) public view returns (uint256 postSplitAmount) {
+        IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
+        IPoolCycleManager cycleManager = pool.poolCycleManager();
+        
+        uint256 splitIndex = cycleManager.poolSplitIndex();
+        uint256 userSplitIndex = pool.userSplitIndex(user);
+        if (userSplitIndex == splitIndex) {
+            // No split adjustment needed if user is at the same split index
+            return amount;
+        }          
+        // Calculate the post-split amount
+        postSplitAmount = Math.mulDiv(amount, cycleManager.splitMultiplier(splitIndex), cycleManager.splitMultiplier(userSplitIndex));
+
+        return postSplitAmount;
+    }
 }
