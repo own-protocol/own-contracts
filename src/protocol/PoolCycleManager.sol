@@ -305,12 +305,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == cycleLPCount) {
             uint256 poolHaltPercent = 0;
+            uint256 availableLiquidity = poolStrategy.calculateCycleAvailableLiquidity(address(assetPool));
             if (poolHaltAmount > 0 && totalLiquidity > 0) {
                 // Calculate the halt percentage based on the pool halt amount
                 poolHaltPercent = Math.mulDiv(poolHaltAmount, BPS, totalLiquidity);
             }
             // if poolHaltPercent is greater than the halt liquidity percent
-            if (poolHaltPercent > poolStrategy.haltLiquidityPercent()) {
+            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount < availableLiquidity) {
                 _startNewCycle(CycleState.POOL_HALTED);
             } else {
                 _startNewCycle(CycleState.POOL_ACTIVE);
@@ -325,8 +326,12 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
      * @param haltPool Whether to halt the pool
      */
     function rebalancePool(address lp, uint256 rebalancePrice, bool haltPool) external {
-        if (haltPool) {   
-            poolHaltAmount += poolLiquidityManager.getLPLiquidityCommitment(lp);
+        if (haltPool) {
+            uint256 liquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+            uint256 haltFee = Math.mulDiv(liquidityCommitment, poolStrategy.haltFeePercent(), BPS);
+            // Transfer halt fee to the fee recipient
+            reserveToken.safeTransferFrom(lp, poolStrategy.feeRecipient(), haltFee);
+            poolHaltAmount += liquidityCommitment;
         }
         rebalancePool(lp, rebalancePrice);
     }
@@ -366,7 +371,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
                 // Use LP's collateral to settle
                 poolLiquidityManager.deductFromCollateral(lp, amount);
             }
-        } else if (rebalanceAmount < 0) {
+        } else if (rebalanceAmount < 0) { 
             // Negative rebalance amount means Pool needs to add to LP liquidity
             amount = Math.mulDiv(uint256(-rebalanceAmount), lpLiquidityCommitment, totalLiquidity);
             cycleRebalanceAmount -= int256(amount);
@@ -403,12 +408,13 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         // If all LPs have rebalanced, start next cycle
         if (rebalancedLPs == cycleLPCount) {
             uint256 poolHaltPercent = 0;
+            uint256 availableLiquidity = poolStrategy.calculateCycleAvailableLiquidity(address(assetPool));
             if (poolHaltAmount > 0 && totalLiquidity > 0) {
                 // Calculate the halt percentage based on the pool halt amount
                 poolHaltPercent = Math.mulDiv(poolHaltAmount, BPS, totalLiquidity);
             }
             // if poolHaltPercent is greater than the halt liquidity percent
-            if (poolHaltPercent > poolStrategy.haltLiquidityPercent()) {
+            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount < availableLiquidity) {
                 _startNewCycle(CycleState.POOL_HALTED);
             } else {
                 _startNewCycle(CycleState.POOL_ACTIVE);

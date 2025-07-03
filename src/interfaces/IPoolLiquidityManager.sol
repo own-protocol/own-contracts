@@ -107,11 +107,11 @@ interface IPoolLiquidityManager {
     event LPRemoved(address indexed lp);
 
     /**
-     * @notice Emitted when fee is deducted from user
-     * @param user Address of the user
+     * @notice Emitted when fee is deducted from lp
+     * @param lp Address of the lp
      * @param amount Amount of fee deducted
      */
-    event FeeDeducted(address indexed user, uint256 amount);
+    event FeeDeducted(address indexed lp, uint256 amount);
 
     /**
     * @notice Emitted when an LP sets or removes a delegate
