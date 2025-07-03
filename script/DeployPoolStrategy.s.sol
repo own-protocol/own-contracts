@@ -35,6 +35,7 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant HALT_THRESHOLD = 5 days;          // 5 days for halting the pool
     uint256 constant HALT_LIQUIDITY_PERCENT = 7000;    // 70.00% liquidity commitment to halt (scaled by 10000)
     uint256 constant HALT_FEE_PERCENT = 500;           // 5.00% fee on halted liquidity (scaled by 10000)
+    uint256 constant HALT_REQUEST_THRESHOLD = 20;      // 20 cycles before halting the pool
     
     function run() public {
         // Get deployer private key from the environment
@@ -57,7 +58,8 @@ contract DeployPoolStrategyScript is Script {
         poolStrategy.setHaltParams(
             HALT_THRESHOLD,
             HALT_LIQUIDITY_PERCENT,
-            HALT_FEE_PERCENT
+            HALT_FEE_PERCENT,
+            HALT_REQUEST_THRESHOLD
         );
 
         // Set interest rate parameters

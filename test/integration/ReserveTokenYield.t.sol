@@ -119,7 +119,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward, lpMinCommitment);
         poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
         poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
-        poolStrategy.setHaltParams(haltThreshold, haltLiquidityPercent, haltFeePercent);
+        poolStrategy.setHaltParams(haltThreshold, haltLiquidityPercent, haltFeePercent, haltRequestThreshold);
         
         _fundAccountsWithYieldToken();
         

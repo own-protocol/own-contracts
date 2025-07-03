@@ -75,7 +75,8 @@ contract DefaultPoolStrategyTest is Test {
         strategy.setHaltParams(
             5 days,        // Halt threshold
             7000,          // Halt liquidity percentage (70%)
-            500            // Halt fee percentage (5%)
+            500,           // Halt fee percentage (5%)
+            20              // Halt request threshold (20 cycles)
         );
     }
     
@@ -89,9 +90,11 @@ contract DefaultPoolStrategyTest is Test {
         uint256 haltThreshold = strategy.haltThreshold();
         uint256 haltLiquidityPercent = strategy.haltLiquidityPercent();
         uint256 haltFeePercent = strategy.haltFeePercent();
+        uint256 haltRequestThreshold = strategy.haltRequestThreshold();
         assertEq(haltThreshold, 5 days, "Halt threshold should be set correctly");
         assertEq(haltLiquidityPercent, 7000, "Halt liquidity percentage should be set correctly");
         assertEq(haltFeePercent, 500, "Halt fee percentage should be set correctly");
+        assertEq(haltRequestThreshold, 20, "Halt request threshold should be set correctly");
 
         (uint256 baseRate, uint256 rate1, uint256 maxRate, uint256 utilTier1, uint256 utilTier2) =
             strategy.getInterestRateParams();

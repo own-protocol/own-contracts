@@ -311,7 +311,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
                 poolHaltPercent = Math.mulDiv(poolHaltAmount, BPS, totalLiquidity);
             }
             // if poolHaltPercent is greater than the halt liquidity percent
-            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount < availableLiquidity) {
+            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount > availableLiquidity) {
                 _startNewCycle(CycleState.POOL_HALTED);
             } else {
                 _startNewCycle(CycleState.POOL_ACTIVE);
@@ -326,7 +326,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
      * @param haltPool Whether to halt the pool
      */
     function rebalancePool(address lp, uint256 rebalancePrice, bool haltPool) external {
-        if (haltPool) {
+        if (haltPool && cycleIndex > poolStrategy.haltRequestThreshold()) {
             uint256 liquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
             uint256 haltFee = Math.mulDiv(liquidityCommitment, poolStrategy.haltFeePercent(), BPS);
             // Transfer halt fee to the fee recipient
@@ -414,7 +414,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
                 poolHaltPercent = Math.mulDiv(poolHaltAmount, BPS, totalLiquidity);
             }
             // if poolHaltPercent is greater than the halt liquidity percent
-            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount < availableLiquidity) {
+            if (poolHaltPercent > poolStrategy.haltLiquidityPercent() && poolHaltAmount > availableLiquidity) {
                 _startNewCycle(CycleState.POOL_HALTED);
             } else {
                 _startNewCycle(CycleState.POOL_ACTIVE);

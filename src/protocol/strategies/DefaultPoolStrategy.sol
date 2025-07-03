@@ -49,6 +49,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     uint256 public haltThreshold;               // Threshold for halting the pool (default: 5 days)
     uint256 public haltLiquidityPercent;        // Percentage of liquidity commitment to halt (default: 70%)
     uint256 public haltFeePercent;              // Percentage of fees to halt (default: 5%)
+    uint256 public haltRequestThreshold;        // Threshold for halting requests (default: 20 cycles)
 
     // Yield generating reserve
     bool public isYieldBearing;                 // Flag to indicate if the reserve is yield generating
@@ -203,24 +204,29 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
      * @param _haltThreshold Threshold for halting the pool (in seconds)
      * @param _haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
      * @param _haltFeePercent Percentage of fees to halt (scaled by 10000)
+     * @param _haltRequestThreshold Threshold for halting requests (in cycles)
      */
     function setHaltParams(
         uint256 _haltThreshold,
         uint256 _haltLiquidityPercent,
-        uint256 _haltFeePercent
+        uint256 _haltFeePercent,
+        uint256 _haltRequestThreshold
     ) external onlyOwner {
         require(_haltThreshold > 0, "Halt threshold must be > 0");
         require(_haltLiquidityPercent <= BPS, "Halt liquidity percent cannot exceed 100%");
         require(_haltFeePercent <= BPS, "Halt fee percent cannot exceed 100%");
+        require(_haltRequestThreshold > 0, "Halt request threshold must be > 0");
 
         haltThreshold = _haltThreshold;
         haltLiquidityPercent = _haltLiquidityPercent;
         haltFeePercent = _haltFeePercent;
+        haltRequestThreshold = _haltRequestThreshold;
 
         emit HaltParamsUpdated(
             _haltThreshold,
             _haltLiquidityPercent,
-            _haltFeePercent
+            _haltFeePercent,
+            _haltRequestThreshold
         );
     }
 

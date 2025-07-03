@@ -73,11 +73,13 @@ interface IPoolStrategy {
      * @param haltThreshold Threshold for halting the pool (scaled by 10000)
      * @param haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
      * @param haltFeePercent Percentage of fees to halt (scaled by 10000)
+     * @param haltRequestThreshold Threshold for halting requests (in cycles)
      */
     event HaltParamsUpdated(
         uint256 haltThreshold,
         uint256 haltLiquidityPercent,
-        uint256 haltFeePercent
+        uint256 haltFeePercent,
+        uint256 haltRequestThreshold
     );
 
     // --------------------------------------------------------------------------------
@@ -150,11 +152,13 @@ interface IPoolStrategy {
      * @param _haltThreshold Threshold for halting the pool (scaled by 10000)
      * @param _haltLiquidityPercent Percentage of liquidity commitment to halt (scaled by 10000)
      * @param _haltFeePercent Percentage of fees to halt (scaled by 10000)
+     * @param _haltRequestThreshold Threshold for halting requests (in cycles)
      */
     function setHaltParams(
         uint256 _haltThreshold,
         uint256 _haltLiquidityPercent,
-        uint256 _haltFeePercent
+        uint256 _haltFeePercent,
+        uint256 _haltRequestThreshold
     ) external;
 
     /**
@@ -465,4 +469,10 @@ interface IPoolStrategy {
      * @return The halt fee percentage (scaled by 10000)
      */
     function haltFeePercent() external view returns (uint256);
+
+    /**
+     * @notice Returns the threshold for halting requests
+     * @return The halt request threshold in cycles
+     */
+    function haltRequestThreshold() external view returns (uint256);
 }

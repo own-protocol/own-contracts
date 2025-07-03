@@ -56,6 +56,7 @@ contract ProtocolTestUtils is Test {
     uint256 public constant haltThreshold = 5 days;
     uint256 public constant haltLiquidityPercent = 7000; // 70%
     uint256 public constant haltFeePercent = 500; // 5%
+    uint256 public constant haltRequestThreshold = 20; // 20 cycles
     
     // Set interest rate parameters
     uint256 public constant baseRate = 900; // 9%
@@ -178,7 +179,7 @@ contract ProtocolTestUtils is Test {
         poolStrategy.setLPLiquidityParams(lpHealthyRatio, lpLiquidationThreshold, lpLiquidationReward, lpMinCommitment);
         poolStrategy.setProtocolFeeParams(protocolFee, feeRecipient);
         poolStrategy.setUserCollateralParams(userhealthyRatio, userLiquidationThreshold);
-        poolStrategy.setHaltParams(haltThreshold, haltLiquidityPercent, haltFeePercent);
+        poolStrategy.setHaltParams(haltThreshold, haltLiquidityPercent, haltFeePercent, haltRequestThreshold);
     }
     
     /**
