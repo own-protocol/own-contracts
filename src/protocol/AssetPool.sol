@@ -346,7 +346,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             if(request.amount >= amount) revert BetterLiquidationRequestExists();
             cycleTotalRedemptions -= request.amount;
             // Refund the previous liquidator's tokens
-            assetToken.safeTransfer(liquidationInitiators[user], request.amount);
+            _safeTransferBalance(liquidationInitiators[user], request.amount, true);
             emit LiquidationCancelled(user, liquidationInitiators[user], request.amount);
 
         } else if (request.requestType != RequestType.NONE) {
