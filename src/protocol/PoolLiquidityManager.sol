@@ -140,7 +140,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Add liquidity to the pool
      * @param amount The amount of liquidity to add
      */
-    function addLiquidity(uint256 amount) external nonReentrant {
+    function addLiquidity(uint256 amount) public nonReentrant {
         if (amount == 0) revert InvalidAmount();
 
         // Check minimum commitment requirement
@@ -298,6 +298,16 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     }
 
     /**
+     * @notice Register as an LP, add liquidity & set delegate
+     * @param amount Amount of liquidity to add
+     * @param delegate Address of the delegate (use address(0) to remove)
+     */
+    function registerLP(uint256 amount, address delegate) external {
+        addLiquidity(amount);
+        setDelegate(delegate);
+    }
+
+    /**
      * @notice Claim interest accrued on LP position
      */
     function claimInterest() external nonReentrant onlyRegisteredLP {
@@ -322,7 +332,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     * @notice Set a delegate address that can rebalance on behalf of the LP
     * @param delegate Address of the delegate (use address(0) to remove)
     */
-    function setDelegate(address delegate) external onlyRegisteredLP {
+    function setDelegate(address delegate) public onlyRegisteredLP {
         lpDelegates[msg.sender] = delegate;
         emit DelegateSet(msg.sender, delegate);
     }

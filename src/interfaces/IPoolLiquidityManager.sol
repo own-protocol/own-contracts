@@ -280,6 +280,13 @@ interface IPoolLiquidityManager {
     function reduceCollateral(uint256 amount) external;
 
     /**
+     * @notice Register as an LP, add liquidity & set delegate
+     * @param amount Amount of liquidity to add
+     * @param delegate Address of the delegate (use address(0) to remove)
+     */
+    function registerLP(uint256 amount, address delegate) external;
+
+    /**
      * @notice Claim interest accrued on LP position
      */
     function claimInterest() external;
