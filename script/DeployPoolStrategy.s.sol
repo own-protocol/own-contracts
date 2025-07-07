@@ -8,17 +8,17 @@ import "../src/protocol/strategies/DefaultPoolStrategy.sol";
 
 contract DeployPoolStrategyScript is Script {
     // Strategy parameters - adjust these as needed
-    uint256 constant REBALANCE_LENGTH = 3 hours;       // 3 hours for onchain rebalancing period
+    uint256 constant REBALANCE_LENGTH = 60 minutes;       // 1 hour for onchain rebalancing period
     uint256 constant ORACLE_UPDATE_THRESHOLD = 15 minutes; // 15 minutes for oracle update threshold
     
     // Interest rate parameters
     uint256 constant BASE_INTEREST_RATE = 600;         // 6.00% base interest rate
     uint256 constant INTEREST_RATE1 = 1200;            // 12.00% tier 1 interest rate
     uint256 constant MAX_INTEREST_RATE = 4800;         // 48.00% maximum interest rate
-    uint256 constant UTILIZATION_TIER1 = 6500;         // 65.00% first utilization tier
-    uint256 constant UTILIZATION_TIER2 = 7500;         // 75.00% second utilization tier
-    
-    // Fee parameters  
+    uint256 constant UTILIZATION_TIER1 = 7500;         // 75.00% first utilization tier
+    uint256 constant UTILIZATION_TIER2 = 8500;         // 85.00% second utilization tier
+
+    // Fee parameters
     uint256 constant PROTOCOL_FEE = 1000;              // 10.00% fee on interest
     
     // User collateral parameters
@@ -26,8 +26,8 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant USER_LIQUIDATION_THRESHOLD = 1250; // 12.50% liquidation threshold
     
     // LP parameters
-    uint256 constant LP_HEALTHY_RATIO = 3000;          // 30.00% healthy collateral ratio
-    uint256 constant LP_LIQUIDATION_THRESHOLD = 2000;  // 20.00% liquidation threshold
+    uint256 constant LP_HEALTHY_RATIO = 2000;          // 20.00% healthy collateral ratio
+    uint256 constant LP_LIQUIDATION_THRESHOLD = 1500;  // 15.00% liquidation threshold
     uint256 constant LP_LIQUIDATION_REWARD = 50;       // 0.50% liquidation reward
     uint256 constant LP_MIN_COMMITMENT = 100;         // Minimum LP commitment amount
 
