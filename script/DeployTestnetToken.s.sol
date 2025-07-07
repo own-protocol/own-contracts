@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../docs/testnet/SimpleToken.sol";
+import "../docs/testnet/SimpleTokenV2.sol";
 
 contract DeploySimpleToken is Script {
     function run() external {
@@ -13,13 +13,15 @@ contract DeploySimpleToken is Script {
         string memory name = "USDT";
         string memory symbol = "USDT";
         uint8 decimals = 18;
-        uint256 nonOwnerMintLimit = 10000; // 10000 tokens (will be scaled by decimals in the contract)
-        
+        uint256 nonOwnerMintLimit = 50000; // 50000 tokens (will be scaled by decimals in the contract)
+        uint256 maxMintPerTransaction = 10000; // 10000 tokens per transaction
+        uint256 maxMintTimes = 5; // Maximum 5 minting transactions per non-owner
+
         // Start broadcast for deployment
         vm.startBroadcast(deployerPrivateKey);
         
         // Deploy the token
-        SimpleToken token = new SimpleToken(name, symbol, decimals, nonOwnerMintLimit);
+        SimpleToken token = new SimpleToken(name, symbol, decimals, nonOwnerMintLimit, maxMintPerTransaction, maxMintTimes);
         
         // End broadcast
         vm.stopBroadcast();

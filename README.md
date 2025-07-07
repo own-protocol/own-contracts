@@ -27,23 +27,23 @@ The protocol creates a market where users gain exposure to stock performance by 
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPoolFactory | `0x6eA99f37b4c3ad5B3353cF7CBf7db916fd78ee63` |
+| AssetPoolFactory | `0x59409659e34158244AF69c3E3aE15Ded8bA941A4` |
 
 ## Implementation Contract Addresses (Base Sepolia)
 
 | Contract             | Address                                      |
 | -------------------- | -------------------------------------------- |
-| AssetPool            | `0x3A91E1E6Fd53Bf1efF573dBd551DA930f4937ea3` |
-| PoolCylceManager     | `0xda22816E7FeAD4a4639cC892d7Dfa0d1eCDB362C` |
-| PoolLiquidityManager | `0x3C6F5423287FCf768E2393735778a65f94d521e7` |
-| ProtocolRegistry     | `0xCEaBF7ed92bCA91920316f015C92F61a4F8bE761` |
+| AssetPool            | `0x63a0Bc7cf9603f5D3bcAE4C35500526a72A790AE` |
+| PoolCylceManager     | `0x3B10A2343fFC0C452AeE1580fBcFB27cA05572f1` |
+| PoolLiquidityManager | `0xACdf42f5A525EF0a0E3D749d6000471cf1100a81` |
+| ProtocolRegistry     | `0x811Ad5f758DB53d8dD3B18890a0cfe5a389e3C72` |
 
 ## Strategy Contract Addresses (Base Sepolia)
 
 | Contract   | Address                                      |
 | ---------- | -------------------------------------------- |
-| Strategy A | `0x7dFC74B1dAfd918D66B35E5237C7A5b170710386` |
-| Strategy B | `0x627d18FAe968Ad8d73CE9f54680B2e6F3b15700e` |
+| Strategy A | `0x1D89e11a80d08323B86377f56Ff2de9B07cf6045` |
+| Strategy B | `0xD0aD5937B8365C90404145FFEc361b2C817B0c52` |
 
 Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.  
 Strategy B - To be used for high volatility assets. It has higher lp collateral requirements.
@@ -52,8 +52,8 @@ Strategy B - To be used for high volatility assets. It has higher lp collateral 
 
 | TSLA   | Address                                      |
 | ------ | -------------------------------------------- |
-| Pool   | `0x688878805152CE79CD930071cD32481B11A5b95B` |
-| Oracle | `0x845d51C05c482198A7C543D3BFaB95846E3E0a50` |
+| Pool   | `0x9c66076401E5008E4BE2FAB3d013e5A257AAc102` |
+| Oracle | `0xF2fF3c044fEEDA0FE91A65ba3f056d7D81E6c6dc` |
 
 ## Deploy & Create Commands
 

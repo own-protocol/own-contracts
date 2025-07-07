@@ -5,10 +5,10 @@ import "forge-std/Script.sol";
 import "../src/protocol/AssetPoolFactory.sol";
 
 contract AssetPoolFactoryDeployScript is Script {
-    address constant assetPool = 0x02c436fdb529AeadaC0D4a74a34f6c51BFC142F0;
-    address constant cycleManager = 0x105B599CDbC0B6EFa4C04C8dbbc4313894487713;
-    address constant liquidityManager = 0x66B2079cfdB9f387Bc08E36ca25097ADeD661e2b;
-    address constant protocolRegistry = 0x0AE43Ac4d1B35da83D46dC5f78b22501f83E846c;
+    address constant assetPool = 0x63a0Bc7cf9603f5D3bcAE4C35500526a72A790AE;
+    address constant cycleManager = 0x3B10A2343fFC0C452AeE1580fBcFB27cA05572f1;
+    address constant liquidityManager = 0xACdf42f5A525EF0a0E3D749d6000471cf1100a81;
+    address constant protocolRegistry = 0x811Ad5f758DB53d8dD3B18890a0cfe5a389e3C72;
     
 
     function setUp() public {}
