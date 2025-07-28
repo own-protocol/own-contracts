@@ -59,14 +59,14 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
     uint256 public cycleInterestAmount;
 
     /**
-     * @notice Asset price high for the current cycle
+     * @notice Asset price open for the current cycle
      */
-    uint256 public cyclePriceHigh;
+    uint256 public cyclePriceOpen;
 
     /**
-     * @notice Asset price low for the current cycle
+     * @notice Asset price close for the current cycle
      */
-    uint256 public cyclePriceLow;
+    uint256 public cyclePriceClose;
 
     /**
      * @notice Number of LPs who need to rebalance in the current cycle
@@ -217,7 +217,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             }
         }
 
-        (,cyclePriceHigh, cyclePriceLow, ,) = assetOracle.ohlcData();
+        (cyclePriceOpen, , , cyclePriceClose,) = assetOracle.ohlcData();
 
         // Accrue interest before changing cycle state
         _accrueInterest();
@@ -350,8 +350,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
         if (!poolLiquidityManager.isLP(lp)) revert NotLP();
 
-        // Calculate the settlement price (average of high and low)
-        uint256 settlementPrice = (cyclePriceHigh + cyclePriceLow) / 2;
+        // Calculate the settlement price (average of open and close)
+        uint256 settlementPrice = (cyclePriceOpen + cyclePriceClose) / 2;
 
         uint256 lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
@@ -574,7 +574,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
      * @param rebalancePrice Price at which the LP is rebalancing.
      */
     function _validateRebalancingPrice(uint256 rebalancePrice) internal view {
-        if (rebalancePrice < cyclePriceLow || rebalancePrice > cyclePriceHigh) {
+        if (rebalancePrice < Math.min(cyclePriceOpen, cyclePriceClose) ||
+            rebalancePrice > Math.max(cyclePriceOpen, cyclePriceClose)) {
             revert InvalidRebalancePrice();
         }
     }
@@ -603,8 +604,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         lastCycleActionDateTime = block.timestamp;
         cycleRebalanceAmount = 0;
         cycleInterestAmount = 0;
-        cyclePriceHigh = 0;
-        cyclePriceLow = 0;
+        cyclePriceOpen = 0;
+        cyclePriceClose = 0;
         poolHaltAmount = 0;
         cumulativeInterestIndex[cycleIndex] = cumulativeInterestIndex[cycleIndex - 1];
         

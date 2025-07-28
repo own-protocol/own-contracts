@@ -285,14 +285,14 @@ interface IPoolCycleManager {
     function lastInterestAccrualTimestamp() external view returns (uint256);
 
     /**
-     * @notice Asset price high for the current cycle
+     * @notice Asset price open for the current cycle
      */
-    function cyclePriceHigh() external view returns (uint256);
+    function cyclePriceOpen() external view returns (uint256);
 
     /**
-     * @notice Asset price low for the current cycle
+     * @notice Asset price close for the current cycle
      */
-    function cyclePriceLow() external view returns (uint256);
+    function cyclePriceClose() external view returns (uint256);
 
     /**
      * @notice Returns the total number of LPs that need to rebalance in the current cycle
