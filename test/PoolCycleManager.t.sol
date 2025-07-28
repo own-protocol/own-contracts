@@ -152,9 +152,8 @@ contract PoolCycleManagerTest is ProtocolTestUtils {
         assertEq(cycleManager.cycleLPCount(), lpCount, "Cycle LP count should match total LPs");
         
         // Verify high/low prices were set
-        assertGt(cycleManager.cyclePriceHigh(), 0, "Cycle high price should be set");
-        assertGt(cycleManager.cyclePriceLow(), 0, "Cycle low price should be set");
-        assertGt(cycleManager.cyclePriceHigh(), cycleManager.cyclePriceLow(), "High price should be greater than low price");
+        assertGt(cycleManager.cyclePriceOpen(), 0, "Cycle open price should be set");
+        assertGt(cycleManager.cyclePriceClose(), 0, "Cycle close price should be set");
     }
     
     /**
