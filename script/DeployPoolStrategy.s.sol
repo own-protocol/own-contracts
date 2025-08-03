@@ -15,15 +15,15 @@ contract DeployPoolStrategyScript is Script {
     uint256 constant BASE_INTEREST_RATE = 600;         // 6.00% base interest rate
     uint256 constant INTEREST_RATE1 = 1200;            // 12.00% tier 1 interest rate
     uint256 constant MAX_INTEREST_RATE = 4800;         // 48.00% maximum interest rate
-    uint256 constant UTILIZATION_TIER1 = 7500;         // 75.00% first utilization tier
-    uint256 constant UTILIZATION_TIER2 = 8500;         // 85.00% second utilization tier
+    uint256 constant UTILIZATION_TIER1 = 7000;         // 70.00% first utilization tier
+    uint256 constant UTILIZATION_TIER2 = 8000;         // 80.00% second utilization tier
 
     // Fee parameters
     uint256 constant PROTOCOL_FEE = 1000;              // 10.00% fee on interest
     
     // User collateral parameters
-    uint256 constant USER_HEALTHY_RATIO = 2000;        // 20.00% healthy collateral ratio
-    uint256 constant USER_LIQUIDATION_THRESHOLD = 1250; // 12.50% liquidation threshold
+    uint256 constant USER_HEALTHY_RATIO = 1250;        // 12.50% healthy collateral ratio
+    uint256 constant USER_LIQUIDATION_THRESHOLD = 800; // 8.00% liquidation threshold
     
     // LP parameters
     uint256 constant LP_HEALTHY_RATIO = 2000;          // 20.00% healthy collateral ratio
@@ -40,7 +40,7 @@ contract DeployPoolStrategyScript is Script {
     function run() public {
         // Get deployer private key from the environment
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address feeRecipient = 0xb914b344D8a2C88598A9C5905C9342a9678a67db;  // Set the fee recipient address here
+        address feeRecipient = 0xB31DbCFEb935DADf10698980FDCE6b313b744c5F;  // Set the fee recipient address here
         
         // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
@@ -92,7 +92,7 @@ contract DeployPoolStrategyScript is Script {
         );
         
         // Optionally set yield-bearing flag if needed
-        // poolStrategy.setIsYieldBearing();
+        poolStrategy.setIsYieldBearing();
         
         // Stop broadcasting transactions
         vm.stopBroadcast();
