@@ -13,9 +13,11 @@ remappings = [
 [rpc_endpoints]
 sepolia = "${RPC_URL_SEPOLIA}"
 base_sepolia = "${RPC_URL_BASE_SEPOLIA}"
+base = "${RPC_URL_BASE}"
 
 [etherscan]
 sepolia = { key = "${ETHERSCAN_API_KEY_SEPOLIA}", chain = 11155111 }
 base_sepolia = { key = "${ETHERSCAN_API_KEY_BASE_SEPOLIA}", chain = 84532 }
+base = { key = "${ETHERSCAN_API_KEY_BASE}", chain = 8453 }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
