@@ -563,7 +563,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 totalLiquidity = poolLiquidityManager.totalLPLiquidityCommited();
         uint256 utilisedLiquidity = pool.getUtilisedLiquidity();
         
-        return totalLiquidity - utilisedLiquidity;
+        return totalLiquidity > utilisedLiquidity ? totalLiquidity - utilisedLiquidity : 0;
     }
 
     /**
@@ -579,7 +579,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 cycleTotalLiquidity = poolLiquidityManager.getCycleTotalLiquidityCommited();
         uint256 cycleUtilisedLiquidity = calculateCycleUtilisedLiquidity(assetPool);
         
-        return cycleTotalLiquidity - cycleUtilisedLiquidity;
+        return cycleTotalLiquidity > cycleUtilisedLiquidity ? cycleTotalLiquidity - cycleUtilisedLiquidity : 0;
     }
 
     /**
