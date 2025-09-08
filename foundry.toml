@@ -21,11 +21,11 @@ base_sepolia = { key = "${ETHERSCAN_API_KEY_BASE_SEPOLIA}", chain = 84532 }
 base = { key = "${ETHERSCAN_API_KEY_BASE}", chain = 8453 }
 
 [invariant]
-runs = 10000
-depth = 50
+runs = 1024
+depth = 25
 fail_on_revert = false
 call_override = false
-shrink_runs = 5000
+shrink_runs = 500
 dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
