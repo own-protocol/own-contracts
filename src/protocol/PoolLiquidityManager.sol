@@ -158,7 +158,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         if (poolStrategy.isYieldBearing()) {
             // Handle yield-bearing deposit
-            _handleYieldBearingDeposit(msg.sender, requiredCollateral);
+            _handleYieldBearingDeposit(msg.sender, requiredCollateral, msg.sender);
         } else {
             // Transfer required collateral
             reserveToken.safeTransferFrom(msg.sender, address(this), requiredCollateral);
@@ -241,12 +241,12 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     function addCollateral(address lp, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         
+        address delegate = lpDelegates[lp];
+        address fromAccount = (delegate != address(0) && msg.sender == delegate) ? lp : msg.sender;
         if (poolStrategy.isYieldBearing()) {
-            // Handle yield-bearing deposit
-            _handleYieldBearingDeposit(lp, amount);
+            _handleYieldBearingDeposit(lp, amount, fromAccount);
         } else {
-            // Transfer required collateral
-            reserveToken.safeTransferFrom(lp, address(this), amount);
+            reserveToken.safeTransferFrom(fromAccount, address(this), amount);
         }
 
         lpPositions[lp].collateralAmount += amount;
@@ -770,12 +770,13 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @notice Handle deposit for yield-bearing tokens with yield calculation
      * @param lp Address of the LP depositing
      * @param amount Amount being deposited
+     * @param depositor Address of the actual depositor (can be different from lp)
      */
-    function _handleYieldBearingDeposit(address lp, uint256 amount) internal {
+    function _handleYieldBearingDeposit(address lp, uint256 amount, address depositor) internal {
         // Update the reserve yield index
         _updateReserveYieldIndex();
-        // Transfer amount from LP to this contract
-        reserveToken.safeTransferFrom(lp, address(this), amount);
+        // Transfer amount from depositor to this contract
+        reserveToken.safeTransferFrom(depositor, address(this), amount);
         // Update the LP's reserve yield index
         _updateLPReserveYieldIndex(lp, amount);
     }
