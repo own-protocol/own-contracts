@@ -156,8 +156,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (amount == 0) revert InvalidAmount();
 
         UserPosition storage position = userPositions[user];
-        
-        _handleDeposit(user, amount);
+
+        _handleDeposit(user, amount, msg.sender);
 
         // Update user's position
         position.collateralAmount += amount;
@@ -256,7 +256,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         uint256 totalDeposit = amount + collateralAmount;
 
-        _handleDeposit(msg.sender, totalDeposit);
+        _handleDeposit(msg.sender, totalDeposit, msg.sender);
         
         // Update request state
         request.requestType = RequestType.DEPOSIT;
@@ -719,12 +719,13 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @notice Handle deposit for reserve tokens
      * @param user Address of the user depositing
      * @param amount Amount being deposited
+     * @param depositor Address from which the tokens are transferred (could be user or a third party)
      */
-    function _handleDeposit(address user, uint256 amount) internal {
+    function _handleDeposit(address user, uint256 amount, address depositor) internal {
         if (poolStrategy.isYieldBearing()) {
             // Update the reserve yield index before calculating yield
             _updateReserveYieldIndex();
-            reserveToken.safeTransferFrom(user, address(this), amount);
+            reserveToken.safeTransferFrom(depositor, address(this), amount);
 
             uint256 oldPrincipal = _getUserTotalReserveAmount(user);
             uint256 newPrincipal = oldPrincipal + amount;
@@ -738,8 +739,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             }
             userReserveYieldIndex[user] = newUserIndex;
         } else {
-            // Transfer collateral from user to this contract
-            reserveToken.safeTransferFrom(user, address(this), amount);
+            // Transfer collateral from depositor to this contract
+            reserveToken.safeTransferFrom(depositor, address(this), amount);
         }
     }
 
