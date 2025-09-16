@@ -630,9 +630,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      */
     function updateCycleData(uint256 rebalancePrice, int256 rebalanceAmount) external {
         _requirePoolCycleManager();
-        reserveBackingAsset = reserveBackingAsset 
-            + cycleTotalDeposits
-            - _convertAssetToReserve(cycleTotalRedemptions, rebalancePrice);
+        reserveBackingAsset += cycleTotalDeposits;
 
         int256 nettAssetChange = int256(_convertReserveToAsset(cycleTotalDeposits, rebalancePrice)) - int256(cycleTotalRedemptions);
 
@@ -641,8 +639,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             aggregatePoolReserves += uint256(rebalanceAmount);
         } else if (rebalanceAmount < 0) {
             reserveBackingAsset -= uint256(-rebalanceAmount);
-            aggregatePoolReserves -= uint256(-rebalanceAmount);
+            aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, uint256(-rebalanceAmount));
         }
+
+        reserveBackingAsset = _safeSubtract(reserveBackingAsset, _convertReserveToAsset(cycleTotalRedemptions, rebalancePrice));
 
         if (nettAssetChange > 0) {
             assetToken.mint(address(this), uint256(nettAssetChange));
