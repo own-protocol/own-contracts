@@ -215,8 +215,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             }
         }
 
-        // Alowed reduction is lower (50%) in case of normal reduction
-        uint256 allowedReduction = poolStrategy.calculateCycleAvailableLiquidity(address(assetPool)) / 2;
+        uint256 availableLiquidity = poolStrategy.calculateCycleAvailableLiquidity(address(assetPool));
+        // Allowed reduction is lower (50%) when its being utilized
+        uint256 allowedReduction = assetToken.totalSupply() > 0 ? availableLiquidity / 2 : availableLiquidity;
         // Ensure there is available liquidity for the operation
         if (allowedReduction == 0) revert UtilizationTooHighForOperation();
         // Ensure reduction amount doesn't exceed allowed reduction
@@ -517,10 +518,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
      * @return uint256 Total liquidity committed
      */
     function getCycleTotalLiquidityCommited() public view returns (uint256) {
-        if (totalLPLiquidityCommited == 0) return 0;
-        uint256 cycleTotalLiquidity = totalLPLiquidityCommited
-            + cycleTotalAddLiquidityAmount
-            - cycleTotalReduceLiquidityAmount;
+        uint256 cycleTotalLiquidity = _safeSubtract(totalLPLiquidityCommited + cycleTotalAddLiquidityAmount,
+            cycleTotalReduceLiquidityAmount
+        );
 
         return cycleTotalLiquidity;
     }
