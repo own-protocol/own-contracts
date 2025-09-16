@@ -677,9 +677,5 @@ contract ProtocolTestUtils is Test {
         (rebalanceAmount, isDeposit) = cycleManager.calculateLPRebalanceAmount(liquidityProvider2, _newPrice);
         cycleManager.rebalancePool(liquidityProvider2, _newPrice);
         vm.stopPrank();
-        
-        // Set market back to open for normal operations
-        vm.prank(owner);
-        assetOracle.setMarketOpen(true);
     }
 }

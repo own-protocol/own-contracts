@@ -588,7 +588,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         poolLiquidityManager.updateCycleData();
         // calculate the rebalance price for the cycle
         // The cycleWeightedSum is divided by the total LP liquidity committed to get the average price
-        uint256 price = Math.mulDiv(cycleWeightedSum, PRECISION, poolLiquidityManager.totalLPLiquidityCommited() * reserveToAssetDecimalFactor);
+        uint256 lpCommitment = poolLiquidityManager.totalLPLiquidityCommited();
+        uint256 price = lpCommitment > 0 ? Math.mulDiv(cycleWeightedSum, PRECISION, lpCommitment * reserveToAssetDecimalFactor) : 0;
         cycleRebalancePrice[cycleIndex] = price;
         // Calculate the cumulative interest index
         if (assetToken.totalSupply() > 0) {

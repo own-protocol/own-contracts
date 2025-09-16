@@ -122,6 +122,6 @@ abstract contract PoolStorage is Initializable {
      * @param price The price of the asset in reserve terms
      */
     function _convertReserveToAsset(uint256 reserveAmount, uint256 price) internal view returns (uint256) {
-        return Math.mulDiv(reserveAmount, PRECISION * reserveToAssetDecimalFactor, price);
+        return price > 0 ? Math.mulDiv(reserveAmount, PRECISION * reserveToAssetDecimalFactor, price) : 0;
     }
 }
