@@ -154,4 +154,7 @@ forge test --gas-report
 
 # Check contract verification status
 forge verify-check $GUID --chain-id $CHAIN_ID
+
+# Run specific test
+forge test --match-contract ContractName --match-test testName
 ```

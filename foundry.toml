@@ -21,13 +21,12 @@ base_sepolia = { key = "${ETHERSCAN_API_KEY_BASE_SEPOLIA}", chain = 84532 }
 base = { key = "${ETHERSCAN_API_KEY_BASE}", chain = 8453 }
 
 [invariant]
-runs = 1024
-depth = 25
+runs = 1800
+depth = 96
 fail_on_revert = false
-call_override = false
-shrink_runs = 500
-dictionary_weight = 80
-include_storage = true
-include_push_bytes = true
+shrink_runs = 150
+dictionary_weight = 55
+include_storage = false
+include_push_bytes = false
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
