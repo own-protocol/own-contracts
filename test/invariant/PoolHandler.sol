@@ -10,164 +10,226 @@ import "../../src/interfaces/IPoolLiquidityManager.sol";
 import "../../src/interfaces/IPoolCycleManager.sol";
 import "../../src/protocol/xToken.sol";
 import "../mocks/MockERC20.sol";
+import "../mocks/MockAssetOracle.sol";
 
 /**
  * @title PoolHandler
- * @notice Handler contract for invariant testing of Pool
- * @dev Fuzzes core protocol actions while maintaining the reserve conservation invariant
+ * @notice Cycle-aware pool handler for invariant testing
  */
 contract PoolHandler is Test {
-    AssetPool public assetPool;
+    AssetPool public pool;
     PoolLiquidityManager public liquidityManager;
     PoolCycleManager public cycleManager;
     MockERC20 public reserveToken;
     xToken public assetToken;
+    MockAssetOracle public oracle;
+    address public owner;
     
-    // Track actors for realistic fuzzing
     address[] public users;
     address[] public lps;
     
-    // Constants
-    uint256 constant MAX_AMOUNT = 1e12; // Reasonable max to prevent overflow
-    uint256 constant MIN_AMOUNT = 1e3;  // Minimum viable amount
+    uint256 constant MAX_AMOUNT = 1e12;
+    uint256 constant MIN_AMOUNT = 1e3;
     uint256 constant BPS = 10000;
+    uint256 constant PRECISION = 1e18;
     
-    // Stats for debugging
-    uint256 public depositRequestCalls;
-    uint256 public redemptionRequestCalls;
+    // Tracking
+    uint256 public depositCalls;
+    uint256 public redeemCalls;
     uint256 public addLiquidityCalls;
     uint256 public claimCalls;
+    uint256 public cycleCalls;
     
     constructor(
-        AssetPool _assetPool,
+        AssetPool _pool,
         PoolLiquidityManager _liquidityManager, 
         PoolCycleManager _cycleManager,
         MockERC20 _reserveToken,
         xToken _assetToken,
+        MockAssetOracle _oracle,
+        address _owner,
         address[] memory _users,
         address[] memory _lps
     ) {
-        assetPool = _assetPool;
+        pool = _pool;
         liquidityManager = _liquidityManager;
         cycleManager = _cycleManager;
         reserveToken = _reserveToken;
         assetToken = _assetToken;
+        oracle = _oracle;
+        owner = _owner;
         users = _users;
         lps = _lps;
     }
     
-    modifier useActor(address[] memory actors, uint256 actorSeed) {
-        vm.startPrank(actors[bound(actorSeed, 0, actors.length - 1)]);
-        _;
+    function _boundAmount(uint256 amount) internal pure returns (uint256) {
+        return bound(amount, MIN_AMOUNT, MAX_AMOUNT);
+    }
+    
+    function _getUser(uint256 seed) internal view returns (address) {
+        return users[bound(seed, 0, users.length - 1)];
+    }
+    
+    function _getLP(uint256 seed) internal view returns (address) {
+        return lps[bound(seed, 0, lps.length - 1)];
+    }
+    
+    function _ensureBalance(address user, uint256 amount) internal {
+        if (reserveToken.balanceOf(user) < amount) {
+            reserveToken.mint(user, amount * 2);
+        }
+    }
+    
+    // User deposits (only in ACTIVE state)
+    function deposit(uint256 userSeed, uint256 amount, uint256 collateralRatio) external {
+        if (!_isActive()) return;
+        
+        amount = _boundAmount(amount);
+        collateralRatio = bound(collateralRatio, 1000, 5000); // 10-50%
+        uint256 collateral = (amount * collateralRatio) / BPS;
+        uint256 total = amount + collateral;
+        
+        address user = _getUser(userSeed);
+        _ensureBalance(user, total);
+        
+        vm.startPrank(user);
+        try pool.depositRequest(amount, collateral) {
+            depositCalls++;
+        } catch {}
         vm.stopPrank();
     }
     
-    modifier validAmount(uint256 amount) {
-        amount = bound(amount, MIN_AMOUNT, MAX_AMOUNT);
-        _;
+    // User redeems (only in ACTIVE state)
+    function redeem(uint256 userSeed, uint256 amount) external {
+        if (!_isActive()) return;
+        
+        address user = _getUser(userSeed);
+        uint256 balance = assetToken.balanceOf(user);
+        if (balance == 0) return;
+        
+        amount = bound(amount, 1, balance);
+        
+        vm.startPrank(user);
+        try pool.redemptionRequest(amount) {
+            redeemCalls++;
+        } catch {}
+        vm.stopPrank();
     }
     
-    /// @notice User deposits funds
-    function depositRequest(uint256 userSeed, uint256 amount, uint256 collateralRatio) 
-        external 
-        useActor(users, userSeed)
-        validAmount(amount)
-    {
-        // Bound collateral ratio to reasonable range (10% - 50%)
-        collateralRatio = bound(collateralRatio, 1000, 5000);
-        uint256 collateralAmount = (amount * collateralRatio) / BPS;
+    // LP adds liquidity (only in ACTIVE state)
+    function addLiquidity(uint256 lpSeed, uint256 amount) external {
+        if (!_isActive()) return;
         
-        // Ensure user has enough balance
-        address user = users[bound(userSeed, 0, users.length - 1)];
-        uint256 totalNeeded = amount + collateralAmount;
-        if (reserveToken.balanceOf(user) < totalNeeded) {
-            reserveToken.mint(user, totalNeeded);
-        }
+        amount = _boundAmount(amount);
+        address lp = _getLP(lpSeed);
+        _ensureBalance(lp, amount);
         
-        try assetPool.depositRequest(amount, collateralAmount) {
-            depositRequestCalls++;
-        } catch {
-            // Ignore failed calls - they shouldn't break invariants
-        }
-    }
-    
-    /// @notice User redeems assets
-    function redemptionRequest(uint256 userSeed, uint256 amount) 
-        external 
-        useActor(users, userSeed)
-        validAmount(amount)
-    {
-        address user = users[bound(userSeed, 0, users.length - 1)];
-        uint256 userBalance = assetToken.balanceOf(user);
-        
-        if (userBalance == 0) return;
-        
-        amount = bound(amount, 1, userBalance);
-        
-        try assetPool.redemptionRequest(amount) {
-            redemptionRequestCalls++;
-        } catch {
-            // Ignore failed calls
-        }
-    }
-    
-    /// @notice LP adds liquidity
-    function addLiquidity(uint256 lpSeed, uint256 amount) 
-        external 
-        useActor(lps, lpSeed)
-        validAmount(amount)
-    {
-        address lp = lps[bound(lpSeed, 0, lps.length - 1)];
-        
-        // Ensure LP has enough balance
-        if (reserveToken.balanceOf(lp) < amount) {
-            reserveToken.mint(lp, amount);
-        }
-        
+        vm.startPrank(lp);
         try liquidityManager.addLiquidity(amount) {
             addLiquidityCalls++;
-        } catch {
-            // Ignore failed calls
-        }
+        } catch {}
+        vm.stopPrank();
     }
     
-    /// @notice User claims assets after deposit
-    function claimAsset(uint256 userSeed) 
-        external 
-        useActor(users, userSeed)
-    {
-        address user = users[bound(userSeed, 0, users.length - 1)];
+    // Claim assets (any state except during transitions)
+    function claimAsset(uint256 userSeed) external {
+        address user = _getUser(userSeed);
         
-        try assetPool.claimAsset(user) {
+        vm.startPrank(user);
+        try pool.claimAsset(user) {
             claimCalls++;
-        } catch {
-            // Ignore failed calls
-        }
+        } catch {}
+        vm.stopPrank();
     }
     
-    /// @notice User claims reserves after redemption
-    function claimReserve(uint256 userSeed) 
-        external 
-        useActor(users, userSeed)
-    {
-        address user = users[bound(userSeed, 0, users.length - 1)];
+    // Claim reserves (any state except during transitions)
+    function claimReserve(uint256 userSeed) external {
+        address user = _getUser(userSeed);
         
-        try assetPool.claimReserve(user) {
+        vm.startPrank(user);
+        try pool.claimReserve(user) {
             claimCalls++;
-        } catch {
-            // Ignore failed calls
-        }
+        } catch {}
+        vm.stopPrank();
     }
     
-    /// @notice Get total system reserves for invariant checking
+    // Start offchain rebalance (owner only, from ACTIVE)
+    function startOffchainRebalance(uint256 priceSeed) external {
+        if (!_isActive()) return;
+        
+        uint256 price = bound(priceSeed, PRECISION / 2, PRECISION * 2); // 0.5x to 2x
+        
+        vm.startPrank(owner);
+        oracle.setMarketOpen(true);
+        oracle.setOHLCData(price, price, price, price, block.timestamp);
+        try cycleManager.initiateOffchainRebalance() {
+            cycleCalls++;
+        } catch {}
+        vm.stopPrank();
+    }
+    
+    // Start onchain rebalance (owner only, from OFFCHAIN_REBALANCING)
+    function startOnchainRebalance(uint256 priceSeed) external {
+        if (cycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_REBALANCING_OFFCHAIN) return;
+        
+        uint256 price = bound(priceSeed, PRECISION / 2, PRECISION * 2);
+        
+        vm.warp(block.timestamp + 1 hours); // Simulate time passage
+        
+        vm.startPrank(owner);
+        oracle.setMarketOpen(false);
+        oracle.setOHLCData(price, price, price, price, block.timestamp);
+        try cycleManager.initiateOnchainRebalance() {
+            cycleCalls++;
+        } catch {}
+        vm.stopPrank();
+    }
+    
+    // LP rebalances (only in ONCHAIN_REBALANCING)
+    function rebalance(uint256 lpSeed, uint256 priceSeed) external {
+        if (cycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_REBALANCING_ONCHAIN) return;
+        
+        address lp = _getLP(lpSeed);
+        uint256 price = bound(priceSeed, PRECISION / 2, PRECISION * 2);
+        
+        vm.startPrank(lp);
+        try cycleManager.rebalancePool(lp, price) {
+            cycleCalls++;
+        } catch {}
+        vm.stopPrank();
+    }
+    
+    // Time progression
+    function skipTime(uint256 timeSeed) external {
+        uint256 timeSkip = bound(timeSeed, 1 minutes, 24 hours);
+        vm.warp(block.timestamp + timeSkip);
+    }
+    
+    // Price updates
+    function updatePrice(uint256 priceSeed) external {
+        uint256 price = bound(priceSeed, PRECISION / 2, PRECISION * 2);
+        
+        vm.startPrank(owner);
+        oracle.setOHLCData(price, price, price, price, block.timestamp);
+        vm.stopPrank();
+    }
+    
+    function _isActive() internal view returns (bool) {
+        return cycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE;
+    }
+    
+    // Invariant helpers
     function getSystemReserves() external view returns (uint256) {
-        return reserveToken.balanceOf(address(assetPool)) + 
+        return reserveToken.balanceOf(address(pool)) + 
                reserveToken.balanceOf(address(liquidityManager));
     }
     
-    /// @notice Get total accounted reserves for invariant checking  
     function getAccountedReserves() external view returns (uint256) {
-        return assetPool.aggregatePoolReserves() + 
+        return pool.aggregatePoolReserves() + 
                liquidityManager.aggregatePoolReserves();
+    }
+    
+    function getCycleState() external view returns (uint8) {
+        return uint8(cycleManager.cycleState());
     }
 }

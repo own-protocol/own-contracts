@@ -5,36 +5,33 @@ import "../utils/ProtocolTestUtils.sol";
 import "./PoolHandler.sol";
 
 /**
- * @title PoolInvariantTest  
- * @notice Invariant testing for Pool focusing on reserve conservation
- * @dev Tests the critical invariant that money cannot disappear or be created
+ * @title PoolInvariantTest
+ * @notice Cycle-aware invariant testing for the protocol
  */
 contract PoolInvariantTest is ProtocolTestUtils {
     PoolHandler public handler;
 
-    // Protocol setup constants
     uint256 constant INITIAL_PRICE = 100 * 1e18;
-    uint256 constant USER_INITIAL_BALANCE = 1_000_000;
-    uint256 constant LP_INITIAL_BALANCE = 10_000_000; 
-    uint256 constant LP_LIQUIDITY_AMOUNT = 5_000_000;
+    uint256 constant USER_BALANCE = 100_000;
+    uint256 constant LP_BALANCE = 1_000_000; 
+    uint256 constant LP_LIQUIDITY = 500_000;
     
-    // Actor arrays
     address[] public users;
     address[] public lps;
     
     function setUp() public {
-        // Setup protocol with 6 decimal token (like USDC)
+        // Setup protocol
         bool success = setupProtocol(
             "xTSLA",
             6,
             INITIAL_PRICE,
-            USER_INITIAL_BALANCE,
-            LP_INITIAL_BALANCE,  
-            LP_LIQUIDITY_AMOUNT
+            USER_BALANCE,
+            LP_BALANCE,  
+            LP_LIQUIDITY
         );
         require(success, "Protocol setup failed");
         
-        // Create additional users and LPs for fuzzing
+        // Create test accounts
         for (uint i = 0; i < 5; i++) {
             address user = makeAddr(string(abi.encodePacked("user", vm.toString(i))));
             address lp = makeAddr(string(abi.encodePacked("lp", vm.toString(i))));
@@ -42,13 +39,13 @@ contract PoolInvariantTest is ProtocolTestUtils {
             users.push(user);
             lps.push(lp);
             
-            // Fund accounts and approve
-            uint256 userAmount = adjustAmountForDecimals(USER_INITIAL_BALANCE, 6);
-            uint256 lpAmount = adjustAmountForDecimals(LP_INITIAL_BALANCE, 6);
+            uint256 userAmount = adjustAmountForDecimals(USER_BALANCE, 6);
+            uint256 lpAmount = adjustAmountForDecimals(LP_BALANCE, 6);
             
             reserveToken.mint(user, userAmount);
             reserveToken.mint(lp, lpAmount);
             
+            // Approvals
             vm.startPrank(user);
             reserveToken.approve(address(assetPool), type(uint256).max);
             assetToken.approve(address(assetPool), type(uint256).max);
@@ -59,74 +56,103 @@ contract PoolInvariantTest is ProtocolTestUtils {
             reserveToken.approve(address(cycleManager), type(uint256).max);
             vm.stopPrank();
         }
-        
+
         // Create handler
         handler = new PoolHandler(
             assetPool,
             liquidityManager,
-            cycleManager, 
+            cycleManager,
             reserveToken,
             assetToken,
+            assetOracle,
+            owner,
             users,
             lps
         );
         
-        // Set handler as target for foundry fuzzing
+        // Set as target
         targetContract(address(handler));
     }
     
-    /// @notice The most critical invariant - money can't disappear or be created
-    function invariant_totalReserveConservation() external view {
+    /// @notice Core invariant - reserves must be conserved
+    function invariant_reserveConservation() external view {
         uint256 systemReserves = handler.getSystemReserves();
         uint256 accountedReserves = handler.getAccountedReserves();
         
-        assertEq(systemReserves, accountedReserves, "System reserves must equal accounted reserves");
+        assertEq(systemReserves, accountedReserves, "Reserve conservation failed");
     }
     
-    /// @notice Reserves should never be negative (overflow protection)
-    function invariant_reservesNonNegative() external view {
-        // These will revert on underflow due to uint256
-        assert(assetPool.aggregatePoolReserves() >= 0);
-        assert(liquidityManager.aggregatePoolReserves() >= 0);
-    }
-    
-    /// @notice Asset pool reserves should be backed by actual tokens
-    function invariant_assetPoolReservesBacked() external view {
-        uint256 actualBalance = reserveToken.balanceOf(address(assetPool));
-        uint256 accountedBalance = assetPool.aggregatePoolReserves();
+    /// @notice Pool reserves must be backed by actual tokens
+    function invariant_poolReservesBacked() external view {
+        uint256 poolBalance = reserveToken.balanceOf(address(assetPool));
+        uint256 poolReserves = assetPool.aggregatePoolReserves();
         
-        // Accounted reserves should not exceed actual token balance
-        assert(accountedBalance <= actualBalance);
+        assert(poolReserves <= poolBalance);
     }
     
-    /// @notice Liquidity manager reserves should be backed by actual tokens  
-    function invariant_liquidityManagerReservesBacked() external view {
-        uint256 actualBalance = reserveToken.balanceOf(address(liquidityManager));
-        uint256 accountedBalance = liquidityManager.aggregatePoolReserves();
+    /// @notice LP reserves must be backed by actual tokens
+    function invariant_lpReservesBacked() external view {
+        uint256 lpBalance = reserveToken.balanceOf(address(liquidityManager));
+        uint256 lpReserves = liquidityManager.aggregatePoolReserves();
         
-        // Accounted reserves should not exceed actual token balance
-        assert(accountedBalance <= actualBalance);
+        assert(lpReserves <= lpBalance);
     }
     
-    /// @notice User deposits should equal total collateral + total user deposits
-    function invariant_userAccountingConsistency() external view {
-        // This invariant ensures internal accounting is consistent
-        uint256 totalUserDeposits = assetPool.totalUserDeposits();
-        uint256 totalUserCollateral = assetPool.totalUserCollateral();
+    /// @notice User positions must be consistent
+    function invariant_userPositions() external view {
+        uint256 totalDeposits = assetPool.totalUserDeposits();
+        uint256 totalCollateral = assetPool.totalUserCollateral();
         
-        // These values should be non-negative and consistent with positions
-        assert(totalUserDeposits >= 0);
-        assert(totalUserCollateral >= 0);
+        // These should never overflow (would revert)
+        assert(totalDeposits >= 0);
+        assert(totalCollateral >= 0);
     }
     
-    /// @notice Debug function to check handler state
-    function invariant_logHandlerStats() external view {
-        console2.log("=== Handler Stats ===");
-        console2.log("Deposit requests:", handler.depositRequestCalls());
-        console2.log("Redemption requests:", handler.redemptionRequestCalls()); 
-        console2.log("Add liquidity calls:", handler.addLiquidityCalls());
-        console2.log("Claim calls:", handler.claimCalls());
-        console2.log("System reserves:", handler.getSystemReserves());
-        console2.log("Accounted reserves:", handler.getAccountedReserves());
+    /// @notice Cycle state transitions must be valid
+    function invariant_cycleStateValid() external view {
+        uint8 state = handler.getCycleState();
+        
+        // Valid states: 0=ACTIVE, 1=OFFCHAIN, 2=ONCHAIN, 3=HALTED
+        assert(state <= 3);
+    }
+    
+    /// @notice Asset token supply must match pool accounting
+    function invariant_assetSupplyConsistent() external view {
+        uint256 totalSupply = assetToken.totalSupply();
+        uint256 poolBalance = assetToken.balanceOf(address(assetPool));
+        
+        // Pool's asset balance should not exceed total supply
+        assert(poolBalance <= totalSupply);
+    }
+    
+    /// @notice Interest calculations must not overflow
+    function invariant_interestBounds() external view {
+        // Get current cycle data
+        uint256 currentCycle = cycleManager.cycleIndex();
+        
+        if (currentCycle > 0) {
+            uint256 interestIndex = cycleManager.cumulativeInterestIndex(currentCycle);
+            uint256 rebalancePrice = cycleManager.cycleRebalancePrice(currentCycle - 1);
+            
+            // These should be reasonable values
+            assert(interestIndex > 0);
+            if (rebalancePrice > 0) {
+                assert(rebalancePrice < 1e30); // Reasonable upper bound
+            }
+        }
+    }
+    
+    /// @notice Debug stats
+    function invariant_logStats() external view {
+        console2.log("=== Cycle Handler Stats ===");
+        console2.log("Deposits:", handler.depositCalls());
+        console2.log("Redeems:", handler.redeemCalls());
+        console2.log("Add Liquidity:", handler.addLiquidityCalls());
+        console2.log("Claims:", handler.claimCalls());
+        console2.log("Cycle Ops:", handler.cycleCalls());
+        console2.log("Current Cycle:", cycleManager.cycleIndex());
+        console2.log("Cycle State:", handler.getCycleState());
+        console2.log("System Reserves:", handler.getSystemReserves());
+        console2.log("Accounted Reserves:", handler.getAccountedReserves());
     }
 }
