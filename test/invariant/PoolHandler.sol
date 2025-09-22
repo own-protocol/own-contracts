@@ -13,10 +13,10 @@ import "../mocks/MockERC20.sol";
 import "../mocks/MockAssetOracle.sol";
 
 /**
- * @title PoolCycleHandler
- * @notice Cycle-aware handler for invariant testing
+ * @title PoolHandler
+ * @notice Cycle-aware pool handler for invariant testing
  */
-contract PoolCycleHandler is Test {
+contract PoolHandler is Test {
     AssetPool public pool;
     PoolLiquidityManager public liquidityManager;
     PoolCycleManager public cycleManager;

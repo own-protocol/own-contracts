@@ -2,14 +2,14 @@
 pragma solidity ^0.8.20;
 
 import "../utils/ProtocolTestUtils.sol";
-import "./PoolCycleHandler.sol";
+import "./PoolHandler.sol";
 
 /**
- * @title PoolCycleInvariantTest
+ * @title PoolInvariantTest
  * @notice Cycle-aware invariant testing for the protocol
  */
-contract PoolCycleInvariantTest is ProtocolTestUtils {
-    PoolCycleHandler public handler;
+contract PoolInvariantTest is ProtocolTestUtils {
+    PoolHandler public handler;
 
     uint256 constant INITIAL_PRICE = 100 * 1e18;
     uint256 constant USER_BALANCE = 100_000;
@@ -58,7 +58,7 @@ contract PoolCycleInvariantTest is ProtocolTestUtils {
         }
 
         // Create handler
-        handler = new PoolCycleHandler(
+        handler = new PoolHandler(
             assetPool,
             liquidityManager,
             cycleManager,
