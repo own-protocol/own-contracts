@@ -304,6 +304,8 @@ contract UserFlowTest is ProtocolTestUtils {
         depositTokens(user1, USER_DEPOSIT_AMOUNT);
         completeCycleWithPriceChange(INITIAL_PRICE);
         claimAssets(user1);
+
+        assertGe(assetPool.reserveBackingAsset(), USER_DEPOSIT_AMOUNT, "Reserve backing assets should be greater than user1 deposit");
         
         // --- CYCLE 2: User2 deposits, User1 redeems half ---
         depositTokens(user2, USER_DEPOSIT_AMOUNT * 2);
@@ -311,11 +313,14 @@ contract UserFlowTest is ProtocolTestUtils {
         completeCycleWithPriceChange(PRICE_INCREASE);
         claimAssets(user2);
         claimReserves(user1);
-        
+
+        assertGe(assetPool.reserveBackingAsset(), USER_DEPOSIT_AMOUNT * 2, "Reserve backing assets should be greater than user2 deposit");
         // --- CYCLE 3: User3 deposits, price decreases ---
         depositTokens(user3, USER_DEPOSIT_AMOUNT * 3);
         completeCycleWithPriceChange(PRICE_DECREASE);
         claimAssets(user3);
+
+        assertGt(assetPool.reserveBackingAsset(), 0, "Reserve backing assets should be greater than 0");
         
         // --- CYCLE 4: User2 redeems everything, User1 redeems remaining ---
         redeemTokens(user2, assetToken.balanceOf(user2));
@@ -328,6 +333,15 @@ contract UserFlowTest is ProtocolTestUtils {
         assertEq(assetToken.balanceOf(user1), 0, "User1 should have no asset tokens left");
         assertEq(assetToken.balanceOf(user2), 0, "User2 should have no asset tokens left");
         assertGt(assetToken.balanceOf(user3), 0, "User3 should have asset tokens left");
+
+        // -- CYCLE 5: User3 redeems everything --
+        redeemTokens(user3, assetToken.balanceOf(user3));
+        completeCycleWithPriceChange(INITIAL_PRICE);
+        claimReserves(user3);
+
+        assertEq(assetToken.balanceOf(user3), 0, "User3 should have no asset tokens left");
+        assertGt(reserveToken.balanceOf(user3), 0, "User3 should have received reserves back");
+        assertEq(assetPool.reserveBackingAsset(), 0, "Reserve backing assets should be zero after all redemptions");
     }
     
     // ==================== HELPER FUNCTIONS ====================
