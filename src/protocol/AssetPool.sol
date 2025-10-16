@@ -642,7 +642,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, uint256(-rebalanceAmount));
         }
 
-        reserveBackingAsset = _safeSubtract(reserveBackingAsset, _convertReserveToAsset(cycleTotalRedemptions, rebalancePrice));
+        reserveBackingAsset = _safeSubtract(reserveBackingAsset, _convertAssetToReserve(cycleTotalRedemptions, rebalancePrice));
 
         if (nettAssetChange > 0) {
             assetToken.mint(address(this), uint256(nettAssetChange));
