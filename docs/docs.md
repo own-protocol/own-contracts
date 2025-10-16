@@ -90,6 +90,13 @@ forge script script/CreateAssetOracle.s.sol:CreateAssetOracleScript \
     --rpc-url base_sepolia --broadcast
 ```
 
+### Verify Contracts on Registry
+
+```bash
+forge script script/VerifyContractsOnRegistry.s.sol:VerifyContractsOnStrategyScript \
+    --rpc-url base_sepolia --broadcast
+```
+
 ### Fetch Asset Price
 
 ```bash

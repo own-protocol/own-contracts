@@ -41,6 +41,10 @@ contract CreatePoolScript is Script {
             POOL_STRATEGY
         );
 
+        address cycleManager = address(AssetPool(poolAddress).poolCycleManager());
+        address liquidityManager = address(AssetPool(poolAddress).poolLiquidityManager());
+        address assetToken = address(AssetPool(poolAddress).assetToken());
+
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
@@ -53,6 +57,9 @@ contract CreatePoolScript is Script {
         console.log("Asset Token Symbol:", ASSET_SYMBOL);
         console.log("Price Oracle:", PRICE_ORACLE);
         console.log("Pool Strategy:", POOL_STRATEGY);
+        console.log("Cycle Manager:", cycleManager);
+        console.log("Liquidity Manager:", liquidityManager);
+        console.log("Asset Token:", assetToken);
         console.log("----------------------------------------------------");
 
         // Verify the pool was created correctly
