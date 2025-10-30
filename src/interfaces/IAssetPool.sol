@@ -369,4 +369,23 @@ interface IAssetPool {
      * @return value Amount of utilised liquidity
      */
     function getUtilisedLiquidity() external view returns (uint256 value);
+
+    /**
+     * @notice Get user's current liquidation initiator
+     * @param user Address of the user
+     */
+    function liquidationInitiators(address user) external view returns (address);
+
+    /**
+     * @notice Get user's current interest index
+     * @param user Address of the user
+     */
+    function userInterestIndex(address user) external view returns (uint256);
+
+    /**
+     * @notice Get user's current reserve yield index
+     * @param user Address of the user
+     */
+    function userReserveYieldIndex(address user) external view returns (uint256);
+
 }

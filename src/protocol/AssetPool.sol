@@ -82,12 +82,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     /**
      * @notice Interest index for each user, used to calculate interest on their positions
      */
-    mapping(address => uint256) private userInterestIndex;
+    mapping(address => uint256) public userInterestIndex;
 
     /**
      * @notice Interest index of the user, used to calculate reserve yield on their positions
      */
-    mapping(address => uint256) private userReserveYieldIndex;
+    mapping(address => uint256) public userReserveYieldIndex;
 
     /**
      * @notice Split index of the user
