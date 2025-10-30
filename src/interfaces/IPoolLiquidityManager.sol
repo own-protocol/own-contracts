@@ -459,4 +459,11 @@ interface IPoolLiquidityManager {
     * @return delegate Address of the delegate (address(0) if none set)
     */
     function lpDelegates(address lp) external view returns (address delegate);
+
+    /**
+     * @notice Get LP's current reserve yield index
+     * @param lp Address of the LP
+     */
+    function lpReserveYieldIndex(address lp) external view returns (uint256);
+
 }

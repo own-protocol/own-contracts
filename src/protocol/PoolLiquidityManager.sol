@@ -61,7 +61,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
     uint256 public reserveYieldIndex;
 
     // Interest index of the LP, used to calculate reserve yield on their positions
-    mapping(address => uint256) private lpReserveYieldIndex;
+    mapping(address => uint256) public lpReserveYieldIndex;
 
     // --------------------------------------------------------------------------------
     //                                  MODIFIERS

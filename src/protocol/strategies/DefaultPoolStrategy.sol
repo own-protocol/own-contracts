@@ -390,9 +390,20 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function getUserCollateralHealth(address assetPool, address user) external view returns (uint8 health) {
         IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         IPoolCycleManager cycleManager = pool.poolCycleManager();
-        
-        (uint256 assetAmount , , uint256 collateralAmount) = pool.userPositions(user);
-        
+
+        (uint256 assetAmount, uint256 depositAmount, uint256 collateralAmount) = pool.userPositions(user);
+
+        if (isYieldBearing) {
+            uint256 reserveYieldIndex = pool.reserveYieldIndex();
+            uint256 userReserveYieldIndex = pool.userReserveYieldIndex(user);
+            uint256 reserveYieldAmount = Math.mulDiv(
+                depositAmount + collateralAmount,
+                reserveYieldIndex - userReserveYieldIndex,
+                PRECISION
+            );
+            collateralAmount += reserveYieldAmount;
+        }
+
         if (assetAmount == 0) {
             return 3; // Healthy - no asset balance means no risk
         }
@@ -430,6 +441,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 lpCollateral = position.collateralAmount;
         uint256 lpCommitment = position.liquidityCommitment;
         
+        if (isYieldBearing) {
+            uint256 reserveYieldIndex = manager.reserveYieldIndex();
+            uint256 lpReserveYieldIndex = manager.lpReserveYieldIndex(lp);
+            uint256 reserveYieldAmount = Math.mulDiv(
+                lpCollateral,
+                reserveYieldIndex - lpReserveYieldIndex,
+                PRECISION
+            );
+            lpCollateral += reserveYieldAmount;
+        }
+
         uint256 healthyLiquidity = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
         uint256 reqLiquidity = Math.mulDiv(lpCommitment, lpLiquidationThreshold, BPS);
         
