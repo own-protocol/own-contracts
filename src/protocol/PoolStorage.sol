@@ -108,7 +108,7 @@ abstract contract PoolStorage is Initializable {
     }
 
     /**
-     * @notice Converts asset amount to reserve amount based on the asset price
+     * @notice Converts asset amount to reserve amount based on the asset price (decimal adjusted)
      * @param assetAmount The amount of asset to convert
      * @param price The price of the asset in reserve terms
      */
@@ -117,7 +117,7 @@ abstract contract PoolStorage is Initializable {
     }
 
     /**
-     * @notice Converts reserve amount to asset amount based on the asset price
+     * @notice Converts reserve amount to asset amount based on the asset price (decimal adjusted)
      * @param reserveAmount The amount of reserve to convert
      * @param price The price of the asset in reserve terms
      */
