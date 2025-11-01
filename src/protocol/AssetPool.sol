@@ -397,9 +397,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // Check collateral requirement
         UserPosition storage position = userPositions[user];
-        uint256 currentCollateral = position.collateralAmount;
-        uint256 requiredCollateral = Math.mulDiv(amount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
-        if (currentCollateral < requiredCollateral) revert InsufficientCollateral();
+        uint256 requiredCollateral = Math.mulDiv(amount + position.depositAmount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
+        if (position.collateralAmount < requiredCollateral) revert InsufficientCollateral();
 
         _splitCheck(position);
         uint256 oldPrincipal = position.assetAmount;
