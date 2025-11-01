@@ -90,12 +90,14 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify user request was accepted
-        (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = 
+        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = 
             assetPool.userRequests(newUser);
+
+        (, , uint256 posCollateral) = assetPool.userPositions(newUser);
         
         assertEq(uint(reqType), uint(IAssetPool.RequestType.DEPOSIT), "User should have a pending deposit request");
         assertEq(reqAmount, userDepositAmount, "Request amount should match user deposit");
-        assertEq(reqCollateral, userCollateralAmount, "Request collateral should match user collateral");
+        assertEq(posCollateral, userCollateralAmount, "Request collateral should match user collateral");
         assertEq(reqCycle, initialCycleIndex, "Request should be in the same cycle as LP addition");
         
         // Verify cycle totals are updated correctly
