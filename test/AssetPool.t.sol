@@ -133,6 +133,31 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.stopPrank();
     }
 
+    /**
+     * @notice Test deposit request with zero collateral
+     */
+    function testDepositRequestWithoutCollateralAndClaim() public {
+        uint256 depositAmount = adjustAmountForDecimals(MEDIUM_DEPOSIT, 6);
+        
+        // Expect revert when collateral amount is zero
+        vm.startPrank(user1);
+        assetPool.depositRequestWithoutCollateral(depositAmount);
+        vm.stopPrank();
+
+        completeCycleWithPriceChange(INITIAL_PRICE);
+
+        // Claim asset should fail due to insufficient collateral
+        vm.prank(user1);
+        vm.expectRevert(IAssetPool.InsufficientCollateral.selector);
+        assetPool.claimAsset(user1);
+
+        // add collateral and claim should succeed
+        uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
+        vm.startPrank(user1);
+        assetPool.addCollateral(user1, collateralAmount);
+        assetPool.claimAsset(user1);
+    }
+
     // ==================== REDEMPTION REQUEST TESTS ====================
 
     /**
