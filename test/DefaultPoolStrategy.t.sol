@@ -157,13 +157,13 @@ contract DefaultPoolStrategyTest is Test {
         vm.expectRevert("Max rate cannot exceed 100%");
         strategy.setInterestRateParams(500, 1500, 11000, 7000, 9000);
         
-        // Tier1 >= Tier2
-        vm.expectRevert("Tier1 must be < Tier2");
-        strategy.setInterestRateParams(500, 1500, 6000, 9000, 9000);
+        // Tier1 > Tier2
+        vm.expectRevert("Tier1 must be <= Tier2");
+        strategy.setInterestRateParams(500, 1500, 6000, 9000, 8000);
         
-        // Tier2 >= BPS
-        vm.expectRevert("Tier2 must be < BPS");
-        strategy.setInterestRateParams(500, 1500, 6000, 7000, 10000);
+        // Tier2 > BPS
+        vm.expectRevert("Tier2 must be <= BPS");
+        strategy.setInterestRateParams(500, 1500, 6000, 7000, 11000);
     }
     
     function testProtocolFeeParamsUpdate() public {
