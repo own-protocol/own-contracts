@@ -57,11 +57,12 @@ contract FullRedemptionAndLPExitTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify deposit request
-        (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = assetPool.userRequests(user1);
+        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = assetPool.userRequests(user1);
+        (, , uint256 posCollateral) = assetPool.userPositions(user1);
         assertEq(uint(reqType), uint(IAssetPool.RequestType.DEPOSIT), "Should have deposit request");
         assertEq(reqAmount, depositAmount, "Request amount should match");
-        assertEq(reqCollateral, collateralAmount, "Collateral amount should match");
-        
+        assertEq(posCollateral, collateralAmount, "Request collateral should match collateral amount");
+
         // Complete cycle at initial price to process deposit
         completeCycleWithPriceChange(INITIAL_PRICE);
         
@@ -269,14 +270,14 @@ contract FullRedemptionAndLPExitTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify deposit request
-        (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = assetPool.userRequests(user1);
+        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = assetPool.userRequests(user1);
+        (, , uint256 posCollateral) = assetPool.userPositions(user1);
         assertEq(uint(reqType), uint(IAssetPool.RequestType.DEPOSIT), "Should have deposit request");
         assertEq(reqAmount, depositAmount, "Request amount should match");
-        assertEq(reqCollateral, collateralAmount, "Collateral amount should match");
-        
+        assertEq(posCollateral, collateralAmount, "Collateral amount should match");
+
         // Complete cycle at initial price to process deposit
         completeCycleWithPriceChange(INITIAL_PRICE);
-        
         // User claims assets
         vm.prank(user1);
         assetPool.claimAsset(user1);

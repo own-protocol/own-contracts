@@ -213,6 +213,12 @@ interface IAssetPool {
     function depositRequest(uint256 amount, uint256 collateralAmount) external;
 
     /**
+     * @notice Processes a deposit request without collateral
+     * @param amount Amount of reserve tokens to deposit
+     */
+    function depositRequestWithoutCollateral(uint256 amount) external;
+
+    /**
      * @notice Creates a redemption request for the user
      * @param amount Amount of asset tokens to burn
      */

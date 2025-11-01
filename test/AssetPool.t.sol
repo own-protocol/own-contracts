@@ -56,12 +56,13 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.stopPrank();
         
         // Verify request state
-        (IAssetPool.RequestType reqType, uint256 reqAmount, uint256 reqCollateral, uint256 reqCycle) = assetPool.userRequests(user1);
+        (IAssetPool.RequestType reqType, uint256 reqAmount, , uint256 reqCycle) = assetPool.userRequests(user1);
+        (, , uint256 posCollateral) = assetPool.userPositions(user1);
         
         // Assert request data
         assertEq(uint(reqType), uint(IAssetPool.RequestType.DEPOSIT), "Request type should be DEPOSIT");
         assertEq(reqAmount, depositAmount, "Request amount should match deposit amount");
-        assertEq(reqCollateral, collateralAmount, "Request collateral should match collateral amount");
+        assertEq(posCollateral, collateralAmount, "Request collateral should match collateral amount");
         assertEq(reqCycle, cycleManager.cycleIndex(), "Request cycle should match current cycle");
         
         // Assert balances
@@ -70,20 +71,6 @@ contract AssetPoolTest is ProtocolTestUtils {
         
         // Assert cycle total deposits
         assertEq(assetPool.cycleTotalDeposits(), depositAmount, "Cycle total deposits should match deposit amount");
-    }
-
-    /**
-     * @notice Test deposit request with insufficient collateral
-     */
-    function testDepositRequestInsufficientCollateral() public {
-        uint256 depositAmount = adjustAmountForDecimals(MEDIUM_DEPOSIT, 6);
-        uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100 - 100; // 100 wei less than required
-        
-        // Expect revert when collateral is insufficient
-        vm.startPrank(user1);
-        vm.expectRevert(IAssetPool.InsufficientCollateral.selector);
-        assetPool.depositRequest(depositAmount, collateralAmount);
-        vm.stopPrank();
     }
 
     /**
@@ -144,6 +131,31 @@ contract AssetPoolTest is ProtocolTestUtils {
         vm.expectRevert(IAssetPool.InvalidAmount.selector);
         assetPool.depositRequest(depositAmount, 0);
         vm.stopPrank();
+    }
+
+    /**
+     * @notice Test deposit request with zero collateral
+     */
+    function testDepositRequestWithoutCollateralAndClaim() public {
+        uint256 depositAmount = adjustAmountForDecimals(MEDIUM_DEPOSIT, 6);
+        
+        // Expect revert when collateral amount is zero
+        vm.startPrank(user1);
+        assetPool.depositRequestWithoutCollateral(depositAmount);
+        vm.stopPrank();
+
+        completeCycleWithPriceChange(INITIAL_PRICE);
+
+        // Claim asset should fail due to insufficient collateral
+        vm.prank(user1);
+        vm.expectRevert(IAssetPool.InsufficientCollateral.selector);
+        assetPool.claimAsset(user1);
+
+        // add collateral and claim should succeed
+        uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
+        vm.startPrank(user1);
+        assetPool.addCollateral(user1, collateralAmount);
+        assetPool.claimAsset(user1);
     }
 
     // ==================== REDEMPTION REQUEST TESTS ====================

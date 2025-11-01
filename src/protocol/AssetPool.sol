@@ -151,7 +151,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @param user Address of the user
      * @param amount Amount of collateral to deposit
      */
-    function addCollateral(address user, uint256 amount) external nonReentrant {
+    function addCollateral(address user, uint256 amount) public nonReentrant {
         _requireActivePool();
         if (amount == 0) revert InvalidAmount();
 
@@ -227,14 +227,22 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     // --------------------------------------------------------------------------------
 
     /**
-     * @notice Process a deposit request
+     * @notice Make a deposit request
      * @param amount Amount of reserve tokens to deposit
      * @param collateralAmount Amount of collateral to provide
      */
-    function depositRequest(uint256 amount, uint256 collateralAmount) external nonReentrant {
+    function depositRequest(uint256 amount, uint256 collateralAmount) external {
+        depositRequestWithoutCollateral(amount);
+        addCollateral(msg.sender, collateralAmount);
+    }
+
+    /**
+     * @notice Process a deposit request without collateral
+     * @param amount Amount of reserve tokens to deposit
+     */
+    function depositRequestWithoutCollateral(uint256 amount) public nonReentrant {
         _requireActivePool();
         if (amount == 0) revert InvalidAmount();
-        if (collateralAmount == 0) revert InvalidAmount();
 
         uint8 userHealth = poolStrategy.getUserCollateralHealth(address(this), msg.sender);
         if (userHealth == 1) revert InsufficientCollateral();
@@ -249,27 +257,19 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         if (availableLiquidity < amount) revert InsufficientLiquidity();
 
-        uint256 healthyRatio = poolStrategy.userHealthyCollateralRatio();
-        
-        // Calculate minimum required collateral & ensure provided collateral meets minimum requirement
-        if (collateralAmount < Math.mulDiv(amount, healthyRatio, BPS, Math.Rounding.Ceil)) revert InsufficientCollateral();
-
-        uint256 totalDeposit = amount + collateralAmount;
-
-        _handleDeposit(msg.sender, totalDeposit, msg.sender);
+        _handleDeposit(msg.sender, amount, msg.sender);
         
         // Update request state
         request.requestType = RequestType.DEPOSIT;
         request.amount = amount;
-        request.collateralAmount = collateralAmount;
+        request.collateralAmount = 0;
         request.requestCycle = currentCycle;
         cycleTotalDeposits += amount;
 
         // Update total user deposits and collateral
         totalUserDeposits += amount;
-        totalUserCollateral += collateralAmount;
-        aggregatePoolReserves += totalDeposit;
-        
+        aggregatePoolReserves += amount;
+
         emit DepositRequested(msg.sender, amount, currentCycle);
     }
 
@@ -386,7 +386,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // Cache request fields
         uint256 amount = request.amount;
-        uint256 collateralAmount = request.collateralAmount;
         uint256 requestCycle = request.requestCycle;
 
         // Clear request early to free stack
@@ -396,7 +395,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
         uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
 
+        // Check collateral requirement
         UserPosition storage position = userPositions[user];
+        uint256 requiredCollateral = Math.mulDiv(amount + position.depositAmount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
+        if (position.collateralAmount < requiredCollateral) revert InsufficientCollateral();
+
         _splitCheck(position);
         uint256 oldPrincipal = position.assetAmount;
         uint256 newPrincipal = oldPrincipal + assetAmount;
@@ -413,7 +416,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         // Update user state
         position.assetAmount = newPrincipal;
         position.depositAmount += amount;
-        position.collateralAmount += collateralAmount;
         userInterestIndex[user] = newUserIndex;
 
         _safeTransferBalance(user, assetAmount, true);
