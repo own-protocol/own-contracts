@@ -108,8 +108,8 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         require(baseRate <= rate1, "Base rate must be <= Interest rate 1");
         require(rate1 <= maxRate, "Interest rate 1 must be <= max rate");
         require(maxRate <= BPS, "Max rate cannot exceed 100%");
-        require(utilTier1 < utilTier2, "Tier1 must be < Tier2");
-        require(utilTier2 < BPS, "Tier2 must be < BPS");
+        require(utilTier1 <= utilTier2, "Tier1 must be <= Tier2");
+        require(utilTier2 <= BPS, "Tier2 must be <= BPS");
         
         baseInterestRate = baseRate;
         interestRate1 = rate1;
