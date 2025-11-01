@@ -415,7 +415,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
         uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 userCollateralBalance = collateralAmount - interestDebt;
+        uint256 userCollateralBalance = _safeSubtract(collateralAmount, interestDebt);
 
         uint256 healthyCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
         uint256 reqCollateral = Math.mulDiv(assetValue, userLiquidationThreshold, BPS, Math.Rounding.Ceil);
@@ -626,5 +626,16 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         postSplitAmount = Math.mulDiv(amount, cycleManager.splitMultiplier(splitIndex), cycleManager.splitMultiplier(userSplitIndex));
 
         return postSplitAmount;
+    }
+
+    /**
+     * @notice Safely subtracts an amount from a value, ensuring it doesn't go negative
+     * @dev This function is used to prevent underflows
+     * @param from The value to subtract from
+     * @param amount The amount to subtract
+     * @return The result of the subtraction, or 0 if it would go negative
+     */
+    function _safeSubtract(uint256 from, uint256 amount) internal pure returns (uint256) {
+        return amount > from ? 0 : from - amount;
     }
 }
