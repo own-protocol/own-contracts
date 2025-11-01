@@ -360,7 +360,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
         (uint256 assetAmount, uint256 depositAmount, ) = pool.userPositions(user);
         if(assetAmount == 0) {
-            return Math.mulDiv(depositAmount, userLiquidationThreshold, BPS);
+            return Math.mulDiv(depositAmount, userHealthyCollateralRatio, BPS);
         }
         assetAmount = calculatePostSplitAmount(assetPool, user, assetAmount);
         uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
@@ -422,7 +422,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         if (userCollateralBalance >= healthyCollateral) {
             return 3; // Healthy
-        } else if (userCollateralBalance >= reqCollateral) {
+        } else if (userCollateralBalance > reqCollateral) {
             return 2; // Warning
         } else {
             return 1; // Liquidatable
