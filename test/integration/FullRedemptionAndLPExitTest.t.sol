@@ -244,8 +244,8 @@ contract FullRedemptionAndLPExitTest is ProtocolTestUtils {
         // Pool should still be active (not halted) despite no LP liquidity or LPs
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_ACTIVE), "Pool should remain active");
         
-        // Verify total LP collateral is zero
-        assertEq(liquidityManager.totalLPCollateral(), 0, "Total LP collateral should be zero");
+        // Verify total LP principal is zero
+        assertEq(liquidityManager.totalLPPrincipal(), 0, "Total LP principal should be zero");
         
         // LP count should be zero since both LPs completely exited
         assertEq(liquidityManager.lpCount(), 0, "LP count should be zero");
@@ -456,8 +456,8 @@ contract FullRedemptionAndLPExitTest is ProtocolTestUtils {
         // Pool should still be active (not halted) despite no LP liquidity or LPs
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_ACTIVE), "Pool should remain active");
         
-        // Verify total LP collateral is zero
-        assertEq(liquidityManager.totalLPCollateral(), 0, "Total LP collateral should be zero");
+        // Verify total LP principal is zero
+        assertEq(liquidityManager.totalLPPrincipal(), 0, "Total LP principal should be zero");
         
         // LP count should be zero since both LPs completely exited
         assertEq(liquidityManager.lpCount(), 0, "LP count should be zero");
