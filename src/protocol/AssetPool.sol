@@ -515,6 +515,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // Transfer reserve tokens to the user
         _safeTransferBalance(msg.sender, totalAmount, false);
+        _updateReserveYieldIndex(cycle);
 
         emit ReserveWithdrawn(msg.sender, totalAmount, cycle);
     }
@@ -635,7 +636,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             assetToken.burn(address(this), uint256(-nettAssetChange));
         }
 
-        _updateReserveYieldIndex();
+        uint256 cycle = poolCycleManager.cycleIndex();
+        _updateReserveYieldIndex(cycle);
+        reserveYieldIndex[cycle+1] = reserveYieldIndex[cycle];
         cycleTotalDeposits = 0;
         cycleTotalRedemptions = 0;
     }
@@ -733,10 +736,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
     /**
      * @notice Update the reserve yield index
+     * @param cycle Cycle index
      */
-    function _updateReserveYieldIndex() internal {
-        uint256 newReserveBalance = reserveToken.balanceOf(address(this));  
-        uint256 cycle = poolCycleManager.cycleIndex();    
+    function _updateReserveYieldIndex(uint256 cycle) internal {
+        uint256 newReserveBalance = reserveToken.balanceOf(address(this));     
         // Calculate yield per asset token
         uint256 yIndex = 0;
         // The reasoning to include cycleTotalRedemptions is that the yield earned should be distributed
@@ -749,7 +752,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         }
         // Index accrues, starting from cycle 1.
         reserveYieldIndex[cycle] += yIndex;
-        reserveYieldIndex[cycle+1] = reserveYieldIndex[cycle];
     }
 
     /**
