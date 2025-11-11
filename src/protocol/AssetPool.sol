@@ -733,15 +733,16 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @notice Update the reserve yield index
      */
     function _updateReserveYieldIndex() internal {
-        uint256 newreserveBalance = reserveToken.balanceOf(address(this));  
+        uint256 newReserveBalance = reserveToken.balanceOf(address(this));  
         uint256 cycle = poolCycleManager.cycleIndex();    
         // Calculate yield per asset token
         uint256 yIndex = 0;
-        // If there are asset tokens in circulation or redemptions in the cycle
+        // The reasoning to include cycleTotalRedemptions is that the yield earned should be distributed
+        // among all asset tokens that were present during the cycle, including those that were redeemed.
         if (assetToken.totalSupply() > 0 || cycleTotalRedemptions > 0) {
-            if (newreserveBalance > aggregatePoolReserves) {
-                yIndex = Math.mulDiv((newreserveBalance - aggregatePoolReserves), PRECISION, assetToken.totalSupply() + cycleTotalRedemptions);
-                aggregatePoolReserves = newreserveBalance;
+            if (newReserveBalance > aggregatePoolReserves) {
+                yIndex = Math.mulDiv((newReserveBalance - aggregatePoolReserves), PRECISION, assetToken.totalSupply() + cycleTotalRedemptions);
+                aggregatePoolReserves = newReserveBalance;
             }
         } 
         reserveYieldIndex[cycle] += yIndex;
