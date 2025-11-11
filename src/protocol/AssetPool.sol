@@ -126,6 +126,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
+        reserveYieldIndex[0] = 1e18;
         reserveYieldIndex[1] = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
@@ -376,7 +377,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         // Clear request early to free stack
         delete userRequests[user];
 
-        _handleAssetClaim(user, amount, requestCycle);
+        // We use reuqestCycle - 1 to let users accrue yield for the deposit cycle as well
+        _handleAssetClaim(user, amount, requestCycle - 1);
 
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
         uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
@@ -744,7 +746,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
                 yIndex = Math.mulDiv((newReserveBalance - aggregatePoolReserves), PRECISION, assetToken.totalSupply() + cycleTotalRedemptions);
                 aggregatePoolReserves = newReserveBalance;
             }
-        } 
+        }
+        // Index accrues, starting from cycle 1.
         reserveYieldIndex[cycle] += yIndex;
         reserveYieldIndex[cycle+1] = reserveYieldIndex[cycle];
     }
