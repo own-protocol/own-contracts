@@ -755,6 +755,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
             }
 
             position.interestAccrued = 0;
+            totalLPPrincipal -= interestAmount;
             aggregatePoolReserves -= interestAmount;
             reserveToken.safeTransfer(lp, interestAmount + reserveYield);
 
