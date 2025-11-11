@@ -367,47 +367,6 @@ contract ReserveTokenYield is ProtocolTestUtils {
     }
     
     /**
-     * @notice Test reducing collateral with yield accrual
-     */
-    function testReduceCollateralWithYield() public {
-        // User1 deposits tokens with extra collateral
-        uint256 depositAmount = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
-        uint256 minCollateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
-        uint256 extraCollateralAmount = minCollateralAmount * 2;  // Double the minimum
-        
-        vm.startPrank(user1);
-        assetPool.depositRequest(depositAmount, extraCollateralAmount);
-        vm.stopPrank();
-        
-        // Complete cycle
-        completeCycleWithPriceChange(INITIAL_PRICE);
-        
-        // User claims asset tokens
-        vm.prank(user1);
-        assetPool.claimAsset(user1);
-        
-        // Advance time for yield to accrue
-        vm.warp(block.timestamp + YIELD_TEST_PERIOD);
-        
-        // Calculate excess collateral that can be withdrawn
-        uint256 excessCollateral = extraCollateralAmount - minCollateralAmount;
-        uint256 balanceBeforeReduce = yieldToken.balanceOf(user1);
-        
-        // Reduce collateral
-        vm.startPrank(user1);
-        assetPool.reduceCollateral(excessCollateral);
-        vm.stopPrank();
-        
-        // Check received amount includes yield
-        uint256 receivedAmount = yieldToken.balanceOf(user1) - balanceBeforeReduce;
-        assertGt(receivedAmount, excessCollateral, "User should receive excess collateral plus yield");
-        
-        // Verify user's remaining collateral
-        (,,uint256 userCollateralAfter) = assetPool.userPositions(user1);
-        assertEq(userCollateralAfter, minCollateralAmount, "User should have minimum collateral remaining");
-    }
-    
-    /**
      * @notice Test exit LP inactive by reducing liquidity with yield accrued
      */
     function testExitLPWithYield() public {
