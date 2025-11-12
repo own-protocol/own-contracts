@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 
 import "../utils/ProtocolTestUtils.sol";
 import "../mocks/MockYieldToken.sol";
-import "forge-std/console2.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
 /**
@@ -466,14 +465,14 @@ contract ReserveTokenYield is ProtocolTestUtils {
         );
     }
 
-    function testAccurateYieldIndexUpdates() public {
-        // 1️⃣ Setup and initial claim
+    function testAccurateYieldIndexUpdatesSingleUser() public {
         uint256 assetPrice = INITIAL_PRICE;
-        uint256 globalYieldIndexCycle0 = assetPool.reserveYieldIndex(
-            cycleManager.cycleIndex()
-        );
-        console2.log("globalYieldIndexCycle0", globalYieldIndexCycle0);
+        uint256 reserveToAssetDecimalFactor = assetPool
+            .reserveToAssetDecimalFactor();
 
+        uint256 currentCycle = cycleManager.cycleIndex();
+
+        // ---- 1️⃣ User1 deposits in Cycle 0 ----
         uint256 depositAmount = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
         uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
 
@@ -482,99 +481,248 @@ contract ReserveTokenYield is ProtocolTestUtils {
         vm.stopPrank();
 
         completeCycleWithPriceChange(assetPrice);
+
         vm.prank(user1);
         assetPool.claimAsset(user1);
 
-        uint256 globalYieldIndexCycle1 = assetPool.reserveYieldIndex(
-            cycleManager.cycleIndex()
-        );
-        uint256 assetSharesUser1 = assetToken.balanceOf(user1);
+        uint256 assetBalanceU1C1 = assetToken.balanceOf(user1);
 
-        uint256 reserveToAssetDecimalFactor = assetPool
-            .reserveToAssetDecimalFactor();
-        console2.log(
-            "reserveToAssetDecimalFactor",
-            reserveToAssetDecimalFactor
-        );
-        uint256 assetValueUser1Cycle1 = Math.mulDiv(
-            assetSharesUser1,
-            assetPrice,
-            PRECISION * reserveToAssetDecimalFactor
-        );
-
-        console2.log("assetValueUser1Cycle1", assetValueUser1Cycle1);
-        console2.log("globalYieldIndexCycle1", globalYieldIndexCycle1);
-        console2.log("globalYieldIndexCycle0", globalYieldIndexCycle0);
-        // Yield = AssetValue × (CurrentIndex - PrevIndex) / PRECISION
-        // assetValueUser1Cycle1 is in 6 decimals (reserve token decimals)
-        // globalYieldIndex is in 18 decimals (PRECISION)
-        // Result should be in 6 decimals
-        uint256 user1cycle1Yield = Math.mulDiv(
-            assetValueUser1Cycle1,
-            globalYieldIndexCycle1 - globalYieldIndexCycle0,
+        uint256 globalYieldIndex1 = assetPool.reserveYieldIndex(currentCycle);
+        uint256 userYieldIndex1 = assetPool.userReserveYieldIndex(user1);
+        uint256 actualYield1 = Math.mulDiv(
+            assetBalanceU1C1,
+            globalYieldIndex1 - userYieldIndex1,
             PRECISION
         );
-        console2.log("user1cycle1Yield", user1cycle1Yield);
 
-        // 2️⃣ Let yield accrue
-        vm.warp(block.timestamp + YIELD_TEST_PERIOD);
+        // ---- Expected Yield (Cycle 0 → 1) ----
+        uint256 assetValueU1C1 = _calcAssetValue(
+            assetBalanceU1C1,
+            assetPrice,
+            reserveToAssetDecimalFactor
+        );
+        uint256 expectedYield1 = ((assetValueU1C1 + collateralAmount) *
+            YIELD_RATE_PER_DAY) / BPS;
+        _assertYieldWithinTolerance(
+            expectedYield1,
+            actualYield1
+        );
+
+        // ---- 2️⃣ Yield accrues (Cycle 1 → 2) ----
+        uint256 assetBalanceU1C2 = assetToken.balanceOf(user1);
         uint256 newAssetPrice = assetPrice + (assetPrice * 10) / 100;
         completeCycleWithPriceChange(newAssetPrice);
 
-        uint256 globalYieldIndexCycle2 = assetPool.reserveYieldIndex(
-            cycleManager.cycleIndex()
-        );
-        uint256 assetValueUser1Cycle2 = Math.mulDiv(
-            assetSharesUser1,
+        currentCycle = cycleManager.cycleIndex();
+
+        uint256 assetValueU1C2 = _calcAssetValue(
+            assetBalanceU1C2,
             newAssetPrice,
-            PRECISION * reserveToAssetDecimalFactor
+            reserveToAssetDecimalFactor
         );
-        // Yield accumulates: PrevYield + AssetValue × (CurrentIndex - PrevIndex) / PRECISION
-        uint256 user1cycle2Yield = user1cycle1Yield +
-            Math.mulDiv(
-                assetValueUser1Cycle2,
-                globalYieldIndexCycle2 - globalYieldIndexCycle1,
-                PRECISION
-            );
-        // 3️⃣ Redeem all assets
+
+        uint256 globalYieldIndex2 = assetPool.reserveYieldIndex(currentCycle);
+        uint256 userYieldIndex2 = assetPool.userReserveYieldIndex(user1);
+        uint256 actualYield2 = Math.mulDiv(
+            assetBalanceU1C2,
+            globalYieldIndex2 - userYieldIndex2,
+            PRECISION
+        );
+
+        uint256 expectedYield2 = expectedYield1 +
+            ((assetValueU1C2 + collateralAmount) * YIELD_RATE_PER_DAY) /
+            BPS;
+
+        _assertYieldWithinTolerance(
+            expectedYield2,
+            actualYield2
+        );
+
+        // ---- 3️⃣ 30-day yield accrual (Cycle 2 → 3) ----
+        vm.warp(block.timestamp + YIELD_TEST_PERIOD);
+        completeCycleWithPriceChange(newAssetPrice);
+
+        currentCycle = cycleManager.cycleIndex();
+
+        uint256 assetBalanceU1C3 = assetToken.balanceOf(user1);
+
+        uint256 globalYieldIndex3 = assetPool.reserveYieldIndex(currentCycle);
+        uint256 userYieldIndex3 = assetPool.userReserveYieldIndex(user1);
+        uint256 actualYield3 = Math.mulDiv(
+            assetBalanceU1C3,
+            globalYieldIndex3 - userYieldIndex3,
+            PRECISION
+        );
+        uint256 assetValueU1C3 = _calcAssetValue(
+            assetBalanceU1C3,
+            newAssetPrice,
+            reserveToAssetDecimalFactor
+        );
+
+        uint256 expectedYield3 = expectedYield2 +
+            ((((assetValueU1C3 + collateralAmount) * YIELD_RATE_PER_DAY) / BPS) *
+                (YIELD_TEST_PERIOD)) /
+            1 days;
+        _assertYieldWithinTolerance(
+            expectedYield3,
+            actualYield3
+        );
+    }
+
+    function testAccurateYieldIndexUpdatesMultipleUsersWithHelperLambdas()
+        public
+    {
+        uint256 assetPrice = INITIAL_PRICE;
+        uint256 reserveToAssetDecimalFactor = assetPool
+            .reserveToAssetDecimalFactor();
+
+        uint256 currentCycle = cycleManager.cycleIndex();
+
+        // ============ Cycle 0 → 1 (User1 joins) ============
+        uint256 depU1 = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
+        uint256 colU1 = (depU1 * COLLATERAL_RATIO) / 100;
+
         vm.startPrank(user1);
-        assetToken.approve(address(assetPool), assetSharesUser1);
-        assetPool.redemptionRequest(assetSharesUser1);
+        assetPool.depositRequest(depU1, colU1);
         vm.stopPrank();
 
-        completeCycleWithPriceChange(newAssetPrice);
-        uint256 globalYieldIndexCycle3 = assetPool.reserveYieldIndex(
-            cycleManager.cycleIndex()
-        );
+        completeCycleWithPriceChange(assetPrice);
 
-
-        uint256 reserveBefore = yieldToken.balanceOf(user1);
         vm.prank(user1);
-        assetPool.claimReserve(user1);
-        uint256 reserveAfter = yieldToken.balanceOf(user1);
+        assetPool.claimAsset(user1);
 
-        // 4️⃣ Compute manual expected yield
-        uint256 yieldIndexDelta = globalYieldIndexCycle3 -
-            globalYieldIndexCycle2;
-        console2.log("yieldIndexDelta", yieldIndexDelta);
-        uint256 assetValueUser1Cycle3 = Math.mulDiv(
-            assetSharesUser1,
-            newAssetPrice,
-            PRECISION * reserveToAssetDecimalFactor
-        );
-        // Total yield = Previous yield + AssetValue × (CurrentIndex - PrevIndex) / PRECISION
-        uint256 totalYieldAccruedUser1 = user1cycle2Yield +
-            Math.mulDiv(assetValueUser1Cycle3, yieldIndexDelta, PRECISION);
-        console2.log("totalYieldAccruedUser1", totalYieldAccruedUser1);
-        uint256 claimedReserve = reserveAfter - reserveBefore;
-        uint256 yieldReceivedFromProtocol = claimedReserve -
-            assetValueUser1Cycle3;
+        currentCycle = cycleManager.cycleIndex();
 
-        assertApproxEqRel(
-            yieldReceivedFromProtocol,
-            totalYieldAccruedUser1,
-            1e16, // ±1%
-            "Protocol yield should match manually expected yield"
+        uint256 assetBalanceU1C1 = assetToken.balanceOf(user1);
+
+        uint256 globalYieldIndex1 = assetPool.reserveYieldIndex(currentCycle);
+        uint256 userYieldIndex1 = assetPool.userReserveYieldIndex(user1);
+        uint256 assetValueU1C1 = _calcAssetValue(
+            assetBalanceU1C1,
+            assetPrice,
+            reserveToAssetDecimalFactor
         );
+
+        uint256 actualYieldU1C1 = Math.mulDiv(
+            assetBalanceU1C1,
+            globalYieldIndex1 - userYieldIndex1,
+            PRECISION
+        );
+        uint256 expectedYieldU1C1 = 0 +
+            ((assetValueU1C1 + colU1) * YIELD_RATE_PER_DAY) /
+            BPS;
+
+        _assertYieldWithinTolerance(
+            expectedYieldU1C1,
+            actualYieldU1C1
+        );
+
+        // ============ Cycle 1 → 2 (User2 joins) ============
+        uint256 depU2 = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
+        uint256 colU2 = (depU2 * COLLATERAL_RATIO) / 100;
+
+        vm.startPrank(user2);
+        assetPool.depositRequest(depU2, colU2);
+        vm.stopPrank();
+
+        assetPrice = assetPrice + (assetPrice * 10) / 100;
+        completeCycleWithPriceChange(assetPrice);
+
+        vm.prank(user2);
+        assetPool.claimAsset(user2);
+
+        currentCycle = cycleManager.cycleIndex();
+
+        // Asset values
+        uint256 assetBalanceU1C2 = assetToken.balanceOf(user1);
+        uint256 assetBalanceU2C2 = assetToken.balanceOf(user2);
+        uint256 assetValueU1C2 = _calcAssetValue(
+            assetBalanceU1C2,
+            assetPrice,
+            reserveToAssetDecimalFactor
+        );
+        uint256 assetValueU2C2 = _calcAssetValue(
+            assetBalanceU2C2,
+            assetPrice,
+            reserveToAssetDecimalFactor
+        );
+
+        uint256 globalYieldIndex2 = assetPool.reserveYieldIndex(currentCycle);
+        uint256 user1YieldIndex2 = assetPool.userReserveYieldIndex(user1);
+        uint256 user2YieldIndex2 = assetPool.userReserveYieldIndex(user2);
+
+        uint256 actualYieldU1C2 =  Math.mulDiv(
+            assetBalanceU1C2,
+            globalYieldIndex2 - user1YieldIndex2,
+            PRECISION
+        );
+        uint256 actualYieldU2C2 = Math.mulDiv(
+            assetBalanceU2C2,
+            globalYieldIndex2 - user2YieldIndex2,
+            PRECISION
+        );
+        // Expected yields (pro-rata by assetValue)
+        uint256 expectedYieldU1C2 = expectedYieldU1C1 +
+            ((assetValueU1C2 + colU1) * YIELD_RATE_PER_DAY) /
+            BPS;
+        uint256 expectedU2C2 = 0 + ((assetValueU2C2 + colU2) * YIELD_RATE_PER_DAY) / BPS;
+
+        _assertYieldWithinTolerance(
+            expectedYieldU1C2,
+            actualYieldU1C2
+        );
+        _assertYieldWithinTolerance(
+            expectedU2C2,
+            actualYieldU2C2
+        );
+    }
+
+    //
+    // ─── Helper Functions ───────────────────────────────────────────
+    //
+
+    function _calcAssetValue(
+        uint256 assetShares,
+        uint256 price,
+        uint256 reserveToAssetDecimalFactor
+    ) internal pure returns (uint256) {
+        // Converts asset shares (1e18) and price (1e18) to reserve decimals (1e6)
+        return
+            Math.mulDiv(
+                assetShares,
+                price,
+                PRECISION * reserveToAssetDecimalFactor
+            );
+    }
+
+    function _calcShare(
+        uint256 userAssetValue,
+        uint256 totalAssetValue
+    ) internal pure returns (uint256) {
+        // Returns user share as a fraction scaled to 1e18 (PRECISION)
+        return
+            totalAssetValue > 0
+                ? Math.mulDiv(userAssetValue, PRECISION, totalAssetValue)
+                : 0;
+    }
+
+    function _calcPercentDiff(
+        uint256 expected,
+        uint256 actual
+    ) internal pure returns (uint256) {
+        if (expected == 0) return 0;
+        uint256 diff = expected > actual
+            ? expected - actual
+            : actual - expected;
+        return (diff * 10000) / expected; // basis points (1% = 100)
+    }
+
+    function _assertYieldWithinTolerance(
+        uint256 expected,
+        uint256 actual
+    ) internal pure {
+        uint256 diffBp = _calcPercentDiff(expected, actual);
+        // Allow 1% difference tolerance = 100 bps
+        assertLt(diffBp, 500, "Percent difference < 1%");
     }
 }
