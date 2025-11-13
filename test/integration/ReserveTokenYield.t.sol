@@ -486,19 +486,19 @@ contract ReserveTokenYield is ProtocolTestUtils {
 
         // Cycle 1: Check initial yield (1 day)
         uint256 expectedYield = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1 days);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C1");
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield);
 
         // Cycle 2: Price increases 10% (1 day)
         uint256 assetPriceC1 = (INITIAL_PRICE * 110) / 100;
         completeCycleWithPriceChange(assetPriceC1);
         expectedYield = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYield, 1 days);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C2");
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield);
 
         // Cycle 3: 30-day yield accrual with new price
-        // vm.warp(block.timestamp + YIELD_TEST_PERIOD);
+        vm.warp(block.timestamp + YIELD_TEST_PERIOD);
         completeCycleWithPriceChange(assetPriceC1);
-        expectedYield = _getExpectedYield(assetBalance, assetPriceC1, collateralAmount, expectedYield, 1 days);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C3");
+        expectedYield = _getExpectedYield(assetBalance, assetPriceC1, collateralAmount, expectedYield, 30 days);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield);
     }
 
     /**
@@ -534,8 +534,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1C1,
-            "U1C1"
+            expectedYieldU1C1
         );
 
         // ============ Cycle 1 → 2 (User2 joins) ============
@@ -564,8 +563,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1C2,
-            "U1C2"
+            expectedYieldU1C2
         );
 
         // Test User2 yield in Cycle 2
@@ -581,8 +579,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2C2,
-            "U2C2"
+            expectedYieldU2C2
         );
 
         // next cycle, asset price remains the same
@@ -600,8 +597,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1C3,
-            "U1C3"
+            expectedYieldU1C3
         );
 
         // Test User2 yield in Cycle 3
@@ -616,8 +612,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2C3,
-            "U2C3"
+            expectedYieldU2C3
         );
     }
 
@@ -654,8 +649,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1,
-            "U1C1"
+            expectedYieldU1
         );
 
         // ============ Cycle 1 → 2 (User2 joins, price +10%) ============
@@ -684,8 +678,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1,
-            "U1C2"
+            expectedYieldU1
         );
 
         // User2's yield
@@ -701,8 +694,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2,
-            "U2C2"
+            expectedYieldU2
         );
 
         // ============ Cycle 2 → 3 (Price -20%) ============
@@ -721,8 +713,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1,
-            "U1C3"
+            expectedYieldU1
         );
 
         // User2's yield
@@ -737,8 +728,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2,
-            "U2C3"
+            expectedYieldU2
         );
 
         // ============ Cycle 3 → 4 (User1 redeems) ============
@@ -763,8 +753,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1,
-            "U1C4"
+            expectedYieldU1
         );
 
         // User2's yield
@@ -779,8 +768,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2,
-            "U2C4"
+            expectedYieldU2
         );
 
         // ============ Cycle 4 → 5 (Price unchanged) ============
@@ -793,8 +781,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
-            expectedYieldU1,
-            "U1C5"
+            expectedYieldU1
         );
 
         // User2's yield
@@ -809,8 +796,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         _testUserYield(
             assetBalanceU2,
             user2YieldIndex,
-            expectedYieldU2,
-            "U2C5"
+            expectedYieldU2
         );
     }
 
@@ -823,13 +809,11 @@ contract ReserveTokenYield is ProtocolTestUtils {
      * @param assetBalance User's asset token balance
      * @param userYieldIndex User's stored yield index
      * @param expectedYield Expected yield amount
-     * @param label Label for logging
      */
     function _testUserYield(
         uint256 assetBalance,
         uint256 userYieldIndex,
-        uint256 expectedYield,
-        string memory label
+        uint256 expectedYield
     ) public view {
         uint256 currentCycle = cycleManager.cycleIndex();
         uint256 globalYieldIndex = assetPool.reserveYieldIndex(currentCycle);
@@ -840,8 +824,6 @@ contract ReserveTokenYield is ProtocolTestUtils {
             PRECISION
         );
 
-        console2.log(string.concat("Expected yield ", label), expectedYield);
-        console2.log(string.concat("Actual yield ", label), actualYield);
         _assertYieldWithinTolerance(expectedYield, actualYield);
     }
 
@@ -878,11 +860,39 @@ contract ReserveTokenYield is ProtocolTestUtils {
             ? _calcAssetValue(assetBalance, price, _getReserveToAssetDecimalFactor())
             : 0;
 
-        return
-            previousYield +
-            ((principal + collateralAmount + previousYield) * daysElapsed *
-                YIELD_RATE_PER_DAY) /
-            BPS;
+        uint256 compoundedBalance = _compoundBalance(
+            principal + collateralAmount + previousYield,
+            YIELD_RATE_PER_DAY,
+            daysElapsed
+        );
+
+        uint256 newYield = compoundedBalance -
+            (principal + collateralAmount + previousYield);
+        
+        return previousYield + newYield;
+    }
+
+        /**
+     * @notice Calculate compounded balance over time
+     * @param principal Initial principal amount
+     * @param yieldRatePerDay Yield rate per day in basis points
+     * @param daysElapsed Number of days elapsed
+     * @return Compounded balance after the elapsed time
+     */
+    function _compoundBalance(
+        uint256 principal,
+        uint256 yieldRatePerDay,
+        uint256 daysElapsed
+    ) internal pure returns (uint256) {
+        uint256 compoundedBalance = principal;
+        uint256 yield;
+
+        for (uint256 i = 0; i < daysElapsed; i++) {
+            yield = (compoundedBalance * yieldRatePerDay) / BPS;
+            compoundedBalance += yield;
+        }
+
+        return compoundedBalance;
     }
 
     /**
