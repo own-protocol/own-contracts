@@ -466,7 +466,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         );
     }
 
-    function testAccurateYieldIndexUpdatesSingleUser() public {
+    function testAccurateYieldUpdatesSingleUser() public {
         // ---- 1️⃣ User1 deposits in Cycle 0 ----
         uint256 depositAmount = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
         uint256 collateralAmount = (depositAmount * COLLATERAL_RATIO) / 100;
@@ -507,7 +507,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
      * when they deposit and redeem assets.
      * user1 deposits in current cycle, user2 joins in next cycle at same price and the asset price increases
      */
-    function testAccurateYieldIndexUpdatesMultipleUsers() public {
+    function testAccurateYieldMultipleUsers_WithPriceChange() public {
         // ============ Cycle 0 → 1 (User1 joins) ============
         uint256 depU1 = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
         uint256 colU1 = (depU1 * COLLATERAL_RATIO) / 100;
@@ -528,9 +528,8 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU1,
             0,
-            1
+            1 days
         );
-
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
@@ -558,7 +557,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU1,
             expectedYieldU1C1,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -574,7 +573,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU2,
             0,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -592,7 +591,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC2,
             colU1,
             expectedYieldU1C2,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -607,7 +606,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC2,
             colU2,
             expectedYieldU2C2,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -623,7 +622,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
      * user1 deposits in current cycle, asset price increases in next cycle, user 2 joins in this cycle
      * user1 redeems half of their assets in cycle 2
      */
-    function testAccurateYieldGeneratedForMultipleUsers() public {
+    function testAccurateYieldMultipleUsers_Redeem() public {
         // ============ Cycle 0 → 1 (User1 joins) ============
         uint256 depU1 = adjustAmountForDecimals(USER_DEPOSIT_AMOUNT, 6);
         uint256 colU1 = (depU1 * COLLATERAL_RATIO) / 100;
@@ -644,7 +643,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU1,
             0,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -673,7 +672,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU1,
             expectedYieldU1,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -689,7 +688,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             INITIAL_PRICE,
             colU2,
             0,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -708,7 +707,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC2,
             colU1,
             expectedYieldU1,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -723,7 +722,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC2,
             colU2,
             expectedYieldU2,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -748,7 +747,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC3,
             colU1,
             expectedYieldU1,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU1,
@@ -757,13 +756,12 @@ contract ReserveTokenYield is ProtocolTestUtils {
         );
 
         // User2's yield
-        assetBalanceU2 = assetToken.balanceOf(user2);
         expectedYieldU2 = _getExpectedYield(
             assetBalanceU2,
             assetPriceC3,
             colU2,
             expectedYieldU2,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -777,7 +775,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
 
         // User1's yield
         // Since user1 has claimed the reserves, they do not have any deposits (including collateral and yields) in the pool
-        expectedYieldU1 = _getExpectedYield(assetBalanceU1, assetPriceC3, 0, 0, 1 days);
+        expectedYieldU1 = _getExpectedYield(0, assetPriceC3, 0, 0, 1 days);
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
@@ -791,7 +789,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
             assetPriceC3,
             colU2,
             expectedYieldU2,
-            1
+            1 days
         );
         _testUserYield(
             assetBalanceU2,
@@ -823,7 +821,6 @@ contract ReserveTokenYield is ProtocolTestUtils {
             globalYieldIndex - userYieldIndex,
             PRECISION
         );
-
         _assertYieldWithinTolerance(expectedYield, actualYield);
     }
 
