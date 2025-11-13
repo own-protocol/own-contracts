@@ -40,29 +40,19 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     uint256 public cycleTotalRedemptions;
 
     /**
-     * @notice Total active user deposits
-     */
-    uint256 public totalUserDeposits;
-
-    /**
-     * @notice Total active user collateral
-     */
-    uint256 public totalUserCollateral;
-
-    /**
      * @notice Amount of reserve tokens backing the asset token
      */
     uint256 public reserveBackingAsset;
 
     /**
-     * @notice Current reserve balance of the pool (including rebalance amount, collateral, interestDebt).
+     * @notice Current reserve balance of the pool (including rebalance amount, collateral, interestDebt, yield)
      */
     uint256 public aggregatePoolReserves;
 
     /**
-     * @notice Reserve yield earned per token to date (if isYieldBearing).
+     * @notice Reserve yield earned per asset token at a given cycle (if isYieldBearing).
      */
-    uint256 public reserveYieldIndex;
+    mapping(uint256 => uint256) public reserveYieldIndex;
 
     /**
      * @notice Mapping of user addresses to their positions
@@ -136,7 +126,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         poolCycleManager =IPoolCycleManager(_poolCycleManager);
         poolLiquidityManager = IPoolLiquidityManager(_poolLiquidityManager);
         poolStrategy = IPoolStrategy(_poolStrategy);
-        reserveYieldIndex = 1e18;
+        reserveYieldIndex[0] = 1e18;
+        reserveYieldIndex[1] = 1e18;
 
         _initializeDecimalFactor(address(reserveToken), address(assetToken));
 
@@ -157,11 +148,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         UserPosition storage position = userPositions[user];
 
-        _handleDeposit(user, amount, msg.sender);
+        reserveToken.safeTransferFrom(msg.sender, address(this), amount);
 
         // Update user's position
         position.collateralAmount += amount;
-        totalUserCollateral += amount;
         aggregatePoolReserves += amount;
 
         UserRequest storage request = userRequests[user];
@@ -208,18 +198,15 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         }
         
         if (amount > excessCollateral) revert ExcessiveWithdrawal();
-
-        uint256 reserveYield = _handleWithdrawal(msg.sender, amount);
         
         // Update user's position
         position.collateralAmount -= amount;
-        totalUserCollateral -= amount;
         aggregatePoolReserves -= amount;
         
         // Transfer collateral to user
-        reserveToken.safeTransfer(msg.sender, amount + reserveYield);
+        reserveToken.safeTransfer(msg.sender, amount);
         
-        emit CollateralWithdrawn(msg.sender, amount + reserveYield);
+        emit CollateralWithdrawn(msg.sender, amount);
     }
 
     // --------------------------------------------------------------------------------
@@ -257,7 +244,8 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         if (availableLiquidity < amount) revert InsufficientLiquidity();
 
-        _handleDeposit(msg.sender, amount, msg.sender);
+        // Transfer reserve tokens from user to pool
+        reserveToken.safeTransferFrom(msg.sender, address(this), amount);
         
         // Update request state
         request.requestType = RequestType.DEPOSIT;
@@ -266,8 +254,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         request.requestCycle = currentCycle;
         cycleTotalDeposits += amount;
 
-        // Update total user deposits and collateral
-        totalUserDeposits += amount;
         aggregatePoolReserves += amount;
 
         emit DepositRequested(msg.sender, amount, currentCycle);
@@ -395,6 +381,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
         uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
 
+        // We use reuqestCycle - 1 to let users accrue yield for the deposit cycle as well
+        _handleAssetClaim(user, assetAmount, requestCycle - 1);
+
         // Check collateral requirement
         UserPosition storage position = userPositions[user];
         uint256 requiredCollateral = Math.mulDiv(amount + position.depositAmount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
@@ -450,7 +439,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         uint256 totalAmount = r.reserveAmount + r.collateralAmount;
 
-        uint256 reserveYield = _handleWithdrawal(user, totalAmount);
+        uint256 reserveYield = _handleWithdrawal(user, amount, requestCycle);
 
         if(position.assetAmount == amount) {
             delete userPositions[user];
@@ -461,9 +450,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         }
 
         totalAmount -= r.interestDebt;
-        // Update total user deposits and collateral
-        totalUserDeposits -= r.depositAmount;
-        totalUserCollateral -= r.collateralAmount;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
         totalAmount += reserveYield;
 
@@ -514,7 +500,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         uint256 totalAmount = r.reserveAmount + r.collateralAmount;
 
-        uint256 reserveYield = _handleWithdrawal(msg.sender, totalAmount);
+        uint256 reserveYield = _handleWithdrawal(msg.sender, amount, cycle);
 
         if(position.assetAmount == amount) {
             delete userPositions[msg.sender];
@@ -523,15 +509,13 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             position.depositAmount -= r.depositAmount;
             position.collateralAmount -= r.collateralAmount;
         }
-        // Update total user deposits and collateral
-        totalUserDeposits -= r.depositAmount;
-        totalUserCollateral -= r.collateralAmount;
         totalAmount -= r.interestDebt;
         aggregatePoolReserves = _safeSubtract(aggregatePoolReserves, totalAmount);
         totalAmount += reserveYield;
 
         // Transfer reserve tokens to the user
         _safeTransferBalance(msg.sender, totalAmount, false);
+        _updateReserveYieldIndex(cycle);
 
         emit ReserveWithdrawn(msg.sender, totalAmount, cycle);
     }
@@ -652,6 +636,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             assetToken.burn(address(this), uint256(-nettAssetChange));
         }
 
+        uint256 cycle = poolCycleManager.cycleIndex();
+        _updateReserveYieldIndex(cycle);
+        reserveYieldIndex[cycle+1] = reserveYieldIndex[cycle];
         cycleTotalDeposits = 0;
         cycleTotalRedemptions = 0;
     }
@@ -702,66 +689,42 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     }
 
     /**
-     * @dev Gets the total reserve amount for a user, including any pending requests
-     * @param user Address of the user
-     * @return Total reserve amount for the user
-     */
-    function _getUserTotalReserveAmount(address user) internal view returns (uint256) {
-        UserPosition storage position = userPositions[user];
-        UserRequest storage request = userRequests[user];
-        if (request.requestType == RequestType.DEPOSIT) {
-            // If there's a deposit request, include it in the total
-            return position.depositAmount + position.collateralAmount + request.amount + request.collateralAmount;
-        } else{
-            return position.depositAmount + position.collateralAmount;
-        }
-    }
-
-    /**
-     * @notice Handle deposit for reserve tokens
+     * @notice Handle asset claim for yield bearing reserve tokens
      * @param user Address of the user depositing
-     * @param amount Amount being deposited
-     * @param depositor Address from which the tokens are transferred (could be user or a third party)
+     * @param amount Amount of asset being claimed
+     * @param cycle Cycle when the request was made
      */
-    function _handleDeposit(address user, uint256 amount, address depositor) internal {
+    function _handleAssetClaim(address user, uint256 amount, uint256 cycle) internal {
         if (poolStrategy.isYieldBearing()) {
-            // Update the reserve yield index before calculating yield
-            _updateReserveYieldIndex();
-            reserveToken.safeTransferFrom(depositor, address(this), amount);
+            uint256 oldPrincipal = userPositions[user].assetAmount;
 
-            uint256 oldPrincipal = _getUserTotalReserveAmount(user);
             uint256 newPrincipal = oldPrincipal + amount;
             uint256 newUserIndex;
             {
                 // Isolate newUserIndex computation to limit locals in outer scope
                 uint256 uIndex = userReserveYieldIndex[user];
                 uint256 weightedOld = (oldPrincipal == 0) ? 0 : Math.mulDiv(oldPrincipal, uIndex, newPrincipal);
-                uint256 weightedNew = Math.mulDiv(amount, reserveYieldIndex, newPrincipal);
-                newUserIndex = (oldPrincipal == 0) ? reserveYieldIndex : weightedOld + weightedNew;
+                uint256 weightedNew = Math.mulDiv(amount, reserveYieldIndex[cycle], newPrincipal);
+                newUserIndex = (oldPrincipal == 0) ? reserveYieldIndex[cycle] : weightedOld + weightedNew;
             }
             userReserveYieldIndex[user] = newUserIndex;
-        } else {
-            // Transfer collateral from depositor to this contract
-            reserveToken.safeTransferFrom(depositor, address(this), amount);
         }
     }
 
     /**
      * @notice Handle withdrawal for reserve tokens
      * @param user Address of the user withdrawing
-     * @param amount Amount being withdrawn
+     * @param amount Amount of asset being withdrawn
+     * @param cycle Cycle when the request was made
      * @return reserveYield The calculated yield amount
     */
     function _handleWithdrawal(
         address user, 
-        uint256 amount    
+        uint256 amount,
+        uint256 cycle
         ) internal returns (uint256) {
-        if (poolStrategy.isYieldBearing()){
-            // Update the reserve yield index before calculating yield
-            _updateReserveYieldIndex();            
-            uint256 userReserve = _getUserTotalReserveAmount(user);
-            uint256 totalYield = Math.mulDiv(userReserve, reserveYieldIndex - userReserveYieldIndex[user], PRECISION);
-            uint256 reserveYield = Math.mulDiv(totalYield, amount, userReserve);
+        if (poolStrategy.isYieldBearing()){          
+            uint256 reserveYield = Math.mulDiv(amount, reserveYieldIndex[cycle] - userReserveYieldIndex[user], PRECISION);
             aggregatePoolReserves -= reserveYield;
 
             // Deduct protocol fee from the yield
@@ -773,16 +736,22 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
     /**
      * @notice Update the reserve yield index
+     * @param cycle Cycle index
      */
-    function _updateReserveYieldIndex() internal {
-        uint256 reserveBalanceBefore = reserveToken.balanceOf(address(this));         
-        uint256 yIndex = poolStrategy.calculateYieldAccrued(
-            aggregatePoolReserves,
-            reserveBalanceBefore,
-            totalUserDeposits + totalUserCollateral
-        );
-        aggregatePoolReserves = reserveBalanceBefore;
-        reserveYieldIndex += yIndex;
+    function _updateReserveYieldIndex(uint256 cycle) internal {
+        uint256 newReserveBalance = reserveToken.balanceOf(address(this));     
+        // Calculate yield per asset token
+        uint256 yIndex = 0;
+        // The reasoning to include cycleTotalRedemptions is that the yield earned should be distributed
+        // among all asset tokens that were present during the cycle, including those that were redeemed.
+        if (assetToken.totalSupply() > 0 || cycleTotalRedemptions > 0) {
+            if (newReserveBalance > aggregatePoolReserves) {
+                yIndex = Math.mulDiv((newReserveBalance - aggregatePoolReserves), PRECISION, assetToken.totalSupply() + cycleTotalRedemptions);
+                aggregatePoolReserves = newReserveBalance;
+            }
+        }
+        // Index accrues, starting from cycle 1.
+        reserveYieldIndex[cycle] += yIndex;
     }
 
     /**

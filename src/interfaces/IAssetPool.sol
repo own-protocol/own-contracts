@@ -339,29 +339,21 @@ interface IAssetPool {
     function cycleTotalRedemptions() external view returns (uint256);
 
     /**
-     * @notice Total active user deposits 
-     */
-    function totalUserDeposits() external view returns (uint256);
-
-    /**
-     * @notice Total active user collateral
-     */
-    function totalUserCollateral() external view returns (uint256);
-
-    /**
      * @notice Returns Amount of reserve token backing the asset tokens
      */
     function reserveBackingAsset() external view returns (uint256);
 
     /**
-     * @notice Combined reserve balance of the pool (including rebalance amount, collateral, interestDebt).
+     * @notice Combined reserve balance of the pool (including rebalance amount, collateral, interestDebt, yield).
      */
     function aggregatePoolReserves() external view returns (uint256);
 
     /**
      * @notice Reserve yield earned per token to date (if isYieldBearing).
+     * @param cycle Cycle index
+     * @return Reserve yield index at the given cycle
      */
-    function reserveYieldIndex() external view returns (uint256);
+    function reserveYieldIndex(uint256 cycle) external view returns (uint256);
 
     /**
      * @notice Get the split index of a user
