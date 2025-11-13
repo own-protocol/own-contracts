@@ -377,12 +377,12 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         // Clear request early to free stack
         delete userRequests[user];
 
-        // We use reuqestCycle - 1 to let users accrue yield for the deposit cycle as well
-        _handleAssetClaim(user, amount, requestCycle - 1);
-
         uint256 rebalancePrice = poolCycleManager.cycleRebalancePrice(requestCycle);
         uint256 interestIndex = poolCycleManager.cumulativeInterestIndex(requestCycle);
         uint256 assetAmount = _convertReserveToAsset(amount, rebalancePrice);
+
+        // We use reuqestCycle - 1 to let users accrue yield for the deposit cycle as well
+        _handleAssetClaim(user, assetAmount, requestCycle - 1);
 
         // Check collateral requirement
         UserPosition storage position = userPositions[user];
