@@ -482,52 +482,23 @@ contract ReserveTokenYield is ProtocolTestUtils {
 
         uint256 assetBalance = assetToken.balanceOf(user1);
         uint256 yieldIndexU1 = assetPool.userReserveYieldIndex(user1);
+        uint256 expectedYieldPrevCycle = 0;
 
         // Cycle 1: Check initial yield
-        _testCycleYield(
-            assetBalance,
-            INITIAL_PRICE,
-            collateralAmount,
-            0,
-            yieldIndexU1
-        );
+        expectedYieldPrevCycle = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C1");
 
         // Cycle 2: Price increases 10%
-        uint256 assetPriceC1 = INITIAL_PRICE + (INITIAL_PRICE * 10) / 100;
+        uint256 assetPriceC1 = (INITIAL_PRICE * 110) / 100;
         completeCycleWithPriceChange(assetPriceC1);
-        uint256 expectedYield1 = _getExpectedYield(
-            assetBalance,
-            INITIAL_PRICE,
-            collateralAmount,
-            0,
-            1
-        );
-        _testCycleYield(
-            assetBalance,
-            INITIAL_PRICE,
-            collateralAmount,
-            expectedYield1,
-            yieldIndexU1
-        );
+        expectedYieldPrevCycle = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C2");
 
+        // Cycle 3: 30-day yield accrual with new price
         // vm.warp(block.timestamp + YIELD_TEST_PERIOD);
-        // Cycle 3: Continue with new price
         completeCycleWithPriceChange(assetPriceC1);
-
-        uint256 expectedYield2 = _getExpectedYield(
-            assetBalance,
-            INITIAL_PRICE,
-            collateralAmount,
-            expectedYield1,
-            1
-        );
-        _testCycleYield(
-            assetBalance,
-            assetPriceC1,
-            collateralAmount,
-            expectedYield2,
-            yieldIndexU1
-        );
+        expectedYieldPrevCycle = _getExpectedYield(assetBalance, assetPriceC1, collateralAmount, expectedYieldPrevCycle, 1);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C3");
     }
 
     /**
@@ -875,41 +846,6 @@ contract ReserveTokenYield is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test yield for a specific cycle
-     * @param assetBalance User's asset token balance
-     * @param price Asset price for calculating asset value
-     * @param collateralAmount User's collateral amount
-     * @param previousExpectedYield Previously accumulated expected yield
-     * @param userYieldIndex User's stored yield index
-     */
-    function _testCycleYield(
-        uint256 assetBalance,
-        uint256 price,
-        uint256 collateralAmount,
-        uint256 previousExpectedYield,
-        uint256 userYieldIndex
-    ) public view {
-        uint256 currentCycle = cycleManager.cycleIndex();
-        uint256 globalYieldIndex = assetPool.reserveYieldIndex(currentCycle);
-
-        uint256 actualYield = Math.mulDiv(
-            assetBalance,
-            globalYieldIndex - userYieldIndex,
-            PRECISION
-        );
-
-        uint256 expectedYield = _getExpectedYield(
-            assetBalance,
-            price,
-            collateralAmount,
-            previousExpectedYield,
-            1
-        );
-
-        _assertYieldWithinTolerance(expectedYield, actualYield);
-    }
-
-    /**
      * @notice Calculate expected yield based on asset value and previous yield
      * @param assetBalance User's asset token balance (18 decimals)
      * @param price Asset price (18 decimals)
@@ -951,17 +887,6 @@ contract ReserveTokenYield is ProtocolTestUtils {
                 price,
                 PRECISION * reserveToAssetDecimalFactor
             );
-    }
-
-    function _calcShare(
-        uint256 userAssetValue,
-        uint256 totalAssetValue
-    ) internal pure returns (uint256) {
-        // Returns user share as a fraction scaled to 1e18 (PRECISION)
-        return
-            totalAssetValue > 0
-                ? Math.mulDiv(userAssetValue, PRECISION, totalAssetValue)
-                : 0;
     }
 
     function _calcPercentDiff(
