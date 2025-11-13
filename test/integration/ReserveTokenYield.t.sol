@@ -960,7 +960,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
         uint256 actual
     ) internal pure {
         uint256 diffBp = _calcPercentDiff(expected, actual);
-        // Allow 1% difference tolerance = 100 bps
-        assertLt(diffBp, 400, "Percent difference < 1%");
+        // Allow 4% difference tolerance = 400 bps
+        assertLt(diffBp, 400, "Percent difference < 4%");
     }
 }
