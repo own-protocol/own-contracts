@@ -427,10 +427,9 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
            _updateLPReserveYieldIndex(lp, reserveYield);
         }
 
-        uint256 totalAmount = _safeSubtract(amount, reserveYield);
-        position.collateralAmount -= totalAmount;
-        totalLPPrincipal -= totalAmount;
-        aggregatePoolReserves -= totalAmount;
+        position.collateralAmount = position.collateralAmount + reserveYield - amount;
+        totalLPPrincipal = totalLPPrincipal + reserveYield - amount;
+        aggregatePoolReserves = aggregatePoolReserves + reserveYield - amount;
 
         reserveToken.safeTransfer(address(assetPool), amount);
     }
