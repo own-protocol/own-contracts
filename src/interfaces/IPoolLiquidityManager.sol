@@ -245,9 +245,9 @@ interface IPoolLiquidityManager {
     function totalLPLiquidityCommited() external view returns (uint256);
 
     /**
-     * @notice Total lp collateral
+     * @notice Total lp principal (includes both collateral and interest)
      */
-    function totalLPCollateral() external view returns (uint256);
+    function totalLPPrincipal() external view returns (uint256);
 
     /**
      * @notice Combined reserve balance of the liquidity manager (including collateral and interest)

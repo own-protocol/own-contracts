@@ -307,7 +307,7 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         IPoolLiquidityManager.LPPosition memory initialPosition = liquidityManager.getLPPosition(liquidityProvider1);
         uint256 initialCollateral = initialPosition.collateralAmount;
         uint256 initialBalance = reserveToken.balanceOf(liquidityProvider1);
-        uint256 initialTotalCollateral = liquidityManager.totalLPCollateral();
+        uint256 initialTotalPrincipal = liquidityManager.totalLPPrincipal();
         
         // Add collateral
         vm.startPrank(liquidityProvider1);
@@ -321,8 +321,8 @@ contract PoolLiquidityManagerTest is ProtocolTestUtils {
         // Verify balance decreased
         assertEq(reserveToken.balanceOf(liquidityProvider1), initialBalance - collateralAmount, "Balance should decrease by collateral amount");
         
-        // Verify total collateral increased
-        assertEq(liquidityManager.totalLPCollateral(), initialTotalCollateral + collateralAmount, "Total collateral should increase");
+        // Verify total principal increased
+        assertEq(liquidityManager.totalLPPrincipal(), initialTotalPrincipal + collateralAmount, "Total principal should increase");
         
         // Verify event emitted
         // Note: In a real test would verify event emission with expectEmit

@@ -445,7 +445,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             uint256 reserveYieldIndex = manager.reserveYieldIndex();
             uint256 lpReserveYieldIndex = manager.lpReserveYieldIndex(lp);
             uint256 reserveYieldAmount = Math.mulDiv(
-                lpCollateral,
+                lpCollateral + position.interestAccrued,
                 reserveYieldIndex - lpReserveYieldIndex,
                 PRECISION
             );
