@@ -484,21 +484,21 @@ contract ReserveTokenYield is ProtocolTestUtils {
         uint256 yieldIndexU1 = assetPool.userReserveYieldIndex(user1);
         uint256 expectedYieldPrevCycle = 0;
 
-        // Cycle 1: Check initial yield
-        expectedYieldPrevCycle = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C1");
+        // Cycle 1: Check initial yield (1 day)
+        uint256 expectedYield = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1 days);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C1");
 
-        // Cycle 2: Price increases 10%
+        // Cycle 2: Price increases 10% (1 day)
         uint256 assetPriceC1 = (INITIAL_PRICE * 110) / 100;
         completeCycleWithPriceChange(assetPriceC1);
-        expectedYieldPrevCycle = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYieldPrevCycle, 1);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C2");
+        expectedYield = _getExpectedYield(assetBalance, INITIAL_PRICE, collateralAmount, expectedYield, 1 days);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C2");
 
         // Cycle 3: 30-day yield accrual with new price
         // vm.warp(block.timestamp + YIELD_TEST_PERIOD);
         completeCycleWithPriceChange(assetPriceC1);
-        expectedYieldPrevCycle = _getExpectedYield(assetBalance, assetPriceC1, collateralAmount, expectedYieldPrevCycle, 1);
-        _testUserYield(assetBalance, yieldIndexU1, expectedYieldPrevCycle, "U1C3");
+        expectedYield = _getExpectedYield(assetBalance, assetPriceC1, collateralAmount, expectedYield, 1 days);
+        _testUserYield(assetBalance, yieldIndexU1, expectedYield, "U1C3");
     }
 
     /**
@@ -789,7 +789,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
 
         // User1's yield
         // Since user1 has claimed the reserves, they do not have any deposits (including collateral and yields) in the pool
-        expectedYieldU1 = _getExpectedYield(assetBalanceU1, assetPriceC3, 0, 0, 1);
+        expectedYieldU1 = _getExpectedYield(assetBalanceU1, assetPriceC3, 0, 0, 1 days);
         _testUserYield(
             assetBalanceU1,
             user1YieldIndex,
@@ -851,6 +851,7 @@ contract ReserveTokenYield is ProtocolTestUtils {
      * @param price Asset price (18 decimals)
      * @param collateralAmount User's collateral (6 decimals)
      * @param previousYield Previously accumulated yield (6 decimals)
+     * @param yieldLength Time period in seconds
      * @return Expected yield in reserve decimals (6 decimals)
      */
     function _getExpectedYield(
@@ -860,19 +861,36 @@ contract ReserveTokenYield is ProtocolTestUtils {
         uint256 previousYield,
         uint256 yieldLength
     ) internal view returns (uint256) {
-        uint256 reserveToAssetDecimalFactor = assetPool
-            .reserveToAssetDecimalFactor();
-        uint256 assetValue = _calcAssetValue(
-            assetBalance,
-            price,
-            reserveToAssetDecimalFactor
-        );
+        // Convert yieldLength from seconds to days
+        // yieldLength is in seconds, YIELD_RATE_PER_DAY is per day
+        // Formula: yield = principal * (yieldLength / 1 days) * YIELD_RATE_PER_DAY / BPS
+        uint256 daysElapsed = yieldLength / 1 days;
+
+        // All values are in 6 decimals (reserve decimals):
+        // - assetValue: 6 decimals (from _calcAssetValue)
+        // - collateralAmount: 6 decimals
+        // - previousYield: 6 decimals
+        // - daysElapsed: no decimals (integer)
+        // - YIELD_RATE_PER_DAY: basis points (no decimals, 50 = 0.5%)
+        // - BPS: 10000 (no decimals)
+        // Result: (6 decimals) * (integer) * (integer) / (integer) = 6 decimals
+        uint256 principal = assetBalance > 0
+            ? _calcAssetValue(assetBalance, price, _getReserveToAssetDecimalFactor())
+            : 0;
 
         return
             previousYield +
-            ((assetValue + collateralAmount + previousYield) * yieldLength *
+            ((principal + collateralAmount + previousYield) * daysElapsed *
                 YIELD_RATE_PER_DAY) /
             BPS;
+    }
+
+    /**
+     * @notice Get reserve to asset decimal factor (helper to avoid stack issues)
+     * @dev This is a workaround to call view function without making _getExpectedYield view
+     */
+    function _getReserveToAssetDecimalFactor() internal view returns (uint256) {
+        return assetPool.reserveToAssetDecimalFactor();
     }
 
     function _calcAssetValue(
