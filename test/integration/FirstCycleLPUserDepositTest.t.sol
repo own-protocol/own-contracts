@@ -110,6 +110,104 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         _verifyPostCycleState(lpLiquidityAmount, userDepositAmount);
     }
 
+    /**
+     * @notice Test that an LP adds liquidity which also adds collateral to the pool
+     * The LP should not be able to reduce collateral until the cycle is completed
+     */
+    function testLPAddLiquidityAddsCollateral() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // LP should not be able to reduce collateral until the cycle is completed
+        uint256 initialCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InvalidCycleState.selector);
+        liquidityManager.reduceCollateral(initialCollateral);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
+     * The LP should not be able to reduce collateral after the cycle is completed because that would reduce the collateral health to 1
+     */
+    function testLPAddLiquidityInFirstCycleAndCycleRebalances() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        _completeCycleProcessingBothRequests();
+
+        // LP should not be able to reduce collateral after the cycle is completed because the collateral health is 1
+        uint256 initialCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
+        liquidityManager.reduceCollateral(initialCollateral);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
+     * LP adds liquidity in the next cycle and tries to reduce collateral which should revert because that would reduce the collateral health to 1
+     */
+    function testLPAddLiquidityInNextCycleAndCycleRebalances() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        _completeCycleProcessingBothRequests();
+
+        uint256 collateralC0 = liquidityManager.getLPPosition(newLP).collateralAmount;
+
+        // Step 2: LP adds liquidity in the next cycle
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Step 3: LP tries to reduce collateral which should revert because the collateral health is 1
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
+        liquidityManager.reduceCollateral(collateralC0);
+    }
+
+    /**
+     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
+     * LP adds liquidity in the next cycle + adds collateral to the pool
+     * LP should be able to reduce the extra collateral because that would not reduce the collateral health to 1
+     */
+    function testLPAddLiquidityInNextCycleAndCycleRebalancesAndReduceExtraCollateral() public {
+        uint256 EXTRA_COLLATERAL = 100_000;
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        _completeCycleProcessingBothRequests();
+
+        uint256 lpCollateralBefore = liquidityManager.getLPPosition(newLP).collateralAmount;
+
+        // LP should be able to reduce the extra collateral because that would not reduce the collateral health to 1
+        vm.startPrank(newLP);
+        liquidityManager.addCollateral(newLP, EXTRA_COLLATERAL);
+        uint256 lpColAfterAddCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        assertEq(lpColAfterAddCollateral, lpCollateralBefore + EXTRA_COLLATERAL, "LP collateral should be updated");
+        liquidityManager.reduceCollateral(EXTRA_COLLATERAL);
+        uint256 lpColAfterReduceCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        assertEq(lpColAfterReduceCollateral, lpCollateralBefore, "LP collateral should be reduced");
+        vm.stopPrank();
+
+        // Verify the extra collateral is reduced
+        assertEq(lpColAfterAddCollateral - lpColAfterReduceCollateral, EXTRA_COLLATERAL, "Extra collateral should be reduced");
+        // Verify the total collateral is updated
+        assertEq(liquidityManager.totalLPCollateral(), lpCollateralBefore, "Total collateral should be updated");
+    }
+
     // ==================== HELPER FUNCTIONS ====================
 
     /**
