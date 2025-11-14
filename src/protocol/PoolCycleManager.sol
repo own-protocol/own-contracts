@@ -170,18 +170,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
     }
 
     // --------------------------------------------------------------------------------
-    //                                    MODIFIERS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @dev Ensures the caller is an active LP.
-     */
-    modifier onlyActiveLP() {
-        if (!poolLiquidityManager.isLPActive(msg.sender)) revert NotLP();
-        _;
-    }
-
-    // --------------------------------------------------------------------------------
     //                               REBALANCING LOGIC
     // --------------------------------------------------------------------------------
 
@@ -234,7 +222,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
      */
-    function rebalancePool(address lp, uint256 rebalancePrice) public onlyActiveLP {
+    function rebalancePool(address lp, uint256 rebalancePrice) public {
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
         address delegate = poolLiquidityManager.lpDelegates(lp);
         if (lp != msg.sender && (delegate == address(0) || msg.sender != delegate)) revert UnauthorizedCaller();
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
