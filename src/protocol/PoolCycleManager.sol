@@ -291,7 +291,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         
         poolLiquidityManager.resolveRequest(lp);
         lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
@@ -382,9 +382,9 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-            // Deduct interest from the pool and add to LP's collateral
+            // Deduct interest from the pool and transfer it to the protocol as penalty
             if (lpCycleInterest > 0) {
-                assetPool.deductInterest(lp, lpCycleInterest, false);
+                assetPool.deductInterest(lp, lpCycleInterest, true);
             }
         }
         
@@ -447,7 +447,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-            // Deduct interest from the pool and add to LP's collateral
+            // Deduct interest from the pool and transfer it to the protocol as penalty
             if (lpCycleInterest > 0) {
                 assetPool.deductInterest(lp, lpCycleInterest, true);
             }
