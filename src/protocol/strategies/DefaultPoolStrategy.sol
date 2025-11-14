@@ -378,6 +378,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
         uint256 lpCommitment = manager.getLPLiquidityCommitment(lp);
+        
+        IPoolLiquidityManager.LPRequest memory request = manager.getLPRequest(lp);
+        if (request.requestType == IPoolLiquidityManager.RequestType.ADD_LIQUIDITY) {
+            lpCommitment += request.requestAmount;
+        }
         uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
         return healthyCollateral;
     }
