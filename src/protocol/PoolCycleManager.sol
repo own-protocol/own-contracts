@@ -290,11 +290,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         }
         
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+        
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
@@ -393,11 +390,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         
         // Resolve any pending requests for the LP
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
@@ -461,11 +455,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         
         // Resolve any pending requests for the LP
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
