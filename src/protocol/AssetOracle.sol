@@ -81,25 +81,17 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
      * @param _assetSymbol Symbol of the asset to track
      * @param _sourceHash Hash of the valid JavaScript source code
      * @param _owner Address of the contract owner
-     * @param _defaultSubscriptionId Default Chainlink Functions subscription ID
-     * @param _marketOpenThreshold Time threshold to consider market open
-     * @param _protocolKeeper Address of an authorized protocol keeper
      */
     constructor(
         address router,
         string memory _assetSymbol,
         bytes32 _sourceHash,
-        address _owner,
-        uint256 _defaultSubscriptionId,
-        uint256 _marketOpenThreshold,
-        address _protocolKeeper
+        address _owner
     ) FunctionsClient(router) ConfirmedOwner(_owner) {
         assetSymbol = _assetSymbol;
         sourceHash = _sourceHash;
         REQUEST_COOLDOWN = 0;
-        defaultSubscriptionId = _defaultSubscriptionId;
-        MARKET_OPEN_THRESHOLD = _marketOpenThreshold;
-        protocolKeepers[_protocolKeeper] = true;
+        MARKET_OPEN_THRESHOLD = 300;
     }
 
     /**

@@ -101,7 +101,13 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
     bool public splitDetected;
     uint256 public preSplitPrice;
     uint256 public lastUpdated;
-    
+    uint256 public lastRequestedAt;
+    uint256 public defaultSubscriptionId;
+    uint256 public REQUEST_COOLDOWN;
+    uint256 public MARKET_OPEN_THRESHOLD;
+    mapping(address => bool) public protocolKeepers;
+
+
     struct OHLCData {
         uint256 open;
         uint256 high;
@@ -112,9 +118,7 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
     
     OHLCData public ohlcData;
     
-    uint256 private constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
     uint256 internal constant PRECISION = 1e18;
-    uint256 public REQUEST_COOLDOWN;
     
     constructor(
         address router,
@@ -124,6 +128,9 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
     ) MockFunctionsClient(router) MockConfirmedOwner(_owner) {
         assetSymbol = _assetSymbol;
         sourceHash = _sourceHash;
+        defaultSubscriptionId = 1;
+        MARKET_OPEN_THRESHOLD = 300;
+        protocolKeepers[_owner] = true;
         REQUEST_COOLDOWN = 0;
     }
     
@@ -265,5 +272,17 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
         // This function is a placeholder for updating the request cooldown
         // In a real implementation, you would update the cooldown logic here
         REQUEST_COOLDOWN = newCooldown;
+    }
+
+    function updateDefaultSubscriptionId(uint256 newSubscriptionId) external onlyOwner {
+        defaultSubscriptionId = newSubscriptionId;
+    }
+
+    function updateMarketOpenThreshold(uint256 newThreshold) external onlyOwner {
+        MARKET_OPEN_THRESHOLD = newThreshold;
+    }
+
+    function updateProtocolKeeper(address keeper, bool isActive) external onlyOwner {
+        protocolKeepers[keeper] = isActive;
     }
 }
