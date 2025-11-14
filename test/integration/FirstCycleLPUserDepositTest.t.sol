@@ -180,7 +180,7 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
      * LP adds liquidity in the next cycle + adds collateral to the pool
      * LP should be able to reduce the extra collateral because that would not reduce the collateral health to 1
      */
-    function testLPAddLiquidityInNextCycleAndCycleRebalancesAndReduceExtraCollateral() public {
+    function testLPReduceExtraCollateralAfterAddingLiquidity() public {
         uint256 EXTRA_COLLATERAL = 100_000;
         // Step 1: New LP adds liquidity (first time)
         vm.startPrank(newLP);
@@ -205,7 +205,7 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         // Verify the extra collateral is reduced
         assertEq(lpColAfterAddCollateral - lpColAfterReduceCollateral, EXTRA_COLLATERAL, "Extra collateral should be reduced");
         // Verify the total collateral is updated
-        assertEq(liquidityManager.totalLPCollateral(), lpCollateralBefore, "Total collateral should be updated");
+        assertEq(liquidityManager.totalLPPrincipal(), lpCollateralBefore, "Total collateral should be updated");
     }
 
     // ==================== HELPER FUNCTIONS ====================
