@@ -113,8 +113,11 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test that an LP adds liquidity which also adds collateral to the pool
-     * The LP should not be able to reduce collateral until the cycle is completed
+     * @notice Test that reducing collateral before cycle completion reverts
+     * @dev Verifies that when an LP adds liquidity (which also adds collateral to the pool),
+     *      attempting to reduce collateral before the cycle completes reverts with InvalidCycleState error.
+     *      This ensures collateral cannot be modified during an active cycle.
+     * TODO: update revert message
      */
     function testLPAddLiquidityAddsCollateral() public {
         // Step 1: New LP adds liquidity (first time)
@@ -131,8 +134,10 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
-     * The LP should not be able to reduce collateral after the cycle is completed because that would reduce the collateral health to 1
+     * @notice Test that reducing collateral after completing the first cycle reverts
+     * @dev Verifies that after an LP adds liquidity in the first cycle and the cycle completes,
+     *      attempting to reduce collateral reverts with InsufficientCollateral error.
+     *      This ensures that LPs cannot reduce their collateral below the minimum health threshold.
      */
     function testLPAddLiquidityInFirstCycleAndCycleRebalances() public {
         // Step 1: New LP adds liquidity (first time)
@@ -154,8 +159,10 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
-     * LP adds liquidity in the next cycle and tries to reduce collateral which should revert because that would reduce the collateral health to 1
+     * @notice Test that reducing collateral after adding liquidity in next cycle reverts
+     * @dev Verifies that when an LP adds liquidity in a subsequent cycle after the initial cycle,
+     *      attempting to reduce collateral reverts with InsufficientCollateral error.
+     *      This ensures that LPs cannot reduce their collateral below the minimum health threshold.
      */
     function testLPAddLiquidityInNextCycleAndCycleRebalances() public {
         // Step 1: New LP adds liquidity (first time)
@@ -175,16 +182,17 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
         vm.stopPrank();
 
-        // Step 3: LP tries to reduce collateral which should revert because the collateral health is 1
+        // Step 3: Should revert because the collateral health would drop to 1
         vm.startPrank(newLP);
         vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
         liquidityManager.reduceCollateral(collateralC0);
     }
 
     /**
-     * @notice Test that an LP adds liquidity in first cycle and then cycle rebalances and moves to next cycle
-     * LP adds liquidity in the next cycle + adds collateral to the pool
-     * LP should be able to reduce the extra collateral because that would not reduce the collateral health to 1
+     * @notice Test that an LP can reduce extra collateral after adding it to the pool
+     * @dev Verifies that when an LP adds additional collateral beyond the required amount,
+     *      they can subsequently reduce that extra collateral without violating health requirements.
+     *      This ensures LPs have flexibility to manage their collateral while maintaining pool safety.
      */
     function testLPReduceExtraCollateralAfterAddingLiquidity() public {
         uint256 EXTRA_COLLATERAL = 100_000;
@@ -217,8 +225,9 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
     }
 
     /**
-     * @notice Test that three LPs join the pool, and then one LP leaves the pool
-     * Rebalance inactive LP should revert
+     * @notice Test that rebalancing an inactive LP reverts with NotLP error
+     * @dev Verifies that when an LP exits the pool and becomes inactive,
+     *      attempting to rebalance that LP should revert with NotLP error
      */
     function testRebalanceInactiveLPShouldRevert() public {
         // Step 1: Three LPs join the pool
@@ -298,6 +307,34 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_REBALANCING_ONCHAIN),
                 "Pool should be rebalancing onchain after LP rebalance");
 
+    }
+
+    /**
+     * @notice Test that delegates can rebalance the pool on behalf of LPs
+     * @dev Verifies that when an LP sets a delegate, the delegate has permission
+     *      to call rebalancePool() on behalf of the LP
+     */
+    function testDelegatesAreAbleToRebalancePool() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+        _completeCycleProcessingRequests(lps);
+
+        // Step 2: New delegate adds liquidity on behalf of the LP
+        address delegate = makeAddr("delegate");
+        vm.startPrank(newLP);
+        liquidityManager.setDelegate(delegate);
+        vm.stopPrank();
+
+        // Step 3: Verify the delegate is able to rebalance the pool on behalf of the LP
+        vm.startPrank(delegate);
+        cycleManager.rebalancePool(newLP, INITIAL_PRICE);
+        vm.stopPrank();
     }
 
     // ==================== HELPER FUNCTIONS ====================
