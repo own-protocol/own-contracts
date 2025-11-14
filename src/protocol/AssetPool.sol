@@ -271,7 +271,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (userHealth == 1) revert InsufficientCollateral();
 
         UserPosition storage position = userPositions[msg.sender];
-        _splitCheck(position);
+        _splitCheck(position, msg.sender);
 
         if (position.assetAmount < amount || assetToken.balanceOf(msg.sender) < amount)
             revert InsufficientBalance();
@@ -310,7 +310,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         
         // Get user's current position
         UserPosition storage position = userPositions[user];
-        _splitCheck(position);
+        _splitCheck(position, user);
         uint256 userAssetAmount = position.assetAmount;
         
         // Verify that user has assets
@@ -389,7 +389,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         uint256 requiredCollateral = Math.mulDiv(amount + position.depositAmount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
         if (position.collateralAmount < requiredCollateral) revert InsufficientCollateral();
 
-        _splitCheck(position);
+        _splitCheck(position, user);
         uint256 oldPrincipal = position.assetAmount;
         uint256 newPrincipal = oldPrincipal + assetAmount;
 
@@ -433,7 +433,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         UserPosition storage position = userPositions[user];
         amount = poolStrategy.calculatePostSplitAmount(address(this), user, amount);
-        _splitCheck(position);
+        _splitCheck(position, user);
         
         RedemptionValues memory r = _calculateRedemptionValues(user, amount, rebalancePrice, requestCycle);
 
@@ -483,7 +483,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         if (request.requestType != RequestType.NONE) revert RequestPending();
 
         UserPosition storage position = userPositions[msg.sender];
-        _splitCheck(position);
+        _splitCheck(position, msg.sender);
 
         if (position.assetAmount < amount) revert InsufficientBalance();
         
@@ -683,9 +683,9 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     }
 
 
-    function _splitCheck(UserPosition storage position) internal {
-        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), msg.sender, position.assetAmount);
-        userSplitIndex[msg.sender] = poolCycleManager.poolSplitIndex();
+    function _splitCheck(UserPosition storage position, address user) internal {
+        position.assetAmount = poolStrategy.calculatePostSplitAmount(address(this), user, position.assetAmount);
+        userSplitIndex[user] = poolCycleManager.poolSplitIndex();
     }
 
     /**
