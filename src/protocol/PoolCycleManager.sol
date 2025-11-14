@@ -348,7 +348,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (block.timestamp < lastCycleActionDateTime + poolStrategy.rebalanceLength()) revert OnChainRebalancingInProgress();
         if (block.timestamp > lastCycleActionDateTime + poolStrategy.haltThreshold()) revert RebalancingExpired();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
 
         // Calculate the settlement price (average of open and close)
         uint256 settlementPrice = (cyclePriceOpen + cyclePriceClose) / 2;
@@ -432,7 +432,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (block.timestamp < lastCycleActionDateTime + poolStrategy.haltThreshold()) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
 
         uint256 lpCollateral = poolLiquidityManager.getLPCollateral(lp);
         bool isDeposit = false;
