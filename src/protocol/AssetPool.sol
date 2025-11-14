@@ -143,7 +143,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @param amount Amount of collateral to deposit
      */
     function addCollateral(address user, uint256 amount) public nonReentrant {
-        _requireActivePool();
+        _requireActiveOrHaltedPool();
         if (amount == 0) revert InvalidAmount();
 
         UserPosition storage position = userPositions[user];
@@ -156,7 +156,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         UserRequest storage request = userRequests[user];
         if (request.requestType == RequestType.LIQUIDATE 
-            && poolCycleManager.cycleState() == IPoolCycleManager.CycleState.POOL_ACTIVE) {
+            && request.requestCycle == poolCycleManager.cycleIndex()) {
             
             // Cancel liquidation request if sufficient collateral is added
             uint256 collateralHealth = poolStrategy.getUserCollateralHealth(address(this), user);
