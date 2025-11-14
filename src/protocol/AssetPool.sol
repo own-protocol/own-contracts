@@ -191,10 +191,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         
         // Calculate required collateral
         uint256 requiredCollateral = poolStrategy.calculateUserRequiredCollateral(address(this), msg.sender);
+        uint256 interestDebt = getInterestDebt(msg.sender, poolCycleManager.cycleIndex() - 1);
         uint256 excessCollateral = 0;
         
-        if (collateral > requiredCollateral) {
-            excessCollateral = collateral - requiredCollateral;
+        if (collateral > requiredCollateral + interestDebt) {
+            excessCollateral = collateral - (requiredCollateral + interestDebt);
         }
         
         if (amount > excessCollateral) revert ExcessiveWithdrawal();
@@ -370,6 +371,11 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             request.requestType != RequestType.DEPOSIT
         ) revert NothingToClaim();
 
+        // Check collateral requirement
+        UserPosition storage position = userPositions[user];
+        uint256 requiredCollateral = poolStrategy.calculateUserRequiredCollateral(address(this), user);
+        if (position.collateralAmount < requiredCollateral) revert InsufficientCollateral();
+
         // Cache request fields
         uint256 amount = request.amount;
         uint256 requestCycle = request.requestCycle;
@@ -383,11 +389,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
 
         // We use reuqestCycle - 1 to let users accrue yield for the deposit cycle as well
         _handleAssetClaim(user, assetAmount, requestCycle - 1);
-
-        // Check collateral requirement
-        UserPosition storage position = userPositions[user];
-        uint256 requiredCollateral = Math.mulDiv(amount + position.depositAmount, poolStrategy.userHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
-        if (position.collateralAmount < requiredCollateral) revert InsufficientCollateral();
 
         _splitCheck(position, user);
         uint256 oldPrincipal = position.assetAmount;
