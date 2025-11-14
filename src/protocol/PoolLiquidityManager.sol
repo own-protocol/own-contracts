@@ -171,7 +171,11 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         
         if (isLP[msg.sender]) {
             LPRequest storage request = lpRequests[msg.sender];
-            if (request.requestType != RequestType.NONE) revert RequestPending();              
+            if (request.requestType != RequestType.NONE) revert RequestPending();  
+             if (!isLPActive[msg.sender]) {
+                isLPActive[msg.sender] = true;
+                lpCount++;
+            }              
         } else {
             isLP[msg.sender] = true;
             isLPActive[msg.sender] = true;
