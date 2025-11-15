@@ -377,8 +377,26 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
-        uint256 lpCommitment = manager.getLPLiquidityCommitment(lp);
-        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
+        IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
+        uint256 lpCommitment = position.liquidityCommitment;
+        
+        IPoolLiquidityManager.LPRequest memory request = manager.getLPRequest(lp);
+        if (request.requestType == IPoolLiquidityManager.RequestType.ADD_LIQUIDITY) {
+            lpCommitment += request.requestAmount;
+        }
+        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
+        uint256 reserveYieldAmount = 0;
+        if (isYieldBearing) {
+            uint256 reserveYieldIndex = manager.reserveYieldIndex();
+            uint256 lpReserveYieldIndex = manager.lpReserveYieldIndex(lp);
+            reserveYieldAmount = Math.mulDiv(
+                position.collateralAmount + position.interestAccrued,
+                reserveYieldIndex - lpReserveYieldIndex,
+                PRECISION
+            );
+            reserveYieldAmount = Math.mulDiv((BPS - protocolFee), reserveYieldAmount, BPS);
+        }
+        healthyCollateral = _safeSubtract(healthyCollateral, reserveYieldAmount);
         return healthyCollateral;
     }
 

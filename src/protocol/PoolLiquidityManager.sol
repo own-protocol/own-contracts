@@ -154,7 +154,7 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
 
         if (!_isPoolActive()) revert InvalidCycleState();
         // Calculate additional required collateral
-        uint256 requiredCollateral = Math.mulDiv(amount, poolStrategy.lpHealthyCollateralRatio(), BPS);
+        uint256 requiredCollateral = Math.mulDiv(amount, poolStrategy.lpHealthyCollateralRatio(), BPS, Math.Rounding.Ceil);
         
         if (poolStrategy.isYieldBearing()) {
             // Handle yield-bearing deposit

@@ -390,6 +390,13 @@ contract DefaultPoolStrategyTest is Test {
         
         // Expected: asset value (100) * 40% = 40
         assertEq(newRequiredCollateral, 40e18, "LP required collateral should update based on new parameters");
+
+        mockLiquidityManager.setLPRequest(mockLP, MockLiquidityManagerForStrategy.RequestType.ADD_LIQUIDITY, 500e18, 1);
+
+        uint256 updatedRequiredCollateral = strategy.calculateLPRequiredCollateral(address(mockLiquidityManager), mockLP);
+
+        // Expected: asset value (100 + 500) * 40% = 240
+        assertEq(updatedRequiredCollateral, 240e18, "LP required collateral should account for pending add liquidity requests");
     }
     
     function testGetUserCollateralHealth() public {
@@ -522,11 +529,25 @@ contract MockLiquidityManagerForStrategy {
     mapping(address => uint256) public lpAssetHoldingValues;
     mapping(address => uint256) public lpLiquidityCommitments;
     mapping(address => uint256) public lpCollateralValues;
+    mapping(address => LPRequest) public lpRequests;
     
     struct LPPosition {
         uint256 liquidityCommitment;
         uint256 collateralAmount;
         uint256 interestAccrued;
+    }
+
+    enum RequestType {
+        NONE,           // No active request
+        ADD_LIQUIDITY,  // Request to add liquidity
+        REDUCE_LIQUIDITY, // Request to reduce liquidity
+        LIQUIDATE       // Request for liquidation
+    }
+
+    struct LPRequest {
+        RequestType requestType;
+        uint256 requestAmount;
+        uint256 requestCycle;
     }
     
     function setLPAssetHoldingValue(address lp, uint256 value) external {
@@ -539,6 +560,14 @@ contract MockLiquidityManagerForStrategy {
 
     function setLPLiquidityCommitment(address lp, uint256 commitment) external {
         lpLiquidityCommitments[lp] = commitment;
+    }
+
+    function setLPRequest(address lp, RequestType requestType, uint256 requestAmount, uint256 requestCycle) external {
+        lpRequests[lp] = LPRequest({
+            requestType: requestType,
+            requestAmount: requestAmount,
+            requestCycle: requestCycle
+        });
     }
     
     // Interface functions required by DefaultPoolStrategy
@@ -557,5 +586,9 @@ contract MockLiquidityManagerForStrategy {
             collateralAmount: lpCollateralValues[lp],
             interestAccrued: 0
         });
+    }
+
+    function getLPRequest(address lp) external view returns (LPRequest memory) {
+        return lpRequests[lp];
     }
 }
