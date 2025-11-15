@@ -455,8 +455,22 @@ contract MockAssetPoolForStrategy {
         uint256 depositAmount;
         uint256 collateralAmount;
     }
+
+    struct UserRequest {
+        IAssetPool.RequestType requestType;
+        uint256 amount;
+        uint256 cycleAtRequest;
+        uint256 requestCycle;
+    }
+
+    enum RequestType {
+        NONE,
+        DEPOSIT,
+        REDEMPTION
+    }
     
     mapping(address => UserPosition) public userPositions;
+    mapping(address => UserRequest) public userRequests;
     address public poolCycleManager;
     uint256 public reserveToAssetDecimalFactor;
     uint256 public interestDebtValue;
