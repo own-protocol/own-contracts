@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IXToken.sol";
 
@@ -30,6 +31,15 @@ contract xToken is IXToken, ERC20, ERC20Permit {
 
     /// @notice Split multiplier to adjust balances for token splits
     uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
+
+    /// @notice Split version counter - increments on every split to invalidate old permits
+    uint256 public splitVersion;
+
+    /// @notice Stores the struct hash for permit with split version
+    bytes32 private constant _PERMIT_TYPEHASH_WITH_SPLIT = keccak256(
+        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline,uint256 splitVersion)"
+    );
+        
 
     /**
      * @notice Ensures the caller is a pool contract
@@ -109,7 +119,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
 
     /**
      * @notice Mints new tokens to an account
-     * @dev Only callable by the manager contract
+     * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens to mint (visible amount with split multiplier applied)
      * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
@@ -146,7 +156,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Applies a split to adjust token balances
      * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
      * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
-     * @dev Only callable by the pool contract
+     * @dev Only callable by the manager contract
      * @dev Updates the split multiplier to affect all balances without changing storage values
      * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
      * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
@@ -157,7 +167,12 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         // Update the split multiplier
         uint256 adjustmentRatio = Math.mulDiv(splitRatio, PRECISION, splitDenominator);
         _splitMultiplier = Math.mulDiv(_splitMultiplier, adjustmentRatio, PRECISION);
-        
+
+        // Increment split version to invalidate all outstanding permits
+        unchecked {
+            ++splitVersion;
+        }
+            
         emit StockSplitApplied(splitRatio, splitDenominator, _splitMultiplier);
     }
 
@@ -261,15 +276,35 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         bytes32 r,
         bytes32 s
     ) public override {
-        // Handle infinite approval case
+        require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
+
+        // Build the struct hash with the value that was actually signed
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _PERMIT_TYPEHASH_WITH_SPLIT,
+                owner,
+                spender,
+                value,
+                _useNonce(owner),
+                deadline,
+                splitVersion
+            )
+        );
+
+        bytes32 hash = _hashTypedDataV4(structHash);
+
+        address signer = ECDSA.recover(hash, v, r, s);
+        require(signer == owner, "ERC20Permit: invalid signature");
+
+        // Convert to raw storage units for allowance
+        uint256 rawValue;
         if (value == type(uint256).max) {
-            super.permit(owner, spender, value, deadline, v, r, s);
-            return;
+            // Preserve infinite-approval semantics
+            rawValue = type(uint256).max;
+        } else {
+            rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
         }
-        // Convert the visible amount to raw storage amount
-        uint256 rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
-        
-        // Call the parent implementation with the raw value
-        super.permit(owner, spender, rawValue, deadline, v, r, s);
+        _approve(owner, spender, rawValue);
     }
+
 }
