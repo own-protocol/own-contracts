@@ -318,7 +318,7 @@ contract ExitPoolTest is ProtocolTestUtils {
         
         // Attempt to exit pool when it's active - should fail
         vm.startPrank(user1);
-        vm.expectRevert("Pool not halted");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         assetPool.exitPool(userAssetBalance);
         vm.stopPrank();
     }
