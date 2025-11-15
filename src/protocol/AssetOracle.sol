@@ -44,8 +44,17 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
     /// @notice Timestamp of the last price update
     uint256 public lastUpdated;
 
+    /// @notice Timestamp of the last price request
+    uint256 public lastRequestedAt;
+
+    /// @notice Default Chainlink Functions subscription ID
+    uint256 public defaultSubscriptionId;
+
+    /// @notice Mapping of protocol keeper addresses
+    mapping(address => bool) public protocolKeepers;
+
     /// @notice Maximum time difference (in seconds) to consider market open
-    uint256 public constant MARKET_OPEN_THRESHOLD = 300; // 300 seconds
+    uint256 public MARKET_OPEN_THRESHOLD; // 300 seconds
 
     /// @notice Cooldown period (in seconds) for price requests
     /// @dev Prevents spamming of requests
@@ -82,6 +91,7 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         assetSymbol = _assetSymbol;
         sourceHash = _sourceHash;
         REQUEST_COOLDOWN = 0;
+        MARKET_OPEN_THRESHOLD = 300;
     }
 
     /**
@@ -101,11 +111,16 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
             revert InvalidSource();
         }
 
+        if (subscriptionId == defaultSubscriptionId) {
+            require(protocolKeepers[msg.sender], "Not authorized");
+        }
+
         // Check cooldown period
-        if (block.timestamp < lastUpdated + REQUEST_COOLDOWN) {
+        if (block.timestamp < lastRequestedAt + REQUEST_COOLDOWN) {
             revert RequestCooldownNotElapsed();
         }
         
+        lastRequestedAt = block.timestamp;
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(source);
         s_lastRequestId = _sendRequest(
@@ -285,5 +300,38 @@ contract AssetOracle is IAssetOracle, FunctionsClient, ConfirmedOwner {
         uint256 oldCooldown = REQUEST_COOLDOWN;
         REQUEST_COOLDOWN = newCooldown;
         emit RequestCooldownUpdated(oldCooldown, newCooldown);
+    }
+
+    /**
+     * @notice Updates the status of a protocol keeper
+     * @param keeper Address of the protocol keeper
+     * @param isActive Boolean indicating if the keeper is active
+     * @dev Can only be called by the contract owner
+     */
+    function updateProtocolKeeper(address keeper, bool isActive) external onlyOwner {
+        protocolKeepers[keeper] = isActive;
+        emit ProtocolKeeperUpdated(keeper, isActive);
+    }
+
+    /**
+    * @notice Updates the market open threshold
+    * @param newThreshold The new time threshold in seconds
+    * @dev Can only be called by the contract owner
+    */
+    function updateMarketOpenThreshold(uint256 newThreshold) external onlyOwner {
+        uint256 oldThreshold = MARKET_OPEN_THRESHOLD;
+        MARKET_OPEN_THRESHOLD = newThreshold;
+        emit MarketOpenThresholdUpdated(oldThreshold, newThreshold);
+    }
+
+    /**
+     * @notice Updates the default Chainlink Functions subscription ID
+     * @param newSubscriptionId The new default subscription ID
+     * @dev Can only be called by the contract owner
+     */
+    function updateDefaultSubscriptionId(uint256 newSubscriptionId) external onlyOwner {
+        uint256 oldSubscriptionId = defaultSubscriptionId;
+        defaultSubscriptionId = newSubscriptionId;
+        emit DefaultSubscriptionIdUpdated(oldSubscriptionId, newSubscriptionId);
     }
 }
