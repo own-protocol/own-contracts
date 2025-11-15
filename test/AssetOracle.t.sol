@@ -149,7 +149,7 @@ contract AssetOracleTest is Test {
     }
 
     /**
-     * @notice Test that only authorized keepers can request prices
+     * @notice Test that non-authorized keepers cannot request prices
      */
     function testRequestAssetPriceUnauthorizedKeeper() public {
         // Valid source code that matches the source hash
@@ -176,6 +176,46 @@ contract AssetOracleTest is Test {
             GAS_LIMIT,
             DON_ID
         );
+    }
+
+    /**
+     * @notice Test that a keeper can request price using the default subscription ID
+     */
+    function testRequestAssetPriceAuthorizedKeeper() public {
+        // Valid source code that matches the source hash
+        string memory source = "console.log(JSON.stringify({price: 42069000000000000000000}));";
+
+        // Try to request price from an authorized keeper, should succeed
+        vm.prank(keeper);
+        assetOracle.requestAssetPrice(
+            source,
+            SUBSCRIPTION_ID,
+            GAS_LIMIT,
+            DON_ID
+        );
+
+        // Verify request was made
+        assertTrue(assetOracle.s_lastRequestId() != bytes32(0), "Request ID not set");
+    }
+
+    /**
+     * @notice Test that a non-keeper can request price using non default subscription ID
+     */
+    function testUnauthorizedKeeperNonDefaultSubscription() public {
+        // Valid source code that matches the source hash
+        string memory source = "console.log(JSON.stringify({price: 42069000000000000000000}));";
+
+        // Try to request price from an authorized keeper, should succeed
+        vm.prank(keeper);
+        assetOracle.requestAssetPrice(
+            source,
+            200, // Non default subscription ID
+            GAS_LIMIT,
+            DON_ID
+        );
+
+        // Verify request was made
+        assertTrue(assetOracle.s_lastRequestId() != bytes32(0), "Request ID not set");
     }
         
     // ==================== FULFILLMENT TESTS ====================
