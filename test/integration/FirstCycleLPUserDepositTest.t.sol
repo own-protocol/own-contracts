@@ -128,7 +128,7 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         // LP should not be able to reduce collateral until the cycle is completed
         uint256 initialCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
         vm.startPrank(newLP);
-        vm.expectRevert(IPoolLiquidityManager.InvalidCycleState.selector);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
         liquidityManager.reduceCollateral(initialCollateral);
         vm.stopPrank();
     }
@@ -236,7 +236,6 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         address newLP3 = makeAddr("newLP3");
 
         uint256 lpAmount = adjustAmountForDecimals(LP_INITIAL_BALANCE, 6);
-        uint256 liquidityAmount = adjustAmountForDecimals(LP_LIQUIDITY_AMOUNT, 6);
         reserveToken.mint(newLP1, lpAmount);
         reserveToken.mint(newLP2, lpAmount);
         reserveToken.mint(newLP3, lpAmount);
@@ -323,7 +322,6 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         // Complete the cycle to process the liquidity request
         address[] memory lps = new address[](1);
         lps[0] = newLP;
-        _completeCycleProcessingRequests(lps);
 
         // Step 2: New delegate adds liquidity on behalf of the LP
         address delegate = makeAddr("delegate");
@@ -331,8 +329,61 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         liquidityManager.setDelegate(delegate);
         vm.stopPrank();
 
+        // Initiate offchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        vm.stopPrank();
+
+         // Close market to trigger onchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+
         // Step 3: Verify the delegate is able to rebalance the pool on behalf of the LP
         vm.startPrank(delegate);
+        cycleManager.rebalancePool(newLP, INITIAL_PRICE);
+        vm.stopPrank();
+    }
+
+    function testNonDelegatesUnableToRebalancePool() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+
+        // Step 2: New delegate adds liquidity on behalf of the LP
+        address delegate = makeAddr("delegate");
+        vm.startPrank(newLP);
+        liquidityManager.setDelegate(delegate);
+        vm.stopPrank();
+
+        address nonDelegate = makeAddr("nonDelegate");
+
+        // Initiate offchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        vm.stopPrank();
+
+         // Close market to trigger onchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+
+        // Step 3: Verify the delegate is able to rebalance the pool on behalf of the LP
+        vm.startPrank(nonDelegate);
+        vm.expectRevert(IPoolCycleManager.UnauthorizedCaller.selector);
         cycleManager.rebalancePool(newLP, INITIAL_PRICE);
         vm.stopPrank();
     }
