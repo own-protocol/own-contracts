@@ -205,8 +205,8 @@ contract AssetOracleTest is Test {
         // Valid source code that matches the source hash
         string memory source = "console.log(JSON.stringify({price: 42069000000000000000000}));";
 
-        // Try to request price from an authorized keeper, should succeed
-        vm.prank(keeper);
+        // Try to request price from an unauthorized keeper, should succeed
+        vm.prank(nonKeeper);
         assetOracle.requestAssetPrice(
             source,
             200, // Non default subscription ID
