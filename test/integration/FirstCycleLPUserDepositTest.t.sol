@@ -104,10 +104,288 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         assertEq(assetPool.cycleTotalDeposits(), userDepositAmount, "Cycle deposits should track user request");
         
         // Step 4: Complete the cycle to process both requests
-        _completeCycleProcessingBothRequests();
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+        _completeCycleProcessingRequests(lps);
         
         // Step 5: Verify both LP and User requests were processed successfully
         _verifyPostCycleState(lpLiquidityAmount, userDepositAmount);
+    }
+
+    /**
+     * @notice Test that reducing collateral before cycle completion reverts
+     * @dev Verifies that when an LP adds liquidity (which also adds collateral to the pool),
+     *      attempting to reduce collateral before the cycle completes reverts with InvalidCycleState error.
+     *      This ensures collateral cannot be modified during an active cycle.
+     * TODO: update revert message
+     */
+    function testLPAddLiquidityAddsCollateral() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // LP should not be able to reduce collateral until the cycle is completed
+        uint256 initialCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
+        liquidityManager.reduceCollateral(initialCollateral);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that reducing collateral after completing the first cycle reverts
+     * @dev Verifies that after an LP adds liquidity in the first cycle and the cycle completes,
+     *      attempting to reduce collateral reverts with InsufficientCollateral error.
+     *      This ensures that LPs cannot reduce their collateral below the minimum health threshold.
+     */
+    function testLPAddLiquidityInFirstCycleAndCycleRebalances() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+        _completeCycleProcessingRequests(lps);
+
+        // LP should not be able to reduce collateral after the cycle is completed because the collateral health is 1
+        uint256 initialCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
+        liquidityManager.reduceCollateral(initialCollateral);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that reducing collateral after adding liquidity in next cycle reverts
+     * @dev Verifies that when an LP adds liquidity in a subsequent cycle after the initial cycle,
+     *      attempting to reduce collateral reverts with InsufficientCollateral error.
+     *      This ensures that LPs cannot reduce their collateral below the minimum health threshold.
+     */
+    function testLPAddLiquidityInNextCycleAndCycleRebalances() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+        _completeCycleProcessingRequests(lps);
+
+        uint256 collateralC0 = liquidityManager.getLPPosition(newLP).collateralAmount;
+
+        // Step 2: LP adds liquidity in the next cycle
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Step 3: Should revert because the collateral health would drop to 1
+        vm.startPrank(newLP);
+        vm.expectRevert(IPoolLiquidityManager.InsufficientCollateral.selector);
+        liquidityManager.reduceCollateral(collateralC0);
+    }
+
+    /**
+     * @notice Test that an LP can reduce extra collateral after adding it to the pool
+     * @dev Verifies that when an LP adds additional collateral beyond the required amount,
+     *      they can subsequently reduce that extra collateral without violating health requirements.
+     *      This ensures LPs have flexibility to manage their collateral while maintaining pool safety.
+     */
+    function testLPReduceExtraCollateralAfterAddingLiquidity() public {
+        uint256 EXTRA_COLLATERAL = 100_000;
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+        _completeCycleProcessingRequests(lps);
+
+        uint256 lpCollateralBefore = liquidityManager.getLPPosition(newLP).collateralAmount;
+
+        // LP should be able to reduce the extra collateral because that would not reduce the collateral health to 1
+        vm.startPrank(newLP);
+        liquidityManager.addCollateral(newLP, EXTRA_COLLATERAL);
+        uint256 lpColAfterAddCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        assertEq(lpColAfterAddCollateral, lpCollateralBefore + EXTRA_COLLATERAL, "LP collateral should be updated");
+        liquidityManager.reduceCollateral(EXTRA_COLLATERAL);
+        uint256 lpColAfterReduceCollateral = liquidityManager.getLPPosition(newLP).collateralAmount;
+        assertEq(lpColAfterReduceCollateral, lpCollateralBefore, "LP collateral should be reduced");
+        vm.stopPrank();
+
+        // Verify the extra collateral is reduced
+        assertEq(lpColAfterAddCollateral - lpColAfterReduceCollateral, EXTRA_COLLATERAL, "Extra collateral should be reduced");
+        // Verify the total collateral is updated
+        assertEq(liquidityManager.totalLPPrincipal(), lpCollateralBefore, "Total collateral should be updated");
+    }
+
+    /**
+     * @notice Test that rebalancing an inactive LP reverts with NotLP error
+     * @dev Verifies that when an LP exits the pool and becomes inactive,
+     *      attempting to rebalance that LP should revert with NotLP error
+     */
+    function testRebalanceInactiveLPShouldRevert() public {
+        // Step 1: Three LPs join the pool
+        address newLP1 = makeAddr("newLP1");
+        address newLP2 = makeAddr("newLP2");
+        address newLP3 = makeAddr("newLP3");
+
+        uint256 lpAmount = adjustAmountForDecimals(LP_INITIAL_BALANCE, 6);
+        reserveToken.mint(newLP1, lpAmount);
+        reserveToken.mint(newLP2, lpAmount);
+        reserveToken.mint(newLP3, lpAmount);
+
+        vm.startPrank(newLP1);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
+        reserveToken.approve(address(cycleManager), type(uint256).max);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        vm.startPrank(newLP2);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
+        reserveToken.approve(address(cycleManager), type(uint256).max);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        vm.startPrank(newLP3);
+        reserveToken.approve(address(liquidityManager), type(uint256).max);
+        reserveToken.approve(address(cycleManager), type(uint256).max);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](3);
+        lps[0] = newLP1;
+        lps[1] = newLP2;
+        lps[2] = newLP3;
+        _completeCycleProcessingRequests(lps);
+
+        // Step 2: One LP leaves the pool
+        vm.startPrank(newLP1);
+        IPoolLiquidityManager.LPPosition memory lp1Position = liquidityManager.getLPPosition(newLP1);
+        liquidityManager.reduceLiquidity(lp1Position.liquidityCommitment);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        _completeCycleProcessingRequests(lps);
+
+        // check id the lp is active
+        assertTrue(liquidityManager.isLPActive(newLP2), "LP should be active");
+        assertTrue(liquidityManager.isLPActive(newLP3), "LP should be active");
+        assertFalse(liquidityManager.isLPActive(newLP1), "LP should not be active");
+
+        // process cycle
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        vm.stopPrank();
+
+        // Advance time to onchain rebalancing phase
+        vm.warp(block.timestamp + REBALANCE_LENGTH);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+
+        // Process LP rebalance
+        vm.warp(block.timestamp + REBALANCE_LENGTH + 100);
+        vm.startPrank(owner);
+        vm.expectRevert(IPoolCycleManager.NotLP.selector);
+        cycleManager.rebalanceLP(newLP1); // this should revert because the LP is not active
+        cycleManager.rebalanceLP(newLP2);
+        vm.stopPrank();
+
+
+       // LP3 is not yet rebalanced, so pool should not be active
+        assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_REBALANCING_ONCHAIN),
+                "Pool should be rebalancing onchain after LP rebalance");
+
+    }
+
+    /**
+     * @notice Test that delegates can rebalance the pool on behalf of LPs
+     * @dev Verifies that when an LP sets a delegate, the delegate has permission
+     *      to call rebalancePool() on behalf of the LP
+     */
+    function testDelegatesAreAbleToRebalancePool() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+
+        // Step 2: New delegate adds liquidity on behalf of the LP
+        address delegate = makeAddr("delegate");
+        vm.startPrank(newLP);
+        liquidityManager.setDelegate(delegate);
+        vm.stopPrank();
+
+        // Initiate offchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        vm.stopPrank();
+
+         // Close market to trigger onchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+
+        // Step 3: Verify the delegate is able to rebalance the pool on behalf of the LP
+        vm.startPrank(delegate);
+        cycleManager.rebalancePool(newLP, INITIAL_PRICE);
+        vm.stopPrank();
+    }
+
+    function testNonDelegatesUnableToRebalancePool() public {
+        // Step 1: New LP adds liquidity (first time)
+        vm.startPrank(newLP);
+        liquidityManager.addLiquidity(LP_LIQUIDITY_AMOUNT);
+        vm.stopPrank();
+
+        // Complete the cycle to process the liquidity request
+        address[] memory lps = new address[](1);
+        lps[0] = newLP;
+
+        // Step 2: New delegate adds liquidity on behalf of the LP
+        address delegate = makeAddr("delegate");
+        vm.startPrank(newLP);
+        liquidityManager.setDelegate(delegate);
+        vm.stopPrank();
+
+        address nonDelegate = makeAddr("nonDelegate");
+
+        // Initiate offchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(true);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOffchainRebalance();
+        vm.stopPrank();
+
+         // Close market to trigger onchain rebalance
+        vm.startPrank(owner);
+        assetOracle.setMarketOpen(false);
+        updateOraclePrice(INITIAL_PRICE);
+        cycleManager.initiateOnchainRebalance();
+        vm.stopPrank();
+
+        // Step 3: Verify the delegate is able to rebalance the pool on behalf of the LP
+        vm.startPrank(nonDelegate);
+        vm.expectRevert(IPoolCycleManager.UnauthorizedCaller.selector);
+        cycleManager.rebalancePool(newLP, INITIAL_PRICE);
+        vm.stopPrank();
     }
 
     // ==================== HELPER FUNCTIONS ====================
@@ -115,7 +393,7 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
     /**
      * @notice Complete cycle by processing both LP and user requests
      */
-    function _completeCycleProcessingBothRequests() internal {
+    function _completeCycleProcessingRequests(address[] memory lps) internal {
         // Initiate offchain rebalance
         vm.startPrank(owner);
         assetOracle.setMarketOpen(true);
@@ -131,9 +409,11 @@ contract FirstCycleLPUserDepositTest is ProtocolTestUtils {
         vm.stopPrank();
          
         // Process LP rebalance
-        vm.startPrank(newLP);
-        cycleManager.rebalancePool(newLP, INITIAL_PRICE);
-        vm.stopPrank();
+        for (uint256 i = 0; i < lps.length; i++) {
+            vm.startPrank(lps[i]);
+            cycleManager.rebalancePool(lps[i], INITIAL_PRICE);
+            vm.stopPrank();
+        }
         
         // Verify pool is back to active state
         assertEq(uint(cycleManager.cycleState()), uint(IPoolCycleManager.CycleState.POOL_ACTIVE), 
