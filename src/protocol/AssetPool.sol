@@ -535,6 +535,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     function getInterestDebt(address user, uint256 cycle) public view returns (uint256 interestDebt) {
         UserPosition storage position = userPositions[user];
         uint256 assetAmount = position.assetAmount;
+        assetAmount = poolStrategy.calculatePostSplitAmount(address(this), user, assetAmount);
         uint256 userIndex = userInterestIndex[user];
         if (assetAmount == 0) return 0;
 
