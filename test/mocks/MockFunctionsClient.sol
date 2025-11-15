@@ -147,6 +147,10 @@ contract MockAssetOracle is MockFunctionsClient, MockConfirmedOwner, IAssetOracl
         if(block.timestamp < lastUpdated + REQUEST_COOLDOWN) {
             revert RequestCooldownNotElapsed();
         }
+
+        if (subscriptionId == defaultSubscriptionId) {
+            require(protocolKeepers[msg.sender], "Not authorized");
+        }
         
         // Create a mock request
         bytes memory emptyBytes = new bytes(0);
