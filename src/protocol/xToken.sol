@@ -100,6 +100,10 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev This ensures allowances are adjusted proportionally during token splits
      */
     function allowance(address owner, address spender) public view override(ERC20, IERC20) returns (uint256) {
+        // Handle infinite approval case
+        if (super.allowance(owner, spender) == type(uint256).max) {
+            return type(uint256).max;
+        }
         return Math.mulDiv(super.allowance(owner, spender), _splitMultiplier, PRECISION);
     }
 
@@ -206,6 +210,11 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         uint256 balance = super.balanceOf(sender);
         if (balance < rawAmount) revert InsufficientBalance();
         
+        if (currentAllowance == type(uint256).max) {
+            // Infinite allowance, no need to update
+            _transfer(sender, recipient, rawAmount);
+            return true;
+        }
         // Update allowance with raw amount
         _approve(sender, msg.sender, currentAllowance - rawAmount);
 
@@ -223,6 +232,10 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), an allowance of 50 tokens is stored
      */
     function approve(address spender, uint256 amount) public override(ERC20, IERC20) returns (bool) {
+        // Handle infinite approval case
+        if (amount == type(uint256).max) {
+            return super.approve(spender, amount);
+        }
         // Convert the visible amount to raw storage amount
         uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
         return super.approve(spender, rawAmount);
@@ -248,6 +261,11 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         bytes32 r,
         bytes32 s
     ) public override {
+        // Handle infinite approval case
+        if (value == type(uint256).max) {
+            super.permit(owner, spender, value, deadline, v, r, s);
+            return;
+        }
         // Convert the visible amount to raw storage amount
         uint256 rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
         
