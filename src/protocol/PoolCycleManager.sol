@@ -170,18 +170,6 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
     }
 
     // --------------------------------------------------------------------------------
-    //                                    MODIFIERS
-    // --------------------------------------------------------------------------------
-
-    /**
-     * @dev Ensures the caller is an active LP.
-     */
-    modifier onlyActiveLP() {
-        if (!poolLiquidityManager.isLPActive(msg.sender)) revert NotLP();
-        _;
-    }
-
-    // --------------------------------------------------------------------------------
     //                               REBALANCING LOGIC
     // --------------------------------------------------------------------------------
 
@@ -234,7 +222,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
      * @param lp Address of the LP performing the final on-chain step
      * @param rebalancePrice Price at which the rebalance was executed
      */
-    function rebalancePool(address lp, uint256 rebalancePrice) public onlyActiveLP {
+    function rebalancePool(address lp, uint256 rebalancePrice) public {
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
         address delegate = poolLiquidityManager.lpDelegates(lp);
         if (lp != msg.sender && (delegate == address(0) || msg.sender != delegate)) revert UnauthorizedCaller();
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
@@ -290,11 +279,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         }
         
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(rebalancePrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
@@ -348,7 +334,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (block.timestamp < lastCycleActionDateTime + poolStrategy.rebalanceLength()) revert OnChainRebalancingInProgress();
         if (block.timestamp > lastCycleActionDateTime + poolStrategy.haltThreshold()) revert RebalancingExpired();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
 
         // Calculate the settlement price (average of open and close)
         uint256 settlementPrice = (cyclePriceOpen + cyclePriceClose) / 2;
@@ -385,19 +371,16 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-            // Deduct interest from the pool and add to LP's collateral
+            // Deduct interest from the pool and transfer it to the protocol as penalty
             if (lpCycleInterest > 0) {
-                assetPool.deductInterest(lp, lpCycleInterest, false);
+                assetPool.deductInterest(lp, lpCycleInterest, true);
             }
         }
         
         // Resolve any pending requests for the LP
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
@@ -432,7 +415,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         if (cycleState != CycleState.POOL_REBALANCING_ONCHAIN) revert InvalidCycleState();
         if (block.timestamp < lastCycleActionDateTime + poolStrategy.haltThreshold()) revert InvalidCycleState();
         if (lastRebalancedCycle[lp] == cycleIndex) revert AlreadyRebalanced();
-        if (!poolLiquidityManager.isLP(lp)) revert NotLP();
+        if (!poolLiquidityManager.isLPActive(lp)) revert NotLP();
 
         uint256 lpCollateral = poolLiquidityManager.getLPCollateral(lp);
         bool isDeposit = false;
@@ -453,7 +436,7 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
             // Calculate interest for the LP's liquidity commitment
             uint256 interestAmount = Math.mulDiv(cycleInterestAmount, settlementPrice, PRECISION);
             uint256 lpCycleInterest = Math.mulDiv(interestAmount, lpLiquidityCommitment, totalLiquidity);
-            // Deduct interest from the pool and add to LP's collateral
+            // Deduct interest from the pool and transfer it to the protocol as penalty
             if (lpCycleInterest > 0) {
                 assetPool.deductInterest(lp, lpCycleInterest, true);
             }
@@ -461,11 +444,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         
         // Resolve any pending requests for the LP
         poolLiquidityManager.resolveRequest(lp);
-        if (poolLiquidityManager.isLP(lp)) {
-            lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
-        } else {
-            lpLiquidityCommitment = 0;
-        }
+        lpLiquidityCommitment = poolLiquidityManager.getLPLiquidityCommitment(lp);
+
         // calculate the weighted sum of the rebalance price
         cycleWeightedSum += Math.mulDiv(settlementPrice, lpLiquidityCommitment * reserveToAssetDecimalFactor, PRECISION);
         lastRebalancedCycle[lp] = cycleIndex;
