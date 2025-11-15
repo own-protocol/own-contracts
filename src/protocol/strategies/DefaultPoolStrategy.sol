@@ -384,7 +384,7 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         if (request.requestType == IPoolLiquidityManager.RequestType.ADD_LIQUIDITY) {
             lpCommitment += request.requestAmount;
         }
-        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
+        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
         uint256 reserveYieldAmount = 0;
         if (isYieldBearing) {
             uint256 reserveYieldIndex = manager.reserveYieldIndex();
