@@ -200,6 +200,8 @@ interface IAssetPool {
     error ExcessiveLiquidationAmount(uint256 amount, uint256 maxLiquidationAmount);
     /// @notice Thrown when a better liquidation request exists
     error BetterLiquidationRequestExists();
+    /// @notice Thrown when the pool is in an invalid state for the operation
+    error InvalidPoolState();
 
     // --------------------------------------------------------------------------------
     //                                USER ACTIONS

@@ -327,9 +327,10 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         // Check if there's already a liquidation request
         UserRequest storage request = userRequests[user];
         
+        uint256 currentCycle = poolCycleManager.cycleIndex();
         // If the current request is better than the previous one, cancel the previous one
         if (request.requestType == RequestType.LIQUIDATE) {
-            if(request.requestCycle != poolCycleManager.cycleIndex()) revert InvalidLiquidationRequest();
+            if(request.requestCycle != currentCycle) revert InvalidLiquidationRequest();
             if(request.amount >= amount) revert BetterLiquidationRequestExists();
             cycleTotalRedemptions -= request.amount;
             // Refund the previous liquidator's tokens
@@ -341,7 +342,6 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
             revert RequestPending();
         }
         
-        uint256 currentCycle = poolCycleManager.cycleIndex();
         // Transfer xTokens from liquidator to pool
         assetToken.safeTransferFrom(msg.sender, address(this), amount);
         
@@ -486,10 +486,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
         UserPosition storage position = userPositions[msg.sender];
         _splitCheck(position, msg.sender);
 
-        if (position.assetAmount < amount) revert InsufficientBalance();
-        
-        uint256 userBalance = assetToken.balanceOf(msg.sender);
-        if (userBalance < amount) revert InsufficientBalance();
+        if (position.assetAmount < amount || assetToken.balanceOf(msg.sender) < amount) revert InsufficientBalance();
 
         assetToken.burn(msg.sender, amount);
 
@@ -662,7 +659,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @dev Use at the beginning of functions that should only execute in active pool state
      */
     function _requireActivePool() internal view {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert("Pool not active");
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_ACTIVE) revert InvalidPoolState();
     }
 
     /**
@@ -670,7 +667,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
      * @dev Use at the beginning of functions that should only execute in halted pool state
      */
     function _requireHaltedPool() internal view {
-        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_HALTED) revert("Pool not halted");
+        if (poolCycleManager.cycleState() != IPoolCycleManager.CycleState.POOL_HALTED) revert InvalidPoolState();
     }
 
     /**
@@ -680,7 +677,7 @@ contract AssetPool is IAssetPool, PoolStorage, ReentrancyGuard {
     function _requireActiveOrHaltedPool() internal view {
         IPoolCycleManager.CycleState state = poolCycleManager.cycleState();
         if (state != IPoolCycleManager.CycleState.POOL_ACTIVE && state != IPoolCycleManager.CycleState.POOL_HALTED) {
-            revert("Pool not active or halted");
+            revert InvalidPoolState();
         }
     }
 
