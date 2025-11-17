@@ -471,6 +471,8 @@ contract PoolCycleManager is IPoolCycleManager, PoolStorage, Ownable, Multicall 
         uint256 splitDenominator
     ) external onlyOwner {
         if (cycleState != CycleState.POOL_REBALANCING_OFFCHAIN) revert InvalidCycleState();
+        // Token split is disabled in v1
+        isTokenSplit = false;
         
         if (isTokenSplit) {
             if (!assetOracle.verifySplit(splitRatio, splitDenominator)) revert InvalidSplit();
