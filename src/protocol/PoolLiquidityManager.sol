@@ -695,7 +695,13 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         if (liquidationAmount == 0) revert InvalidAmount();
 
         if (!_isPoolActive()) revert InvalidCycleState();
-    
+
+        LPRequest storage request = lpRequests[lp];
+        if (request.requestType == RequestType.ADD_LIQUIDITY || 
+            request.requestType == RequestType.REDUCE_LIQUIDITY) {
+            revert RequestPending();
+        }
+
         // Check if LP is liquidatable
         uint8 liquidityHealth = poolStrategy.getLPLiquidityHealth(address(this), lp);
         if (liquidityHealth != 1) revert NotEligibleForLiquidation();
@@ -704,7 +710,6 @@ contract PoolLiquidityManager is IPoolLiquidityManager, PoolStorage, ReentrancyG
         LPPosition storage position = lpPositions[lp];
         if (liquidationAmount > position.liquidityCommitment) revert InvalidAmount();
 
-        LPRequest storage request = lpRequests[lp];
         // If there is an existing liquidation request, check if the current request is better 
         if (request.requestType == RequestType.LIQUIDATE) {
             if (request.requestAmount >= liquidationAmount){
