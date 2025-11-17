@@ -354,19 +354,35 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         IPoolCycleManager cycleManager = pool.poolCycleManager();
 
-        uint256 reserveToAssetDecimalFactor = pool.reserveToAssetDecimalFactor();
         // Get the previous cycle's rebalance price
         uint256 prevCycle = cycleManager.cycleIndex() - 1;
         uint256 rebalancePrice = cycleManager.cycleRebalancePrice(prevCycle);
-        (uint256 assetAmount, uint256 depositAmount, ) = pool.userPositions(user);
+        (uint256 assetAmount, , ) = pool.userPositions(user);
+        (IAssetPool.RequestType requestType, uint256 depositAmount, , ) = pool.userRequests(user);
         if(assetAmount == 0) {
             return Math.mulDiv(depositAmount, userHealthyCollateralRatio, BPS);
         }
         assetAmount = calculatePostSplitAmount(assetPool, user, assetAmount);
-        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * reserveToAssetDecimalFactor);
-        uint256 interestDebt = pool.getInterestDebt(user, prevCycle);
+        uint256 assetValue = Math.mulDiv(assetAmount, rebalancePrice, PRECISION * pool.reserveToAssetDecimalFactor());
+
+        if(requestType == IAssetPool.RequestType.DEPOSIT) {
+            assetValue += depositAmount;
+        }
+
         uint256 requiredCollateral = Math.mulDiv(assetValue, userHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
-        return requiredCollateral + interestDebt;
+        uint256 reserveYieldAmount;
+        if (isYieldBearing) {
+            uint256 reserveYieldIndex = pool.reserveYieldIndex(cycleManager.cycleIndex());
+            uint256 userReserveYieldIndex = pool.userReserveYieldIndex(user);
+            reserveYieldAmount = Math.mulDiv(
+                assetAmount,
+                reserveYieldIndex - userReserveYieldIndex,
+                PRECISION
+            );
+            reserveYieldAmount = Math.mulDiv((BPS - protocolFee), reserveYieldAmount, BPS);
+        }
+        requiredCollateral = _safeSubtract(requiredCollateral, reserveYieldAmount);
+        return requiredCollateral;
     }
     
     /**
@@ -377,8 +393,26 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
     function calculateLPRequiredCollateral(address liquidityManager, address lp) external view returns (uint256) {
         
         IPoolLiquidityManager manager = IPoolLiquidityManager(liquidityManager);
-        uint256 lpCommitment = manager.getLPLiquidityCommitment(lp);
-        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);
+        IPoolLiquidityManager.LPPosition memory position = manager.getLPPosition(lp);
+        uint256 lpCommitment = position.liquidityCommitment;
+        
+        IPoolLiquidityManager.LPRequest memory request = manager.getLPRequest(lp);
+        if (request.requestType == IPoolLiquidityManager.RequestType.ADD_LIQUIDITY) {
+            lpCommitment += request.requestAmount;
+        }
+        uint256 healthyCollateral = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS, Math.Rounding.Ceil);
+        uint256 reserveYieldAmount = 0;
+        if (isYieldBearing) {
+            uint256 reserveYieldIndex = manager.reserveYieldIndex();
+            uint256 lpReserveYieldIndex = manager.lpReserveYieldIndex(lp);
+            reserveYieldAmount = Math.mulDiv(
+                position.collateralAmount + position.interestAccrued,
+                reserveYieldIndex - lpReserveYieldIndex,
+                PRECISION
+            );
+            reserveYieldAmount = Math.mulDiv((BPS - protocolFee), reserveYieldAmount, BPS);
+        }
+        healthyCollateral = _safeSubtract(healthyCollateral, reserveYieldAmount);
         return healthyCollateral;
     }
 
@@ -391,17 +425,17 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
         IAssetPoolWithPoolStorage pool = IAssetPoolWithPoolStorage(assetPool);
         IPoolCycleManager cycleManager = pool.poolCycleManager();
 
-        (uint256 assetAmount, uint256 depositAmount, uint256 collateralAmount) = pool.userPositions(user);
+        (uint256 assetAmount , , uint256 collateralAmount) = pool.userPositions(user);
 
         if (isYieldBearing) {
-            uint256 reserveYieldIndex = pool.reserveYieldIndex();
+            uint256 reserveYieldIndex = pool.reserveYieldIndex(cycleManager.cycleIndex());
             uint256 userReserveYieldIndex = pool.userReserveYieldIndex(user);
             uint256 reserveYieldAmount = Math.mulDiv(
-                depositAmount + collateralAmount,
+                assetAmount,
                 reserveYieldIndex - userReserveYieldIndex,
                 PRECISION
             );
-            collateralAmount += reserveYieldAmount;
+            collateralAmount += Math.mulDiv((BPS - protocolFee), reserveYieldAmount, BPS);
         }
 
         if (assetAmount == 0) {
@@ -445,11 +479,11 @@ contract DefaultPoolStrategy is IPoolStrategy, Ownable {
             uint256 reserveYieldIndex = manager.reserveYieldIndex();
             uint256 lpReserveYieldIndex = manager.lpReserveYieldIndex(lp);
             uint256 reserveYieldAmount = Math.mulDiv(
-                lpCollateral,
+                lpCollateral + position.interestAccrued,
                 reserveYieldIndex - lpReserveYieldIndex,
                 PRECISION
             );
-            lpCollateral += reserveYieldAmount;
+            lpCollateral += Math.mulDiv((BPS - protocolFee), reserveYieldAmount, BPS);
         }
 
         uint256 healthyLiquidity = Math.mulDiv(lpCommitment, lpHealthyCollateralRatio, BPS);

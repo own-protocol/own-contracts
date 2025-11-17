@@ -98,16 +98,6 @@ contract PoolInvariantTest is ProtocolTestUtils {
         assert(lpReserves <= lpBalance);
     }
     
-    /// @notice User positions must be consistent
-    function invariant_userPositions() external view {
-        uint256 totalDeposits = assetPool.totalUserDeposits();
-        uint256 totalCollateral = assetPool.totalUserCollateral();
-        
-        // These should never overflow (would revert)
-        assert(totalDeposits >= 0);
-        assert(totalCollateral >= 0);
-    }
-    
     /// @notice Cycle state transitions must be valid
     function invariant_cycleStateValid() external view {
         uint8 state = handler.getCycleState();

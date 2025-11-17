@@ -96,15 +96,10 @@ abstract contract PoolStorage is Initializable {
     function _initializeDecimalFactor(address _reserveToken, address _assetToken) internal {
         uint8 reserveDecimals = IERC20Metadata(_reserveToken).decimals();
         uint8 assetDecimals = IERC20Metadata(_assetToken).decimals();
+
+        require(reserveDecimals <= assetDecimals, "decimals: reserve > asset");
         
-        // Handle the case where asset might have more or fewer decimals than reserve
-        if (assetDecimals >= reserveDecimals) {
-            reserveToAssetDecimalFactor = 10 ** uint256(assetDecimals - reserveDecimals);
-        } else {
-            reserveToAssetDecimalFactor = 1;
-            // Note: For the case where reserve has more decimals, additional handling
-            // would be needed in conversion functions
-        }
+        reserveToAssetDecimalFactor = 10 ** uint256(assetDecimals - reserveDecimals);
     }
 
     /**

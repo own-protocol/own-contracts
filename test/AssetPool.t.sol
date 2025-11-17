@@ -645,20 +645,20 @@ contract AssetPoolTest is ProtocolTestUtils {
         
         // 1. Deposit request
         vm.startPrank(user2);
-        vm.expectRevert("Pool not active");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         assetPool.depositRequest(depositAmount, collateralAmount);
         vm.stopPrank();
         
         // 2. Redemption request
         vm.startPrank(user2);        
-        vm.expectRevert("Pool not active");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         uint256 assetBalance = adjustAmountForDecimals(SMALL_DEPOSIT, 18);
         assetPool.redemptionRequest(assetBalance);
         vm.stopPrank();
         
         // 3. Liquidation request
         vm.startPrank(user3);
-        vm.expectRevert("Pool not active");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         assetPool.liquidationRequest(user2, 1);
         vm.stopPrank();
         
@@ -671,9 +671,9 @@ contract AssetPoolTest is ProtocolTestUtils {
 
         // Try claim asset & reserve which should revert
         vm.startPrank(user1);
-        vm.expectRevert("Pool not active or halted");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         assetPool.claimAsset(user2);
-        vm.expectRevert("Pool not active or halted");
+        vm.expectRevert(IAssetPool.InvalidPoolState.selector);
         assetPool.claimReserve(user2);
         vm.stopPrank();
         

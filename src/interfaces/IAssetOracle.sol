@@ -27,7 +27,28 @@ interface IAssetOracle {
      * @param newSourceHash The new hash of the JavaScript source code
      */
     event SourceHashUpdated(bytes32 newSourceHash);
-    
+
+    /**
+     * @notice Emitted when a protocol keeper is added or removed
+     * @param keeper The address of the protocol keeper
+     * @param isAdded Boolean indicating if the keeper was added (true) or removed (false)
+     */
+    event ProtocolKeeperUpdated(address keeper, bool isAdded);
+
+    /**
+     * @notice Emitted when the market open threshold is updated
+     * @param oldThreshold The previous time threshold in seconds
+     * @param newThreshold The new time threshold in seconds
+     */
+    event MarketOpenThresholdUpdated(uint256 oldThreshold, uint256 newThreshold);
+
+    /**
+     * @notice Emitted when the default subscription ID is updated
+     * @param oldSubscriptionId The previous default subscription ID
+     * @param newSubscriptionId The new default subscription ID
+     */
+    event DefaultSubscriptionIdUpdated(uint256 oldSubscriptionId, uint256 newSubscriptionId);
+
     /**
      * @notice Emitted when OHLC data is updated
      * @param open The opening price
@@ -115,6 +136,25 @@ interface IAssetOracle {
     function updateAssetSymbol(string memory newAssetSymbol) external;
 
     /**
+     * @notice Updates the default Chainlink Functions subscription ID
+     * @param newSubscriptionId The new default subscription ID
+     */
+    function updateDefaultSubscriptionId(uint256 newSubscriptionId) external;
+
+    /**
+     * @notice Updates the market open threshold
+     * @param newThreshold The new time threshold in seconds
+     */
+    function updateMarketOpenThreshold(uint256 newThreshold) external;
+
+    /**
+     * @notice Updates the status of a protocol keeper
+     * @param keeper The address of the protocol keeper
+     * @param isActive The new status of the protocol keeper
+     */
+    function updateProtocolKeeper(address keeper, bool isActive) external;
+
+    /**
      * @notice Returns the current asset price
      * @return The current price in cents
      */
@@ -135,6 +175,34 @@ interface IAssetOracle {
      * @return The timestamp of the last update
      */
     function lastUpdated() external view returns (uint256);
+
+    /**
+     * @notice Returns the timestamp of the last price request
+     * @return The timestamp of the last request
+     */
+    function lastRequestedAt() external view returns (uint256);
+
+    /**
+    * @notice Returns the market open threshold in seconds
+    */
+    function MARKET_OPEN_THRESHOLD() external view returns (uint256);
+
+    /**
+     * @notice Returns the request cooldown period in seconds
+     */
+    function REQUEST_COOLDOWN() external view returns (uint256);
+
+    /**
+     * @notice Returns the default Chainlink Functions subscription ID
+     */
+    function defaultSubscriptionId() external view returns (uint256);
+
+    /**
+     * @notice Checks if an address is a protocol keeper
+     * @param keeper The address to check
+     * @return bool True if the address is a protocol keeper, false otherwise
+     */
+    function protocolKeepers(address keeper) external view returns (bool);
 
     /**
      * @notice Returns the current asset symbol

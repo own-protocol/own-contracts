@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../interfaces/IXToken.sol";
 
@@ -30,6 +31,15 @@ contract xToken is IXToken, ERC20, ERC20Permit {
 
     /// @notice Split multiplier to adjust balances for token splits
     uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
+
+    /// @notice Split version counter - increments on every split to invalidate old permits
+    uint256 public splitVersion;
+
+    /// @notice Stores the struct hash for permit with split version
+    bytes32 private constant _PERMIT_TYPEHASH_WITH_SPLIT = keccak256(
+        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline,uint256 splitVersion)"
+    );
+        
 
     /**
      * @notice Ensures the caller is a pool contract
@@ -100,12 +110,16 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev This ensures allowances are adjusted proportionally during token splits
      */
     function allowance(address owner, address spender) public view override(ERC20, IERC20) returns (uint256) {
+        // Handle infinite approval case
+        if (super.allowance(owner, spender) == type(uint256).max) {
+            return type(uint256).max;
+        }
         return Math.mulDiv(super.allowance(owner, spender), _splitMultiplier, PRECISION);
     }
 
     /**
      * @notice Mints new tokens to an account
-     * @dev Only callable by the manager contract
+     * @dev Only callable by the pool contract
      * @param account The address receiving the minted tokens
      * @param amount The amount of tokens to mint (visible amount with split multiplier applied)
      * @dev The actual storage amount is calculated by dividing the visible amount by the split multiplier
@@ -142,7 +156,7 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @notice Applies a split to adjust token balances
      * @param splitRatio Numerator of the split ratio (e.g., 2 for a 2:1 split where 1 token becomes 2)
      * @param splitDenominator Denominator of the split ratio (e.g., 1 for a 2:1 split)
-     * @dev Only callable by the pool contract
+     * @dev Only callable by the manager contract
      * @dev Updates the split multiplier to affect all balances without changing storage values
      * @dev For a 2:1 split (1 token becomes 2): splitRatio=2, splitDenominator=1
      * @dev For a 1:2 reverse split (2 tokens become 1): splitRatio=1, splitDenominator=2
@@ -153,7 +167,12 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         // Update the split multiplier
         uint256 adjustmentRatio = Math.mulDiv(splitRatio, PRECISION, splitDenominator);
         _splitMultiplier = Math.mulDiv(_splitMultiplier, adjustmentRatio, PRECISION);
-        
+
+        // Increment split version to invalidate all outstanding permits
+        unchecked {
+            ++splitVersion;
+        }
+            
         emit StockSplitApplied(splitRatio, splitDenominator, _splitMultiplier);
     }
 
@@ -206,6 +225,11 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         uint256 balance = super.balanceOf(sender);
         if (balance < rawAmount) revert InsufficientBalance();
         
+        if (currentAllowance == type(uint256).max) {
+            // Infinite allowance, no need to update
+            _transfer(sender, recipient, rawAmount);
+            return true;
+        }
         // Update allowance with raw amount
         _approve(sender, msg.sender, currentAllowance - rawAmount);
 
@@ -223,6 +247,10 @@ contract xToken is IXToken, ERC20, ERC20Permit {
      * @dev Example: If amount=100 and splitMultiplier=2*PRECISION (2:1 split), an allowance of 50 tokens is stored
      */
     function approve(address spender, uint256 amount) public override(ERC20, IERC20) returns (bool) {
+        // Handle infinite approval case
+        if (amount == type(uint256).max) {
+            return super.approve(spender, amount);
+        }
         // Convert the visible amount to raw storage amount
         uint256 rawAmount = Math.mulDiv(amount, PRECISION, _splitMultiplier);
         return super.approve(spender, rawAmount);
@@ -248,10 +276,35 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         bytes32 r,
         bytes32 s
     ) public override {
-        // Convert the visible amount to raw storage amount
-        uint256 rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
-        
-        // Call the parent implementation with the raw value
-        super.permit(owner, spender, rawValue, deadline, v, r, s);
+        require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
+
+        // Build the struct hash with the value that was actually signed
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _PERMIT_TYPEHASH_WITH_SPLIT,
+                owner,
+                spender,
+                value,
+                _useNonce(owner),
+                deadline,
+                splitVersion
+            )
+        );
+
+        bytes32 hash = _hashTypedDataV4(structHash);
+
+        address signer = ECDSA.recover(hash, v, r, s);
+        require(signer == owner, "ERC20Permit: invalid signature");
+
+        // Convert to raw storage units for allowance
+        uint256 rawValue;
+        if (value == type(uint256).max) {
+            // Preserve infinite-approval semantics
+            rawValue = type(uint256).max;
+        } else {
+            rawValue = Math.mulDiv(value, PRECISION, _splitMultiplier);
+        }
+        _approve(owner, spender, rawValue);
     }
+
 }
