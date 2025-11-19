@@ -32,14 +32,10 @@ contract xToken is IXToken, ERC20, ERC20Permit {
     /// @notice Split multiplier to adjust balances for token splits
     uint256 private _splitMultiplier = PRECISION; // Start at 1.0 (scaled by PRECISION)
 
-    /// @notice Split version counter - increments on every split to invalidate old permits
-    uint256 public splitVersion;
-
-    /// @notice Stores the struct hash for permit with split version
-    bytes32 private constant _PERMIT_TYPEHASH_WITH_SPLIT = keccak256(
-        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline,uint256 splitVersion)"
+    /// @notice Stores the struct hash for permit
+    bytes32 private constant PERMIT_TYPEHASH = keccak256(
+        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
     );
-        
 
     /**
      * @notice Ensures the caller is a pool contract
@@ -167,11 +163,6 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         // Update the split multiplier
         uint256 adjustmentRatio = Math.mulDiv(splitRatio, PRECISION, splitDenominator);
         _splitMultiplier = Math.mulDiv(_splitMultiplier, adjustmentRatio, PRECISION);
-
-        // Increment split version to invalidate all outstanding permits
-        unchecked {
-            ++splitVersion;
-        }
             
         emit StockSplitApplied(splitRatio, splitDenominator, _splitMultiplier);
     }
@@ -281,13 +272,12 @@ contract xToken is IXToken, ERC20, ERC20Permit {
         // Build the struct hash with the value that was actually signed
         bytes32 structHash = keccak256(
             abi.encode(
-                _PERMIT_TYPEHASH_WITH_SPLIT,
+                PERMIT_TYPEHASH,
                 owner,
                 spender,
                 value,
                 _useNonce(owner),
-                deadline,
-                splitVersion
+                deadline
             )
         );
 
