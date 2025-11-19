@@ -87,13 +87,6 @@ interface IXToken is IERC20Metadata {
     function splitMultiplier() external view returns (uint256);
 
     /**
-     * @dev Returns the current split version counter
-     * @return The current split version
-     * @dev This increments with each token split to invalidate old permits
-     **/
-    function splitVersion() external view returns (uint256);
-
-    /**
      * @dev Mints new tokens to the specified account
      * @param account The address that will receive the minted tokens
      * @param amount The amount of tokens to mint (visible amount, after applying split multiplier)
