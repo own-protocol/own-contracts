@@ -556,6 +556,25 @@
   },
   {
     "type": "function",
+    "name": "lpReserveYieldIndex",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "poolCycleManager",
     "inputs": [],
     "outputs": [
@@ -704,7 +723,7 @@
   },
   {
     "type": "function",
-    "name": "totalLPCollateral",
+    "name": "totalLPLiquidityCommited",
     "inputs": [],
     "outputs": [
       {
@@ -717,7 +736,7 @@
   },
   {
     "type": "function",
-    "name": "totalLPLiquidityCommited",
+    "name": "totalLPPrincipal",
     "inputs": [],
     "outputs": [
       {
