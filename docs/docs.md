@@ -136,6 +136,13 @@ forge script script/UpdateOracleSourceHash.s.sol:UpdateOracleSourceHashScript \
     --rpc-url base_sepolia --broadcast
 ```
 
+### Add Collateral
+
+```bash
+forge script script/AddCollateralScript.s.sol:AddCollateralScript \
+    --rpc-url base_sepolia --broadcast
+```
+
 ## Utility Commands
 
 ### Forge Commands
