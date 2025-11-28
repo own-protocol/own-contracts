@@ -143,6 +143,13 @@ forge script script/AddCollateralScript.s.sol:AddCollateralScript \
     --rpc-url base_sepolia --broadcast
 ```
 
+### Claim Asset
+
+```bash
+forge script script/ClaimAssetScript.s.sol:ClaimAssetScript \
+    --rpc-url base_sepolia --broadcast
+```
+
 ## Utility Commands
 
 ### Forge Commands
