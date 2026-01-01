@@ -23,37 +23,39 @@ The protocol creates a market where users gain exposure to stock performance by 
 - **AssetPoolFactory**: Creates new asset pools for different real-world assets
 - **ProtocolRegistry**: Tracks verified protocol contracts for security and discoverability
 
-## Asset Pool Factory (Base Sepolia)
+## Asset Pool Factory (Base)
 
 | Contract         | Address                                      |
 | ---------------- | -------------------------------------------- |
-| AssetPoolFactory | `0xC0166Fd0F9269B7031477C8098E27E8dDb761D54` |
+| AssetPoolFactory | `0xC8e4cc79da89FCFaF4436f5e9F9fFCE0D2850378` |
 
-## Implementation Contract Addresses (Base Sepolia)
+## Implementation Contract Addresses (Base)
 
 | Contract             | Address                                      |
 | -------------------- | -------------------------------------------- |
-| AssetPool            | `0x65939A7A7E78AbAb3A78fbE37728dD66849caB0c` |
-| PoolCylceManager     | `0x6594E0B1Bc8E0aE386aCf63d00a0928e64DCa8AB` |
-| PoolLiquidityManager | `0xcF65F5889C5F2727d0Efa08EE8A1B816a781E940` |
-| ProtocolRegistry     | `0xdE65370F905999eaEC9a3612874752C301324cF7` |
+| AssetPool            | `0x1d227F102B56d91f201EC7715aB96088a34e76a6` |
+| PoolCylceManager     | `0x6068042feb82Ee17Cf1A7de908E44CBB9d506cBe` |
+| PoolLiquidityManager | `0x16AF157937E70Eb432d6a403ADAEb3b5b1FE9C2C` |
+| ProtocolRegistry     | `0xBB9f34413f48aE7520acdedC4f07b110860c1534` |
 
-## Strategy Contract Addresses (Base Sepolia)
+## Strategy Contract Addresses (Base)
 
 | Contract   | Address                                      |
 | ---------- | -------------------------------------------- |
-| Strategy A | `0xF5F2bf441B0EE021FA5fd5803ba143Fdd32f88Cc` |
-| Strategy B | `0xba0efA3aDA11aF3B1837A0A6f086Cc9cAaADa5E2` |
+| Strategy A | `0x82eECDd667D68961045B18B38501ef391ff71b25` |
 
-Strategy A - To be used for high volatility assets. It has higher lp collateral requirements.  
-Strategy B - To be used for low volatility assets. It has lower lp collateral requirements.
+Strategy A - To be used for low volatility assets. It has lower lp collateral requirements.
 
-## Test Pool & Oracle Contract Addresses (Base Sepolia)
+## Main Pool Contract Addresses (Base)
 
-| TSLA   | Address                                      |
-| ------ | -------------------------------------------- |
-| Pool   | `0xE1661B11F3D46bdD3661DB16e592454aE31dafEa` |
-| Oracle | `0x9A5D90Ed944d9413E7BcBF813a59821df68b0a4e` |
+| AI7          | Address                                      |
+| ------------ | -------------------------------------------- |
+| Pool         | `0xCa5b851B28d756EB21DEDceA9BAcea6e18DD5ECF` |
+| CycleManager | `0x0e3eE1270aC831c32875426365505A3f91E40742` |
+| LiqManager   | `0x6C0297c6007dB1E1eC88df92D2302374BcB72ec0` |
+| Oracle       | `0x52BdAa287CF02cf9b4c700439e11146D7c23D311` |
+| Asset        | `0x2567563f230A3A30A5ba9de84157E0449c00EB36` |
+| Reserve      | `0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB` |
 
 ## Deploy & Create Commands
 
@@ -61,14 +63,14 @@ Strategy B - To be used for low volatility assets. It has lower lp collateral re
 
 ```bash
 forge script script/CreateAssetOracle.s.sol:CreateAssetOracleScript \
-    --rpc-url base_sepolia --broadcast --verify
+    --rpc-url base --broadcast --verify
 ```
 
 ### Create New Pool
 
 ```bash
 forge script script/CreateAssetPool.s.sol:CreatePoolScript \
-    --rpc-url base_sepolia --broadcast
+    --rpc-url base --broadcast
 ```
 
 **Checkout [docs](https://own-protocol.gitbook.io/docs) for more details**
