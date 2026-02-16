@@ -8,6 +8,7 @@ optimizer = true
 optimizer_runs = 100
 remappings = [
   '@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/src/',
+  '@morpho-blue/=lib/morpho-blue/src/',
 ]
 # Skip split tests (split disabled in v1)
 no_match_path = "test/integration/AssetSplit.t.sol"

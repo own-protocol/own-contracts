@@ -111,6 +111,20 @@ forge script script/CreateAssetPool.s.sol:CreatePoolScript \
     --rpc-url base_sepolia --broadcast
 ```
 
+### Deploy Morpho Oracle adapter
+
+```bash
+forge script script/DeployMorphoOracleAdapter.s.sol:DeployMorphoOracleAdapter \
+    --rpc-url base --broadcast --verify
+```
+
+### Create Morpho Lending Market
+
+```bash
+forge script script/CreateMorphoMarket.s.sol:CreateMorphoMarket \
+    --rpc-url base --broadcast
+```
+
 ### Verify Pool
 
 ```bash
